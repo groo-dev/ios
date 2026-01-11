@@ -2,10 +2,11 @@
 //  PadUnlockView.swift
 //  Groo
 //
-//  Pad-specific unlock view with password entry.
+//  Pad-specific unlock view with password entry and biometric support.
 //
 
 import SwiftUI
+import LocalAuthentication
 
 struct PadUnlockView: View {
     let padService: PadService
@@ -17,6 +18,7 @@ struct PadUnlockView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showSignOutConfirm = false
+    @State private var biometricType: LABiometryType = .none
 
     var body: some View {
         NavigationStack {
@@ -38,6 +40,28 @@ struct PadUnlockView: View {
 
                 Spacer()
 
+                // Biometric button (if available)
+                if padService.canUnlockWithBiometric && biometricType != .none {
+                    Button {
+                        unlockWithBiometric()
+                    } label: {
+                        HStack {
+                            Image(systemName: biometricIconName)
+                                .font(.title2)
+                            Text("Unlock with \(biometricName)")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.Brand.primary)
+                    .disabled(isLoading)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal)
+
+                    Text("or")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 // Password input
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Text("Password")
@@ -48,7 +72,7 @@ struct PadUnlockView: View {
                         .textFieldStyle(.roundedBorder)
                         .textContentType(.password)
                         .onSubmit {
-                            unlock()
+                            unlockWithPassword()
                         }
                 }
                 .padding(.horizontal)
@@ -61,7 +85,7 @@ struct PadUnlockView: View {
 
                 // Unlock button
                 Button {
-                    unlock()
+                    unlockWithPassword()
                 } label: {
                     if isLoading {
                         ProgressView()
@@ -95,10 +119,63 @@ struct PadUnlockView: View {
             } message: {
                 Text("You'll need to enter your PAT token again to sign back in.")
             }
+            .onAppear {
+                checkBiometricAvailability()
+                // Auto-trigger biometric if available
+                if padService.canUnlockWithBiometric && biometricType != .none {
+                    unlockWithBiometric()
+                }
+            }
         }
     }
 
-    private func unlock() {
+    private var biometricIconName: String {
+        switch biometricType {
+        case .faceID: return "faceid"
+        case .touchID: return "touchid"
+        case .opticID: return "opticid"
+        default: return "lock"
+        }
+    }
+
+    private var biometricName: String {
+        switch biometricType {
+        case .faceID: return "Face ID"
+        case .touchID: return "Touch ID"
+        case .opticID: return "Optic ID"
+        default: return "Biometric"
+        }
+    }
+
+    private func checkBiometricAvailability() {
+        let context = LAContext()
+        var error: NSError?
+        if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+            biometricType = context.biometryType
+        }
+    }
+
+    private func unlockWithBiometric() {
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            do {
+                let success = try padService.unlockWithBiometric()
+                if success {
+                    onUnlock()
+                } else {
+                    errorMessage = "Biometric unlock failed"
+                }
+            } catch {
+                // Biometric failed, user can try password
+                errorMessage = nil
+            }
+            isLoading = false
+        }
+    }
+
+    private func unlockWithPassword() {
         isLoading = true
         errorMessage = nil
 

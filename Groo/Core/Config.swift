@@ -79,4 +79,10 @@ enum Config {
         "dev.groo.ios"
         #endif
     }
+
+    /// Keychain access group for sharing between app and extensions
+    /// Uses App Group identifier for shared access
+    static var keychainAccessGroup: String {
+        appGroupIdentifier
+    }
 }

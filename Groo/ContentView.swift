@@ -48,7 +48,7 @@ struct ContentView: View {
     }
 
     private func signOut() {
-        padService?.lock()
+        padService?.lockAndClearKey()
         syncService?.clearLocalStorage()
         try? authService.logout()
         isLoggedIn = false

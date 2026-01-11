@@ -3,23 +3,15 @@
 //  WidgetExtension
 //
 //  Shows recent Pad items on the home screen.
+//  Decrypts items using biometric-protected key from Keychain.
 //
 
 import WidgetKit
 import SwiftUI
-import SwiftData
 
 // MARK: - Timeline Provider
 
 struct PadWidgetProvider: TimelineProvider {
-    private var appGroupId: String {
-        #if DEBUG
-        "group.dev.groo.ios.debug"
-        #else
-        "group.dev.groo.ios"
-        #endif
-    }
-
     func placeholder(in context: Context) -> PadWidgetEntry {
         PadWidgetEntry(date: Date(), items: [
             WidgetItem(id: "1", text: "Quick capture from anywhere"),
@@ -43,20 +35,18 @@ struct PadWidgetProvider: TimelineProvider {
     }
 
     private func loadItems() -> (items: [WidgetItem], isLocked: Bool) {
-        // Load from App Group shared container
-        guard let containerURL = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: appGroupId
-        ) else { return ([], true) }
-
-        let cacheURL = containerURL.appendingPathComponent("widget_cache.json")
-
-        guard let data = try? Data(contentsOf: cacheURL),
-              let items = try? JSONDecoder().decode([WidgetItem].self, from: data) else {
-            // No cache file means Pad is locked
+        // Check if locked first (without triggering biometric)
+        if ExtensionDataProvider.isLocked() {
             return ([], true)
         }
 
-        return (Array(items.prefix(5)), false)
+        // Load and decrypt items
+        guard let decryptedItems = ExtensionDataProvider.loadDecryptedItems() else {
+            return ([], true) // Locked or biometric failed
+        }
+
+        let widgetItems = decryptedItems.prefix(5).map { WidgetItem(id: $0.id, text: $0.text) }
+        return (Array(widgetItems), false)
     }
 }
 

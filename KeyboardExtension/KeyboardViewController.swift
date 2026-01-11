@@ -3,20 +3,13 @@
 //  KeyboardExtension
 //
 //  Custom keyboard that shows recent Pad items for quick insertion.
+//  Decrypts items using biometric-protected key from Keychain.
 //
 
 import UIKit
 import SwiftUI
 
 class KeyboardViewController: UIInputViewController {
-
-    private var appGroupId: String {
-        #if DEBUG
-        "group.dev.groo.ios.debug"
-        #else
-        "group.dev.groo.ios"
-        #endif
-    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -52,19 +45,18 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func loadItems() -> (items: [KeyboardItem], isLocked: Bool) {
-        guard let containerURL = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: appGroupId
-        ) else { return ([], true) }
-
-        let cacheURL = containerURL.appendingPathComponent("widget_cache.json")
-
-        guard let data = try? Data(contentsOf: cacheURL),
-              let items = try? JSONDecoder().decode([KeyboardItem].self, from: data) else {
-            // No cache file means Pad is locked
+        // Check if locked first (without triggering biometric)
+        if ExtensionDataProvider.isLocked() {
             return ([], true)
         }
 
-        return (Array(items.prefix(10)), false)
+        // Load and decrypt items
+        guard let decryptedItems = ExtensionDataProvider.loadDecryptedItems() else {
+            return ([], true) // Locked or biometric failed
+        }
+
+        let keyboardItems = decryptedItems.prefix(10).map { KeyboardItem(id: $0.id, text: $0.text) }
+        return (Array(keyboardItems), false)
     }
 }
 

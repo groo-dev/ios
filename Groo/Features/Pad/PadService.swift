@@ -56,7 +56,7 @@ class PadService {
         return hasEncryptionSetup
     }
 
-    /// Unlock with existing password - derives encryption key
+    /// Unlock with existing password - derives encryption key and stores in Keychain
     func unlock(password: String) async throws -> Bool {
         let state: PadUserState = try await api.get(APIClient.Endpoint.state)
 
@@ -73,15 +73,42 @@ class PadService {
 
         if crypto.verifyKey(key, with: encPayload) {
             encryptionKey = key
+            // Store key in Keychain with biometric protection for extensions
+            storeKeyInKeychain(key)
             return true
         }
 
         return false
     }
 
+    /// Try to unlock using biometric authentication (retrieve key from Keychain)
+    func unlockWithBiometric() throws -> Bool {
+        let keyData = try keychain.loadBiometricProtected(for: KeychainService.Key.padEncryptionKey)
+        encryptionKey = SymmetricKey(data: keyData)
+        return true
+    }
+
+    /// Check if biometric unlock is available
+    var canUnlockWithBiometric: Bool {
+        keychain.biometricProtectedKeyExists(for: KeychainService.Key.padEncryptionKey)
+    }
+
     /// Lock the service (clear encryption key from memory)
     func lock() {
         encryptionKey = nil
+        // Note: We keep the key in Keychain for biometric unlock later
+    }
+
+    /// Lock and clear stored key (full sign out)
+    func lockAndClearKey() {
+        encryptionKey = nil
+        try? keychain.deleteBiometricProtected(for: KeychainService.Key.padEncryptionKey)
+    }
+
+    /// Store encryption key in Keychain with biometric protection
+    private func storeKeyInKeychain(_ key: SymmetricKey) {
+        let keyData = key.withUnsafeBytes { Data($0) }
+        try? keychain.saveBiometricProtected(keyData, for: KeychainService.Key.padEncryptionKey)
     }
 
     var isUnlocked: Bool {
