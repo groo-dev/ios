@@ -28,8 +28,8 @@ enum Config {
             return url
         }
         #if DEBUG
-        // Local development - update ports as needed
-        return URL(string: "http://localhost:13648")!
+        // Local development - use Mac hostname for real device testing
+        return URL(string: "http://universe.local:13648")!
         #else
         return URL(string: "https://pad.groo.dev")!
         #endif
@@ -42,7 +42,7 @@ enum Config {
             return url
         }
         #if DEBUG
-        return URL(string: "http://localhost:37586")!
+        return URL(string: "http://universe.local:37586")!
         #else
         return URL(string: "https://accounts.groo.dev")!
         #endif
@@ -50,7 +50,7 @@ enum Config {
 
     static var accountsWebURL: URL {
         #if DEBUG
-        URL(string: "http://localhost:37586")!
+        URL(string: "http://universe.local:37586")!
         #else
         URL(string: "https://accounts.groo.dev")!
         #endif
