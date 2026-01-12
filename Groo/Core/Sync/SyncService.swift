@@ -78,24 +78,37 @@ class SyncService {
 
     private func pushPendingOperations() async {
         let operations = store.getAllPendingOperations()
+        print("[Sync] Pending operations: \(operations.count)")
 
         for operation in operations {
+            print("[Sync] Processing \(operation.operationType): \(operation.id) (itemId: \(operation.itemId))")
             do {
                 switch operation.operationType {
                 case .create:
+                    print("[Sync] CREATE: Posting item \(operation.itemId)")
                     if let item = operation.getCreatePayload() {
                         let _: AddItemResponse = try await api.post(APIClient.Endpoint.list, body: item)
+                        print("[Sync] CREATE: Success")
+                    } else {
+                        print("[Sync] CREATE: No payload, removing stale operation")
                     }
 
                 case .delete:
-                    try await api.delete(APIClient.Endpoint.listItem(operation.itemId))
+                    print("[Sync] DELETE: Deleting item \(operation.itemId)")
+                    do {
+                        try await api.delete(APIClient.Endpoint.listItem(operation.itemId))
+                        print("[Sync] DELETE: Success")
+                    } catch APIError.httpError(statusCode: 404, _) {
+                        print("[Sync] DELETE: 404 - item already gone, treating as success")
+                    }
                 }
 
                 // Remove successful operation
+                print("[Sync] Removing operation \(operation.id)")
                 store.removePendingOperation(operation)
             } catch {
                 // Keep failed operations for retry
-                print("Failed to sync operation \(operation.id): \(error)")
+                print("[Sync] FAILED operation \(operation.id): \(error)")
             }
         }
     }

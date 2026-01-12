@@ -86,6 +86,7 @@ actor APIClient {
     func post<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
         let bodyData = try encoder.encode(body)
         let request = try buildRequest(path: path, method: "POST", body: bodyData)
+        print("[API] POST \(request.url?.absoluteString ?? "nil")")
         return try await perform(request)
     }
 

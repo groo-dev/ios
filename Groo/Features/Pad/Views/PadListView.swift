@@ -59,6 +59,23 @@ struct PadListView: View {
         .onChange(of: refreshTrigger) { _, _ in
             loadItems(animated: true)
         }
+        .onChange(of: syncService.state.status) { _, newStatus in
+            if case .error(let message) = newStatus {
+                toastState.showError(friendlyErrorMessage(message))
+            }
+        }
+    }
+
+    private func friendlyErrorMessage(_ message: String) -> String {
+        let lowercased = message.lowercased()
+        if lowercased.contains("network") || lowercased.contains("offline") || lowercased.contains("internet") || lowercased.contains("connection") {
+            return "Unable to connect. Check your internet."
+        } else if lowercased.contains("401") || lowercased.contains("unauthorized") || lowercased.contains("authentication") {
+            return "Session expired. Please sign in again."
+        } else if lowercased.contains("500") || lowercased.contains("server") {
+            return "Something went wrong. Please try again."
+        }
+        return "Sync failed. Please try again."
     }
 
     private var emptyState: some View {

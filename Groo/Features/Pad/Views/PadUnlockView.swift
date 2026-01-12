@@ -2,7 +2,8 @@
 //  PadUnlockView.swift
 //  Groo
 //
-//  Pad-specific unlock view with password entry and biometric support.
+//  Pad unlock view with biometric and password support.
+//  Follows Apple Human Interface Guidelines for authentication screens.
 //
 
 import SwiftUI
@@ -19,113 +20,181 @@ struct PadUnlockView: View {
     @State private var errorMessage: String?
     @State private var showSignOutConfirm = false
     @State private var biometricType: LABiometryType = .none
+    @State private var showPasswordField = false
+    @FocusState private var isPasswordFocused: Bool
+
+    private var canUseBiometric: Bool {
+        padService.canUnlockWithBiometric && biometricType != .none
+    }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: Theme.Spacing.xl) {
-                Spacer()
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: geometry.size.height * 0.12)
 
-                // Lock icon
-                Image(systemName: "doc.on.clipboard.fill")
-                    .font(.system(size: Theme.Size.iconHero))
-                    .foregroundStyle(Theme.Brand.primary)
+                    // Lock icon and title
+                    VStack(spacing: Theme.Spacing.md) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 56))
+                            .foregroundStyle(Theme.Brand.primary)
+                            .symbolEffect(.pulse, options: .repeating.speed(0.5), isActive: isLoading)
 
-                Text("Unlock Pad")
-                    .font(.title)
-                    .fontWeight(.bold)
+                        Text("Pad is Locked")
+                            .font(.title)
+                            .fontWeight(.bold)
 
-                Text("Enter your encryption password")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                        Text("Unlock to access your items")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.bottom, Theme.Spacing.xxl)
 
-                Spacer()
+                    // Unlock options
+                    VStack(spacing: Theme.Spacing.lg) {
+                        // Biometric button (primary action)
+                        if canUseBiometric {
+                            Button {
+                                unlockWithBiometric()
+                            } label: {
+                                HStack(spacing: Theme.Spacing.sm) {
+                                    Image(systemName: biometricIconName)
+                                        .font(.title2)
+                                    Text("Unlock with \(biometricName)")
+                                        .fontWeight(.semibold)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 56)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Theme.Brand.primary)
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.lg))
+                            .disabled(isLoading)
+                        }
 
-                // Biometric button (if available)
-                if padService.canUnlockWithBiometric && biometricType != .none {
-                    Button {
-                        unlockWithBiometric()
-                    } label: {
-                        HStack {
-                            Image(systemName: biometricIconName)
-                                .font(.title2)
-                            Text("Unlock with \(biometricName)")
+                        // Password section
+                        if showPasswordField || !canUseBiometric {
+                            passwordSection
+                        } else {
+                            // Show password option
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showPasswordField = true
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    isPasswordFocused = true
+                                }
+                            } label: {
+                                Text("Use Password Instead")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.Brand.primary)
-                    .disabled(isLoading)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal)
+                    .padding(.horizontal, Theme.Spacing.xl)
 
+                    Spacer(minLength: Theme.Spacing.xxl)
+
+                    // Sign out option
+                    Button("Sign Out", role: .destructive) {
+                        showSignOutConfirm = true
+                    }
+                    .font(.footnote)
+                    .padding(.bottom, Theme.Spacing.xl)
+                }
+                .frame(minHeight: geometry.size.height)
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .confirmationDialog("Sign Out?", isPresented: $showSignOutConfirm) {
+            Button("Sign Out", role: .destructive) {
+                onSignOut()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You'll need to enter your PAT token again to sign back in.")
+        }
+        .onAppear {
+            checkBiometricAvailability()
+            // Auto-trigger biometric if available
+            if canUseBiometric {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    unlockWithBiometric()
+                }
+            } else {
+                showPasswordField = true
+                isPasswordFocused = true
+            }
+        }
+    }
+
+    private var passwordSection: some View {
+        VStack(spacing: Theme.Spacing.md) {
+            if canUseBiometric {
+                HStack {
+                    Rectangle()
+                        .fill(Color(.separator))
+                        .frame(height: 1)
                     Text("or")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Rectangle()
+                        .fill(Color(.separator))
+                        .frame(height: 1)
                 }
+                .padding(.vertical, Theme.Spacing.sm)
+            }
 
-                // Password input
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text("Password")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            // Password input
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("Encryption Password")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
 
-                    SecureField("Enter password", text: $password)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.password)
-                        .onSubmit {
-                            unlockWithPassword()
-                        }
-                }
-                .padding(.horizontal)
+                SecureField("Enter password", text: $password)
+                    .font(.body)
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+                    .textContentType(.password)
+                    .focused($isPasswordFocused)
+                    .onSubmit {
+                        unlockWithPassword()
+                    }
+            }
 
-                if let error = errorMessage {
+            // Error message
+            if let error = errorMessage {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Image(systemName: "exclamationmark.circle.fill")
                     Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
                 }
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
-                // Unlock button
-                Button {
-                    unlockWithPassword()
-                } label: {
+            // Unlock button
+            Button {
+                unlockWithPassword()
+            } label: {
+                Group {
                     if isLoading {
                         ProgressView()
                             .tint(.white)
                     } else {
                         Text("Unlock")
+                            .fontWeight(.semibold)
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.Brand.primary)
-                .disabled(password.isEmpty || isLoading)
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal)
-
-                // Sign out button
-                Button("Sign Out", role: .destructive) {
-                    showSignOutConfirm = true
-                }
-                .font(.footnote)
-
-                Spacer()
+                .frame(height: 50)
             }
-            .padding()
-            .navigationTitle("Pad")
-            .navigationBarTitleDisplayMode(.inline)
-            .confirmationDialog("Sign Out?", isPresented: $showSignOutConfirm) {
-                Button("Sign Out", role: .destructive) {
-                    onSignOut()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("You'll need to enter your PAT token again to sign back in.")
-            }
-            .onAppear {
-                checkBiometricAvailability()
-                // Auto-trigger biometric if available
-                if padService.canUnlockWithBiometric && biometricType != .none {
-                    unlockWithBiometric()
-                }
-            }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.Brand.primary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+            .disabled(password.isEmpty || isLoading)
         }
     }
 
@@ -163,39 +232,52 @@ struct PadUnlockView: View {
             do {
                 let success = try padService.unlockWithBiometric()
                 if success {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     onUnlock()
                 } else {
-                    errorMessage = "Biometric unlock failed"
+                    withAnimation {
+                        showPasswordField = true
+                    }
+                    errorMessage = "Biometric unlock failed. Try your password."
+                    isPasswordFocused = true
                 }
             } catch {
-                // Biometric failed, user can try password
-                errorMessage = nil
+                // Biometric cancelled or failed, show password field
+                withAnimation {
+                    showPasswordField = true
+                }
             }
             isLoading = false
         }
     }
 
     private func unlockWithPassword() {
+        guard !password.isEmpty else { return }
+
         isLoading = true
         errorMessage = nil
+        isPasswordFocused = false
 
         Task {
             do {
                 let success = try await padService.unlock(password: password)
                 if success {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     onUnlock()
                 } else {
                     errorMessage = "Incorrect password"
+                    isPasswordFocused = true
                 }
             } catch {
                 errorMessage = error.localizedDescription
+                isPasswordFocused = true
             }
             isLoading = false
         }
     }
 }
 
-#Preview {
+#Preview("With Biometric") {
     PadUnlockView(
         padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
         syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL)),
