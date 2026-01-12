@@ -15,6 +15,7 @@ struct PadView: View {
     @State private var showSettings = false
     @State private var showAddItem = false
     @State private var isUnlocked = false
+    @State private var listRefreshTrigger = UUID()
 
     var body: some View {
         Group {
@@ -38,38 +39,40 @@ struct PadView: View {
 
     private var unlockedView: some View {
         NavigationStack {
-            PadListView(padService: padService, syncService: syncService)
-                .navigationTitle("Pad")
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            showSettings = true
-                        } label: {
-                            Image(systemName: "gearshape")
-                        }
-                    }
-
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            showAddItem = true
-                        } label: {
-                            Image(systemName: "plus")
-                        }
+            PadListView(
+                padService: padService,
+                syncService: syncService,
+                onAddItem: {
+                    showAddItem = true
+                },
+                refreshTrigger: listRefreshTrigger
+            )
+            .navigationTitle("Pad")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
                     }
                 }
-                .sheet(isPresented: $showSettings) {
-                    PadSettingsView(
-                        onLock: {
-                            padService.lock()
-                            isUnlocked = false
-                        },
-                        onSignOut: onSignOut
-                    )
-                }
-                .sheet(isPresented: $showAddItem) {
-                    AddItemSheet(padService: padService, syncService: syncService)
-                }
+            }
+            .sheet(isPresented: $showSettings) {
+                PadSettingsView(
+                    onLock: {
+                        padService.lock()
+                        isUnlocked = false
+                    },
+                    onSignOut: onSignOut
+                )
+            }
+            .sheet(isPresented: $showAddItem, onDismiss: {
+                listRefreshTrigger = UUID()
+            }) {
+                AddItemSheet(padService: padService, syncService: syncService)
+            }
         }
+        .tint(Theme.Brand.primary)
     }
 }
 

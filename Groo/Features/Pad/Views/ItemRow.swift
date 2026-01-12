@@ -2,7 +2,7 @@
 //  ItemRow.swift
 //  Groo
 //
-//  Individual Pad item row with copy action.
+//  Individual Pad item row with context menu and file attachments.
 //
 
 import SwiftUI
@@ -10,55 +10,55 @@ import SwiftUI
 struct ItemRow: View {
     let item: DecryptedListItem
     let padService: PadService
-
-    @State private var showCopied = false
+    let onCopy: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
-        Button {
-            copyToClipboard()
-        } label: {
-            HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text(item.text)
-                        .font(.body)
-                        .lineLimit(Theme.LineLimit.itemPreview)
-                        .foregroundStyle(.primary)
-
-                    HStack(spacing: Theme.Spacing.sm) {
-                        Text(item.createdAt, style: .relative)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        if !item.files.isEmpty {
-                            Label("\(item.files.count)", systemImage: "paperclip")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                Spacer()
-
-                if showCopied {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                }
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            // Text content
+            if !item.text.isEmpty {
+                Text(item.text)
+                    .font(.body)
+                    .lineLimit(Theme.LineLimit.itemPreview)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .contentShape(Rectangle())
+
+            // File attachments
+            if !item.files.isEmpty {
+                FileAttachmentsGrid(files: item.files, padService: padService)
+            }
+
+            // Footer: timestamp
+            Text(item.createdAt, style: .relative)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
         .rowPadding()
-    }
-
-    private func copyToClipboard() {
-        padService.copyToClipboard(item.text)
-        withAnimation {
-            showCopied = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation {
-                showCopied = false
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                onCopy()
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
             }
+
+            if !item.text.isEmpty {
+                ShareLink(item: item.text) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .onTapGesture {
+            onCopy()
         }
     }
 }
@@ -69,10 +69,40 @@ struct ItemRow: View {
             item: DecryptedListItem(
                 id: "1",
                 text: "This is a sample item with some text that might be longer",
-                files: [],
+                files: [
+                    DecryptedFileAttachment(
+                        id: "f1",
+                        name: "document.pdf",
+                        type: "application/pdf",
+                        size: 1024 * 256,
+                        r2Key: "test"
+                    ),
+                    DecryptedFileAttachment(
+                        id: "f2",
+                        name: "photo.jpg",
+                        type: "image/jpeg",
+                        size: 1024 * 1024,
+                        r2Key: "test2"
+                    )
+                ],
                 createdAt: Int(Date().timeIntervalSince1970 * 1000)
             ),
-            padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL))
+            padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
+            onCopy: {},
+            onDelete: {}
+        )
+
+        ItemRow(
+            item: DecryptedListItem(
+                id: "2",
+                text: "Text only item",
+                files: [],
+                createdAt: Int(Date().timeIntervalSince1970 * 1000) - 3600000
+            ),
+            padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
+            onCopy: {},
+            onDelete: {}
         )
     }
+    .listStyle(.plain)
 }

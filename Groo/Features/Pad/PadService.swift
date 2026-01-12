@@ -172,7 +172,7 @@ class PadService {
     // MARK: - Create Encrypted Item
 
     /// Create an encrypted item for storing locally and syncing
-    func createEncryptedItem(text: String) throws -> PadListItem {
+    func createEncryptedItem(text: String, files: [PadFileAttachment] = []) throws -> PadListItem {
         guard let key = encryptionKey else {
             throw PadError.noEncryptionKey
         }
@@ -182,7 +182,7 @@ class PadService {
         return PadListItem(
             id: String(UUID().uuidString.prefix(8).lowercased()),
             encryptedText: encryptedText.toPadEncryptedPayload(),
-            files: [],
+            files: files,
             createdAt: Int(Date().timeIntervalSince1970 * 1000)
         )
     }
