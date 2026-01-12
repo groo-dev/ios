@@ -9,6 +9,12 @@
 import WidgetKit
 import SwiftUI
 
+// MARK: - Brand Color
+
+extension Color {
+    static let brand = Color(red: 139/255, green: 92/255, blue: 246/255)
+}
+
 // MARK: - Timeline Provider
 
 struct PadWidgetProvider: TimelineProvider {
@@ -90,7 +96,7 @@ struct PadWidgetEntryView: View {
         VStack(spacing: 8) {
             Image(systemName: "lock.fill")
                 .font(.title)
-                .foregroundStyle(.purple)
+                .foregroundStyle(Color.brand)
             Text("Pad Locked")
                 .font(.headline)
             Text("Open Groo to unlock")
@@ -104,7 +110,7 @@ struct PadWidgetEntryView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: "doc.on.clipboard.fill")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(Color.brand)
                 Text("Pad")
                     .font(.headline)
             }
@@ -128,7 +134,7 @@ struct PadWidgetEntryView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: "doc.on.clipboard.fill")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(Color.brand)
                 Text("Pad")
                     .font(.headline)
                 Spacer()
@@ -155,7 +161,7 @@ struct PadWidgetEntryView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: "doc.on.clipboard.fill")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(Color.brand)
                 Text("Pad")
                     .font(.headline)
                 Spacer()
