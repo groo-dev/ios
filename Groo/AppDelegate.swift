@@ -58,6 +58,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        // Trigger sync when notification arrives in foreground
+        let userInfo = notification.request.content.userInfo
+        pushService?.handleRemoteNotification(userInfo)
+
         // Show banner even when app is in foreground
         completionHandler([.banner, .badge, .sound])
     }
