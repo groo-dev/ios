@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AuthService.self) private var authService
+    @Environment(PushService.self) private var pushService
 
     @State private var isLoggedIn = false
     @State private var padService: PadService?
@@ -40,7 +41,15 @@ struct ContentView: View {
     private func initializeServices() {
         let api = APIClient(baseURL: Config.padAPIBaseURL)
         padService = PadService(api: api)
-        syncService = SyncService(api: api)
+        let sync = SyncService(api: api)
+        syncService = sync
+
+        // Wire up push notification sync callback
+        pushService.onSyncRequested = { [weak sync] in
+            Task { @MainActor in
+                await sync?.sync()
+            }
+        }
     }
 
     private func updateState() {
@@ -58,4 +67,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(AuthService())
+        .environment(PushService())
 }
