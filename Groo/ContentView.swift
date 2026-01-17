@@ -14,15 +14,17 @@ struct ContentView: View {
     @State private var isLoggedIn = false
     @State private var padService: PadService?
     @State private var syncService: SyncService?
+    @State private var passService: PassService?
 
     var body: some View {
         Group {
             if !isLoggedIn {
                 LoginView()
-            } else if let padService, let syncService {
+            } else if let padService, let syncService, let passService {
                 MainTabView(
                     padService: padService,
                     syncService: syncService,
+                    passService: passService,
                     onSignOut: {
                         signOut()
                     }
@@ -43,6 +45,7 @@ struct ContentView: View {
         padService = PadService(api: api)
         let sync = SyncService(api: api)
         syncService = sync
+        passService = PassService()
 
         // Wire up push notification sync callback
         pushService.onSyncRequested = { [weak sync] in
@@ -58,6 +61,7 @@ struct ContentView: View {
 
     private func signOut() {
         padService?.lockAndClearKey()
+        passService?.lockAndClearKey()
         syncService?.clearLocalStorage()
         try? authService.logout()
         isLoggedIn = false

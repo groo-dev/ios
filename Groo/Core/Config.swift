@@ -48,6 +48,19 @@ enum Config {
         #endif
     }
 
+    /// Pass API base URL. Can be overridden via UserDefaults "passAPIBaseURL".
+    static var passAPIBaseURL: URL {
+        if let override = UserDefaults.standard.string(forKey: "passAPIBaseURL"),
+           let url = URL(string: override) {
+            return url
+        }
+        #if DEBUG
+        return URL(string: "http://universe.local:13650")!
+        #else
+        return URL(string: "https://pass.groo.dev")!
+        #endif
+    }
+
     static var accountsWebURL: URL {
         #if DEBUG
         URL(string: "http://universe.local:37586")!

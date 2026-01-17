@@ -10,6 +10,7 @@ import SwiftUI
 struct MainTabView: View {
     let padService: PadService
     let syncService: SyncService
+    let passService: PassService
     let onSignOut: () -> Void
 
     @State private var selectedTab = 0
@@ -22,7 +23,7 @@ struct MainTabView: View {
                 }
                 .tag(0)
 
-            PassPlaceholderView()
+            PassView(passService: passService, onSignOut: onSignOut)
                 .tabItem {
                     Label("Pass", systemImage: "key")
                 }
@@ -42,6 +43,7 @@ struct MainTabView: View {
     MainTabView(
         padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
         syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL)),
+        passService: PassService(),
         onSignOut: {}
     )
 }

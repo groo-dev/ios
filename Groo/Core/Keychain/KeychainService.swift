@@ -212,6 +212,10 @@ extension KeychainService {
         // Pad encryption key (biometric protected, shared with extensions)
         static let padEncryptionKey = "pad_encryption_key"
 
+        // Pass encryption key and salt (biometric protected, shared with extensions)
+        static let passEncryptionKey = "pass_encryption_key"
+        static let passSalt = "pass_salt"
+
         // Push notifications
         static let deviceToken = "device_token"
     }
