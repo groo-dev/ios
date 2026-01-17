@@ -4,10 +4,16 @@
 <dict>
 	<key>aps-environment</key>
 	<string>development</string>
+	<key>com.apple.developer.authentication-services.autofill-credential-provider</key>
+	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.dev.groo.ios</string>
 		<string>group.dev.groo.ios.debug</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)dev.groo.ios.debug</string>
 	</array>
 </dict>
 </plist>

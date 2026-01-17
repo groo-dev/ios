@@ -93,9 +93,6 @@ enum Config {
         #endif
     }
 
-    /// Keychain access group for sharing between app and extensions
-    /// Uses App Group identifier for shared access
-    static var keychainAccessGroup: String {
-        appGroupIdentifier
-    }
+    // Note: We don't specify kSecAttrAccessGroup explicitly in keychain calls.
+    // iOS automatically uses the first group from entitlements with team ID prefix.
 }

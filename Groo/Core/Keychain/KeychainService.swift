@@ -129,7 +129,8 @@ struct KeychainService {
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
             kSecAttrAccessControl as String: accessControl,
-            kSecAttrAccessGroup as String: Config.keychainAccessGroup,
+            // Note: Don't specify kSecAttrAccessGroup - iOS uses first group from entitlements
+            // which includes the team ID prefix automatically
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -150,7 +151,6 @@ struct KeychainService {
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
             kSecUseAuthenticationContext as String: context,
-            kSecAttrAccessGroup as String: Config.keychainAccessGroup,
         ]
 
         var result: AnyObject?
@@ -173,7 +173,6 @@ struct KeychainService {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
-            kSecAttrAccessGroup as String: Config.keychainAccessGroup,
         ]
 
         let status = SecItemDelete(query as CFDictionary)
@@ -188,7 +187,6 @@ struct KeychainService {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
-            kSecAttrAccessGroup as String: Config.keychainAccessGroup,
             kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
 

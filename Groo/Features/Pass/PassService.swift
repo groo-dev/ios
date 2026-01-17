@@ -51,6 +51,7 @@ class PassService {
     private let crypto: CryptoService
     private let keychain: KeychainService
     private let vaultStore: PassVaultStore
+    private let credentialService: CredentialIdentityService
 
     // Encryption state
     private var encryptionKey: SymmetricKey?
@@ -70,12 +71,14 @@ class PassService {
         api: PassAPIClient? = nil,
         crypto: CryptoService = CryptoService(),
         keychain: KeychainService = KeychainService(),
-        vaultStore: PassVaultStore = PassVaultStore()
+        vaultStore: PassVaultStore = PassVaultStore(),
+        credentialService: CredentialIdentityService = CredentialIdentityService()
     ) {
         self.api = api ?? PassAPIClient(keychain: keychain)
         self.crypto = crypto
         self.keychain = keychain
         self.vaultStore = vaultStore
+        self.credentialService = credentialService
     }
 
     // MARK: - State Properties
@@ -661,6 +664,9 @@ class PassService {
             lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
         )
         try await vaultStore.saveVault(encryptedData: ciphertext, metadata: metadata)
+
+        // Update AutoFill credential identities
+        await credentialService.updateCredentialIdentities(from: vault.items)
     }
 
     // MARK: - Sync
@@ -700,6 +706,9 @@ class PassService {
             lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
         )
         try await vaultStore.saveVault(encryptedData: encryptedData, metadata: metadata)
+
+        // Update AutoFill credential identities
+        await credentialService.updateCredentialIdentities(from: serverVault.items)
     }
 
     // MARK: - Private Helpers
