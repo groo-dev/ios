@@ -10,6 +10,8 @@ import SwiftUI
 struct PassItemListView: View {
     let passService: PassService
     let onSelectItem: (PassVaultItem) -> Void
+    let onAddItem: () -> Void
+    let onEditItem: (PassVaultItem) -> Void
 
     @State private var searchText = ""
     @State private var selectedType: PassVaultItemType?
@@ -38,6 +40,15 @@ struct PassItemListView: View {
                             onTap: { onSelectItem(item) },
                             onCopyPassword: passwordCopyAction(for: item)
                         )
+                        .swipeActions(edge: .trailing) {
+                            deleteButton(for: item)
+                        }
+                        .swipeActions(edge: .leading) {
+                            editButton(for: item)
+                        }
+                        .contextMenu {
+                            contextMenuItems(for: item)
+                        }
                     }
                 } header: {
                     Label("Favorites", systemImage: "star.fill")
@@ -56,6 +67,15 @@ struct PassItemListView: View {
                             onTap: { onSelectItem(item) },
                             onCopyPassword: passwordCopyAction(for: item)
                         )
+                        .swipeActions(edge: .trailing) {
+                            deleteButton(for: item)
+                        }
+                        .swipeActions(edge: .leading) {
+                            editButton(for: item)
+                        }
+                        .contextMenu {
+                            contextMenuItems(for: item)
+                        }
                     }
                 }
             } header: {
@@ -68,10 +88,10 @@ struct PassItemListView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
         .searchable(text: $searchText, prompt: "Search passwords...")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarLeading) {
                 Menu {
                     Button {
                         selectedType = nil
@@ -91,6 +111,14 @@ struct PassItemListView: View {
                 } label: {
                     Image(systemName: selectedType?.icon ?? "line.3.horizontal.decrease.circle")
                         .foregroundStyle(selectedType != nil ? Theme.Brand.primary : .secondary)
+                }
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    onAddItem()
+                } label: {
+                    Image(systemName: "plus")
                 }
             }
         }
@@ -168,13 +196,86 @@ struct PassItemListView: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
     }
+
+    @ViewBuilder
+    private func deleteButton(for item: PassVaultItem) -> some View {
+        Button(role: .destructive) {
+            Task {
+                try? await passService.deleteItem(item)
+            }
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+    }
+
+    @ViewBuilder
+    private func editButton(for item: PassVaultItem) -> some View {
+        Button {
+            onEditItem(item)
+        } label: {
+            Label("Edit", systemImage: "pencil")
+        }
+        .tint(.orange)
+    }
+
+    @ViewBuilder
+    private func contextMenuItems(for item: PassVaultItem) -> some View {
+        Button {
+            onEditItem(item)
+        } label: {
+            Label("Edit", systemImage: "pencil")
+        }
+
+        Button {
+            Task {
+                try? await passService.toggleFavorite(item)
+            }
+        } label: {
+            if item.favorite {
+                Label("Remove from Favorites", systemImage: "star.slash")
+            } else {
+                Label("Add to Favorites", systemImage: "star")
+            }
+        }
+
+        if case .password(let passwordItem) = item {
+            Button {
+                passService.copyToClipboard(passwordItem.password)
+                withAnimation {
+                    copiedItemId = item.id
+                }
+            } label: {
+                Label("Copy Password", systemImage: "doc.on.doc")
+            }
+
+            if !passwordItem.username.isEmpty {
+                Button {
+                    passService.copyToClipboard(passwordItem.username)
+                } label: {
+                    Label("Copy Username", systemImage: "person.crop.circle")
+                }
+            }
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            Task {
+                try? await passService.deleteItem(item)
+            }
+        } label: {
+            Label("Move to Trash", systemImage: "trash")
+        }
+    }
 }
 
 #Preview {
     NavigationStack {
         PassItemListView(
             passService: PassService(),
-            onSelectItem: { _ in }
+            onSelectItem: { _ in },
+            onAddItem: {},
+            onEditItem: { _ in }
         )
         .navigationTitle("Pass")
     }

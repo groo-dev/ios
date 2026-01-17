@@ -37,6 +37,8 @@ struct PassItemDetailView: View {
                     passkeyContent(passkeyItem)
                 case .file(let fileItem):
                     fileContent(fileItem)
+                case .corrupted(let corruptedItem):
+                    corruptedContent(corruptedItem)
                 }
 
                 // Metadata
@@ -73,12 +75,12 @@ struct PassItemDetailView: View {
             // Type icon
             ZStack {
                 Circle()
-                    .fill(Theme.Brand.primary.opacity(0.1))
+                    .fill(item.isCorrupted ? Color.orange.opacity(0.1) : Theme.Brand.primary.opacity(0.1))
                     .frame(width: 56, height: 56)
 
-                Image(systemName: item.type.icon)
+                Image(systemName: item.isCorrupted ? "exclamationmark.triangle.fill" : item.type.icon)
                     .font(.title2)
-                    .foregroundStyle(Theme.Brand.primary)
+                    .foregroundStyle(item.isCorrupted ? .orange : Theme.Brand.primary)
             }
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
@@ -86,7 +88,7 @@ struct PassItemDetailView: View {
                     .font(.title2)
                     .fontWeight(.bold)
 
-                Text(item.type.label)
+                Text(item.isCorrupted ? "Corrupted" : item.type.label)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -157,13 +159,10 @@ struct PassItemDetailView: View {
             }
 
             // TOTP
-            if item.totp != nil {
-                fieldRow(
-                    label: "2FA Code",
-                    value: "••• •••",  // TODO: Generate TOTP
-                    icon: "lock.shield",
-                    canCopy: false
-                )
+            if let totp = item.totp {
+                TotpDisplayView(config: totp) { code in
+                    copy(code, field: "2FA Code")
+                }
             }
 
             // Notes
@@ -355,6 +354,53 @@ struct PassItemDetailView: View {
             }
 
             // TODO: Download button
+        }
+    }
+
+    // MARK: - Corrupted Content
+
+    private func corruptedContent(_ item: PassCorruptedItem) -> some View {
+        VStack(spacing: Theme.Spacing.md) {
+            // Warning banner
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text("This item is corrupted and cannot be displayed")
+                    .font(.subheadline)
+            }
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(Color.orange.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+
+            // Error details
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("Error")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(item.error)
+                    .font(.body)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+            }
+
+            // Delete button
+            Button(role: .destructive) {
+                Task {
+                    try? await passService.permanentlyDeleteItem(self.item)
+                    onDismiss()
+                }
+            } label: {
+                Label("Delete Corrupted Item", systemImage: "trash")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red.opacity(0.1))
+                    .foregroundStyle(.red)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+            }
         }
     }
 

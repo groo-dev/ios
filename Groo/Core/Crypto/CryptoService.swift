@@ -52,7 +52,7 @@ struct CryptoService {
     // MARK: - Key Derivation
 
     /// Derive an AES-256 key from password and salt using PBKDF2-HMAC-SHA256
-    func deriveKey(password: String, salt: Data) throws -> SymmetricKey {
+    func deriveKey(password: String, salt: Data, iterations: UInt32 = pbkdf2Iterations) throws -> SymmetricKey {
         guard let passwordData = password.data(using: .utf8) else {
             throw CryptoError.keyDerivationFailed
         }
@@ -68,7 +68,7 @@ struct CryptoService {
                         saltBuffer.baseAddress?.assumingMemoryBound(to: UInt8.self),
                         salt.count,
                         CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
-                        pbkdf2Iterations,
+                        iterations,
                         derivedKeyBuffer.baseAddress?.assumingMemoryBound(to: UInt8.self),
                         keyLength
                     )

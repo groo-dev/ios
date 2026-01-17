@@ -121,8 +121,8 @@ class PassService {
         keySalt = salt
         kdfIterations = UInt32(keyInfo.kdfIterations)
 
-        // Derive encryption key
-        let key = try crypto.deriveKey(password: password, salt: salt)
+        // Derive encryption key using server-provided iterations
+        let key = try crypto.deriveKey(password: password, salt: salt, iterations: kdfIterations)
 
         // Fetch and decrypt vault to verify password
         let vaultResponse: PassVaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
@@ -183,24 +183,29 @@ class PassService {
 
         // Try to load from local cache first
         if let cached = try? await vaultStore.loadVault() {
-            let decryptedData = try decryptVaultData(
-                cached.data,
-                iv: Data(base64Encoded: cached.metadata.iv) ?? Data(),
-                using: key
-            )
+            do {
+                let decryptedData = try decryptVaultData(
+                    cached.data,
+                    iv: Data(base64Encoded: cached.metadata.iv) ?? Data(),
+                    using: key
+                )
 
-            if let decryptedVault = try? JSONDecoder().decode(PassVault.self, from: decryptedData) {
-                encryptionKey = key
-                vault = decryptedVault
-                serverVersion = cached.metadata.version
-                hasVaultSetup = true
+                if let decryptedVault = try? JSONDecoder().decode(PassVault.self, from: decryptedData) {
+                    encryptionKey = key
+                    vault = decryptedVault
+                    serverVersion = cached.metadata.version
+                    hasVaultSetup = true
 
-                // Sync in background
-                Task {
-                    try? await sync()
+                    // Sync in background
+                    Task {
+                        try? await sync()
+                    }
+
+                    return true
                 }
-
-                return true
+            } catch {
+                // Local cache decryption failed - clear it and fall through to server
+                try? await vaultStore.clear()
             }
         }
 
@@ -278,6 +283,11 @@ class PassService {
     }
 
     /// Get all folders
+    /// All folders in the vault
+    var folders: [PassFolder] {
+        vault?.folders ?? []
+    }
+
     func getFolders() -> [PassFolder] {
         vault?.folders ?? []
     }
@@ -308,6 +318,349 @@ class PassService {
 
             return false
         }
+    }
+
+    /// Get items in trash (deleted but not permanently deleted)
+    func getDeletedItems() -> [PassVaultItem] {
+        guard let vault = vault else { return [] }
+        return vault.items
+            .filter { $0.deletedAt != nil }
+            .sorted { $0.deletedAt ?? 0 > $1.deletedAt ?? 0 }
+    }
+
+    // MARK: - Item CRUD Operations
+
+    /// Add a new item to the vault
+    func addItem(_ item: PassVaultItem) async throws {
+        guard var vault = vault else {
+            throw PassError.noEncryptionKey
+        }
+
+        vault.items.append(item)
+        vault.lastModified = Int(Date().timeIntervalSince1970 * 1000)
+        self.vault = vault
+
+        try await saveVault()
+    }
+
+    /// Update an existing item in the vault
+    func updateItem(_ item: PassVaultItem) async throws {
+        guard var vault = vault else {
+            throw PassError.noEncryptionKey
+        }
+
+        guard let index = vault.items.firstIndex(where: { $0.id == item.id }) else {
+            throw PassError.invalidVaultData
+        }
+
+        vault.items[index] = item
+        vault.lastModified = Int(Date().timeIntervalSince1970 * 1000)
+        self.vault = vault
+
+        try await saveVault()
+    }
+
+    /// Soft delete an item (move to trash)
+    func deleteItem(_ item: PassVaultItem) async throws {
+        guard var vault = vault else {
+            throw PassError.noEncryptionKey
+        }
+
+        guard let index = vault.items.firstIndex(where: { $0.id == item.id }) else {
+            throw PassError.invalidVaultData
+        }
+
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        var updatedItem = vault.items[index]
+
+        // Set deletedAt based on item type
+        switch updatedItem {
+        case .password(var passwordItem):
+            passwordItem.deletedAt = now
+            passwordItem.updatedAt = now
+            updatedItem = .password(passwordItem)
+        case .note(var noteItem):
+            noteItem.deletedAt = now
+            noteItem.updatedAt = now
+            updatedItem = .note(noteItem)
+        case .card(var cardItem):
+            cardItem.deletedAt = now
+            cardItem.updatedAt = now
+            updatedItem = .card(cardItem)
+        case .bankAccount(var bankItem):
+            bankItem.deletedAt = now
+            bankItem.updatedAt = now
+            updatedItem = .bankAccount(bankItem)
+        case .passkey(var passkeyItem):
+            passkeyItem.deletedAt = now
+            passkeyItem.updatedAt = now
+            updatedItem = .passkey(passkeyItem)
+        case .file(var fileItem):
+            fileItem.deletedAt = now
+            fileItem.updatedAt = now
+            updatedItem = .file(fileItem)
+        case .corrupted:
+            break // Corrupted items can be deleted via permanentlyDeleteItem
+        }
+
+        vault.items[index] = updatedItem
+        vault.lastModified = now
+        self.vault = vault
+
+        try await saveVault()
+    }
+
+    /// Restore an item from trash
+    func restoreItem(_ item: PassVaultItem) async throws {
+        guard var vault = vault else {
+            throw PassError.noEncryptionKey
+        }
+
+        guard let index = vault.items.firstIndex(where: { $0.id == item.id }) else {
+            throw PassError.invalidVaultData
+        }
+
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        var updatedItem = vault.items[index]
+
+        // Clear deletedAt based on item type
+        switch updatedItem {
+        case .password(var passwordItem):
+            passwordItem.deletedAt = nil
+            passwordItem.updatedAt = now
+            updatedItem = .password(passwordItem)
+        case .note(var noteItem):
+            noteItem.deletedAt = nil
+            noteItem.updatedAt = now
+            updatedItem = .note(noteItem)
+        case .card(var cardItem):
+            cardItem.deletedAt = nil
+            cardItem.updatedAt = now
+            updatedItem = .card(cardItem)
+        case .bankAccount(var bankItem):
+            bankItem.deletedAt = nil
+            bankItem.updatedAt = now
+            updatedItem = .bankAccount(bankItem)
+        case .passkey(var passkeyItem):
+            passkeyItem.deletedAt = nil
+            passkeyItem.updatedAt = now
+            updatedItem = .passkey(passkeyItem)
+        case .file(var fileItem):
+            fileItem.deletedAt = nil
+            fileItem.updatedAt = now
+            updatedItem = .file(fileItem)
+        case .corrupted:
+            return // Corrupted items cannot be restored
+        }
+
+        vault.items[index] = updatedItem
+        vault.lastModified = now
+        self.vault = vault
+
+        try await saveVault()
+    }
+
+    /// Permanently delete an item from the vault
+    func permanentlyDeleteItem(_ item: PassVaultItem) async throws {
+        guard var vault = vault else {
+            throw PassError.noEncryptionKey
+        }
+
+        vault.items.removeAll { $0.id == item.id }
+        vault.lastModified = Int(Date().timeIntervalSince1970 * 1000)
+        self.vault = vault
+
+        try await saveVault()
+    }
+
+    /// Empty the trash (permanently delete all trashed items)
+    func emptyTrash() async throws {
+        guard var vault = vault else {
+            throw PassError.noEncryptionKey
+        }
+
+        vault.items.removeAll { $0.deletedAt != nil }
+        vault.lastModified = Int(Date().timeIntervalSince1970 * 1000)
+        self.vault = vault
+
+        try await saveVault()
+    }
+
+    /// Toggle favorite status for an item
+    func toggleFavorite(_ item: PassVaultItem) async throws {
+        guard var vault = vault else {
+            throw PassError.noEncryptionKey
+        }
+
+        guard let index = vault.items.firstIndex(where: { $0.id == item.id }) else {
+            throw PassError.invalidVaultData
+        }
+
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        var updatedItem = vault.items[index]
+
+        switch updatedItem {
+        case .password(var passwordItem):
+            passwordItem.favorite = !(passwordItem.favorite ?? false)
+            passwordItem.updatedAt = now
+            updatedItem = .password(passwordItem)
+        case .note(var noteItem):
+            noteItem.favorite = !(noteItem.favorite ?? false)
+            noteItem.updatedAt = now
+            updatedItem = .note(noteItem)
+        case .card(var cardItem):
+            cardItem.favorite = !(cardItem.favorite ?? false)
+            cardItem.updatedAt = now
+            updatedItem = .card(cardItem)
+        case .bankAccount(var bankItem):
+            bankItem.favorite = !(bankItem.favorite ?? false)
+            bankItem.updatedAt = now
+            updatedItem = .bankAccount(bankItem)
+        case .passkey(var passkeyItem):
+            passkeyItem.favorite = !(passkeyItem.favorite ?? false)
+            passkeyItem.updatedAt = now
+            updatedItem = .passkey(passkeyItem)
+        case .file(var fileItem):
+            fileItem.favorite = !(fileItem.favorite ?? false)
+            fileItem.updatedAt = now
+            updatedItem = .file(fileItem)
+        case .corrupted:
+            return // Corrupted items cannot be favorited
+        }
+
+        vault.items[index] = updatedItem
+        vault.lastModified = now
+        self.vault = vault
+
+        try await saveVault()
+    }
+
+    // MARK: - Folder Operations
+
+    /// Add a new folder
+    func addFolder(_ folder: PassFolder) async throws {
+        guard var vault = vault else {
+            throw PassError.noEncryptionKey
+        }
+
+        vault.folders.append(folder)
+        vault.lastModified = Int(Date().timeIntervalSince1970 * 1000)
+        self.vault = vault
+
+        try await saveVault()
+    }
+
+    /// Update a folder
+    func updateFolder(_ folder: PassFolder) async throws {
+        guard var vault = vault else {
+            throw PassError.noEncryptionKey
+        }
+
+        guard let index = vault.folders.firstIndex(where: { $0.id == folder.id }) else {
+            throw PassError.invalidVaultData
+        }
+
+        vault.folders[index] = folder
+        vault.lastModified = Int(Date().timeIntervalSince1970 * 1000)
+        self.vault = vault
+
+        try await saveVault()
+    }
+
+    /// Delete a folder (items in folder become root items)
+    func deleteFolder(_ folder: PassFolder) async throws {
+        guard var vault = vault else {
+            throw PassError.noEncryptionKey
+        }
+
+        // Remove folder
+        vault.folders.removeAll { $0.id == folder.id }
+
+        // Move items in this folder to root (clear folderId)
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        vault.items = vault.items.map { item in
+            guard item.folderId == folder.id else { return item }
+
+            var updatedItem = item
+            switch updatedItem {
+            case .password(var passwordItem):
+                passwordItem.folderId = nil
+                passwordItem.updatedAt = now
+                updatedItem = .password(passwordItem)
+            case .note(var noteItem):
+                noteItem.folderId = nil
+                noteItem.updatedAt = now
+                updatedItem = .note(noteItem)
+            case .card(var cardItem):
+                cardItem.folderId = nil
+                cardItem.updatedAt = now
+                updatedItem = .card(cardItem)
+            case .bankAccount(var bankItem):
+                bankItem.folderId = nil
+                bankItem.updatedAt = now
+                updatedItem = .bankAccount(bankItem)
+            case .passkey(var passkeyItem):
+                passkeyItem.folderId = nil
+                passkeyItem.updatedAt = now
+                updatedItem = .passkey(passkeyItem)
+            case .file(var fileItem):
+                fileItem.folderId = nil
+                fileItem.updatedAt = now
+                updatedItem = .file(fileItem)
+            case .corrupted:
+                break // Corrupted items don't have folder IDs
+            }
+            return updatedItem
+        }
+
+        vault.lastModified = now
+        self.vault = vault
+
+        try await saveVault()
+    }
+
+    // MARK: - Save Vault
+
+    /// Encrypt and save vault to server
+    private func saveVault() async throws {
+        guard let key = encryptionKey, let vault = vault else {
+            throw PassError.noEncryptionKey
+        }
+
+        isLoading = true
+        defer { isLoading = false }
+
+        // Encode vault to JSON
+        let vaultData = try JSONEncoder().encode(vault)
+
+        // Encrypt the vault
+        let encryptedData = try crypto.encryptData(vaultData, using: key)
+
+        // Split IV and ciphertext (encryptData returns IV + ciphertext + tag)
+        let iv = encryptedData.prefix(12)
+        let ciphertext = encryptedData.dropFirst(12)
+
+        // Prepare update request
+        let request = PassVaultUpdateRequest(
+            encryptedData: ciphertext.base64EncodedString(),
+            iv: iv.base64EncodedString(),
+            expectedVersion: serverVersion
+        )
+
+        // Send to server
+        let response: PassVaultResponse = try await api.put(PassAPIClient.Endpoint.vault, body: request)
+
+        // Update server version
+        serverVersion = response.version
+
+        // Update local cache
+        let metadata = PassVaultMetadata(
+            version: response.version,
+            iv: iv.base64EncodedString(),
+            updatedAt: response.updatedAt,
+            lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
+        )
+        try await vaultStore.saveVault(encryptedData: ciphertext, metadata: metadata)
     }
 
     // MARK: - Sync

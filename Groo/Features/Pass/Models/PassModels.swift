@@ -51,6 +51,30 @@ struct PassVault: Codable, Equatable {
     static var empty: PassVault {
         PassVault(version: 1, items: [], folders: [], lastModified: Int(Date().timeIntervalSince1970 * 1000))
     }
+
+    enum CodingKeys: String, CodingKey {
+        case version, items, folders, lastModified, rsaPrivateKey
+    }
+
+    init(version: Int, items: [PassVaultItem], folders: [PassFolder], lastModified: Int, rsaPrivateKey: String? = nil) {
+        self.version = version
+        self.items = items
+        self.folders = folders
+        self.lastModified = lastModified
+        self.rsaPrivateKey = rsaPrivateKey
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        version = try container.decode(Int.self, forKey: .version)
+        folders = try container.decode([PassFolder].self, forKey: .folders)
+        lastModified = try container.decode(Int.self, forKey: .lastModified)
+        rsaPrivateKey = try container.decodeIfPresent(String.self, forKey: .rsaPrivateKey)
+
+        // PassVaultItem now handles errors gracefully and returns .corrupted for bad items
+        items = try container.decode([PassVaultItem].self, forKey: .items)
+    }
 }
 
 /// Folder for organizing items
@@ -93,6 +117,31 @@ enum PassVaultItemType: String, Codable, CaseIterable {
     }
 }
 
+/// Corrupted item data (for items that failed to decode)
+struct PassCorruptedItem: Codable, Equatable {
+    let id: String
+    let rawJson: String
+    let error: String
+
+    // Try to extract id from raw JSON, or generate a unique one
+    static func from(json: Data, error: Error) -> PassCorruptedItem {
+        let rawJson = String(data: json, encoding: .utf8) ?? "{}"
+
+        // Try to extract id from the raw JSON
+        var extractedId = UUID().uuidString.lowercased()
+        if let dict = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
+           let id = dict["id"] as? String {
+            extractedId = id
+        }
+
+        return PassCorruptedItem(
+            id: extractedId,
+            rawJson: rawJson,
+            error: error.localizedDescription
+        )
+    }
+}
+
 /// Union type for all vault items
 enum PassVaultItem: Codable, Identifiable, Equatable {
     case password(PassPasswordItem)
@@ -101,6 +150,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
     case card(PassCardItem)
     case bankAccount(PassBankAccountItem)
     case file(PassFileItem)
+    case corrupted(PassCorruptedItem)
 
     var id: String {
         switch self {
@@ -110,6 +160,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.id
         case .bankAccount(let item): item.id
         case .file(let item): item.id
+        case .corrupted(let item): item.id
         }
     }
 
@@ -121,6 +172,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.name
         case .bankAccount(let item): item.name
         case .file(let item): item.name
+        case .corrupted: "⚠️ Corrupted Item"
         }
     }
 
@@ -132,6 +184,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card: .card
         case .bankAccount: .bankAccount
         case .file: .file
+        case .corrupted: .password  // Default, won't be used
         }
     }
 
@@ -143,6 +196,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.folderId
         case .bankAccount(let item): item.folderId
         case .file(let item): item.folderId
+        case .corrupted: nil
         }
     }
 
@@ -154,6 +208,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.favorite ?? false
         case .bankAccount(let item): item.favorite ?? false
         case .file(let item): item.favorite ?? false
+        case .corrupted: false
         }
     }
 
@@ -165,6 +220,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.deletedAt
         case .bankAccount(let item): item.deletedAt
         case .file(let item): item.deletedAt
+        case .corrupted: nil
         }
     }
 
@@ -176,6 +232,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.createdAt
         case .bankAccount(let item): item.createdAt
         case .file(let item): item.createdAt
+        case .corrupted: 0
         }
     }
 
@@ -187,6 +244,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.updatedAt
         case .bankAccount(let item): item.updatedAt
         case .file(let item): item.updatedAt
+        case .corrupted: 0
         }
     }
 
@@ -194,30 +252,87 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         deletedAt != nil
     }
 
+    var isCorrupted: Bool {
+        if case .corrupted = self { return true }
+        return false
+    }
+
     // MARK: - Codable
 
     enum CodingKeys: String, CodingKey {
-        case type
+        case type, id
+        // Fields for type inference when type is missing
+        case username, password, urls  // password item
+        case number, cvv, cardholderName  // card item
+        case bankName, accountNumber  // bank account item
+        case content  // note item
+        case rpId, credentialId  // passkey item
+        case fileName, r2Key  // file item
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let type = try container.decode(PassVaultItemType.self, forKey: .type)
 
-        switch type {
-        case .password:
-            self = .password(try PassPasswordItem(from: decoder))
-        case .passkey:
-            self = .passkey(try PassPasskeyItem(from: decoder))
-        case .note:
-            self = .note(try PassNoteItem(from: decoder))
-        case .card:
-            self = .card(try PassCardItem(from: decoder))
-        case .bankAccount:
-            self = .bankAccount(try PassBankAccountItem(from: decoder))
-        case .file:
-            self = .file(try PassFileItem(from: decoder))
+        // Try to decode type, or infer it from fields if missing
+        let itemType: PassVaultItemType
+        if let type = try? container.decode(PassVaultItemType.self, forKey: .type) {
+            itemType = type
+        } else {
+            // Infer type from present fields
+            itemType = Self.inferType(from: container)
         }
+
+        // Try to decode the appropriate item type
+        do {
+            switch itemType {
+            case .password:
+                self = .password(try PassPasswordItem(from: decoder))
+            case .passkey:
+                self = .passkey(try PassPasskeyItem(from: decoder))
+            case .note:
+                self = .note(try PassNoteItem(from: decoder))
+            case .card:
+                self = .card(try PassCardItem(from: decoder))
+            case .bankAccount:
+                self = .bankAccount(try PassBankAccountItem(from: decoder))
+            case .file:
+                self = .file(try PassFileItem(from: decoder))
+            }
+        } catch {
+            // If decoding fails, create a corrupted item
+            let id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString.lowercased()
+            self = .corrupted(PassCorruptedItem(
+                id: id,
+                rawJson: "Decode failed for type: \(itemType.rawValue)",
+                error: error.localizedDescription
+            ))
+        }
+    }
+
+    /// Infer item type from available fields when type field is missing
+    private static func inferType(from container: KeyedDecodingContainer<CodingKeys>) -> PassVaultItemType {
+        // Check for passkey-specific fields first (most unique)
+        if container.contains(.rpId) && container.contains(.credentialId) {
+            return .passkey
+        }
+        // Check for file-specific fields
+        if container.contains(.fileName) && container.contains(.r2Key) {
+            return .file
+        }
+        // Check for card-specific fields
+        if container.contains(.cvv) || (container.contains(.number) && container.contains(.cardholderName)) {
+            return .card
+        }
+        // Check for bank account-specific fields
+        if container.contains(.bankName) && container.contains(.accountNumber) {
+            return .bankAccount
+        }
+        // Check for note-specific fields (content without password fields)
+        if container.contains(.content) && !container.contains(.password) {
+            return .note
+        }
+        // Default to password (most common type)
+        return .password
     }
 
     func encode(to encoder: Encoder) throws {
@@ -228,6 +343,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): try item.encode(to: encoder)
         case .bankAccount(let item): try item.encode(to: encoder)
         case .file(let item): try item.encode(to: encoder)
+        case .corrupted(let item): try item.encode(to: encoder)
         }
     }
 }
@@ -237,7 +353,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
 /// Base protocol for all items
 protocol PassBaseItem: Codable, Identifiable, Equatable {
     var id: String { get }
-    static var itemType: PassVaultItemType { get }
+    var type: PassVaultItemType { get }
     var name: String { get set }
     var folderId: String? { get set }
     var favorite: Bool? { get set }
@@ -246,13 +362,10 @@ protocol PassBaseItem: Codable, Identifiable, Equatable {
     var deletedAt: Int? { get set }
 }
 
-extension PassBaseItem {
-    var type: PassVaultItemType { Self.itemType }
-}
-
 /// Password / Login item
 struct PassPasswordItem: PassBaseItem {
     let id: String
+    let type: PassVaultItemType
     var name: String
     var username: String
     var password: String
@@ -265,7 +378,42 @@ struct PassPasswordItem: PassBaseItem {
     var updatedAt: Int
     var deletedAt: Int?
 
-    static var itemType: PassVaultItemType { .password }
+    enum CodingKeys: String, CodingKey {
+        case id, type, name, username, password, urls, notes, totp, folderId, favorite, createdAt, updatedAt, deletedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decodeIfPresent(PassVaultItemType.self, forKey: .type) ?? .password
+        name = try container.decode(String.self, forKey: .name)
+        username = try container.decode(String.self, forKey: .username)
+        password = try container.decode(String.self, forKey: .password)
+        urls = try container.decode([String].self, forKey: .urls)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        totp = try container.decodeIfPresent(PassTotpConfig.self, forKey: .totp)
+        folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
+        favorite = try container.decodeIfPresent(Bool.self, forKey: .favorite)
+        createdAt = try container.decode(Int.self, forKey: .createdAt)
+        updatedAt = try container.decode(Int.self, forKey: .updatedAt)
+        deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
+    }
+
+    init(id: String, type: PassVaultItemType, name: String, username: String, password: String, urls: [String], notes: String?, totp: PassTotpConfig?, folderId: String?, favorite: Bool?, createdAt: Int, updatedAt: Int, deletedAt: Int? = nil) {
+        self.id = id
+        self.type = type
+        self.name = name
+        self.username = username
+        self.password = password
+        self.urls = urls
+        self.notes = notes
+        self.totp = totp
+        self.folderId = folderId
+        self.favorite = favorite
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+    }
 
     static func create(
         name: String,
@@ -279,6 +427,7 @@ struct PassPasswordItem: PassBaseItem {
         let now = Int(Date().timeIntervalSince1970 * 1000)
         return PassPasswordItem(
             id: UUID().uuidString.lowercased(),
+            type: .password,
             name: name,
             username: username,
             password: password,
@@ -310,6 +459,7 @@ struct PassTotpConfig: Codable, Equatable {
 /// Passkey / WebAuthn item
 struct PassPasskeyItem: PassBaseItem {
     let id: String
+    let type: PassVaultItemType
     var name: String
     var rpId: String
     var rpName: String
@@ -325,12 +475,35 @@ struct PassPasskeyItem: PassBaseItem {
     var updatedAt: Int
     var deletedAt: Int?
 
-    static var itemType: PassVaultItemType { .passkey }
+    enum CodingKeys: String, CodingKey {
+        case id, type, name, rpId, rpName, credentialId, publicKey, privateKey, userHandle, userName, signCount, folderId, favorite, createdAt, updatedAt, deletedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decodeIfPresent(PassVaultItemType.self, forKey: .type) ?? .passkey
+        name = try container.decode(String.self, forKey: .name)
+        rpId = try container.decode(String.self, forKey: .rpId)
+        rpName = try container.decode(String.self, forKey: .rpName)
+        credentialId = try container.decode(String.self, forKey: .credentialId)
+        publicKey = try container.decode(String.self, forKey: .publicKey)
+        privateKey = try container.decode(String.self, forKey: .privateKey)
+        userHandle = try container.decode(String.self, forKey: .userHandle)
+        userName = try container.decode(String.self, forKey: .userName)
+        signCount = try container.decode(Int.self, forKey: .signCount)
+        folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
+        favorite = try container.decodeIfPresent(Bool.self, forKey: .favorite)
+        createdAt = try container.decode(Int.self, forKey: .createdAt)
+        updatedAt = try container.decode(Int.self, forKey: .updatedAt)
+        deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
+    }
 }
 
 /// Secure Note item
 struct PassNoteItem: PassBaseItem {
     let id: String
+    let type: PassVaultItemType
     var name: String
     var content: String
     var folderId: String?
@@ -339,12 +512,40 @@ struct PassNoteItem: PassBaseItem {
     var updatedAt: Int
     var deletedAt: Int?
 
-    static var itemType: PassVaultItemType { .note }
+    enum CodingKeys: String, CodingKey {
+        case id, type, name, content, folderId, favorite, createdAt, updatedAt, deletedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decodeIfPresent(PassVaultItemType.self, forKey: .type) ?? .note
+        name = try container.decode(String.self, forKey: .name)
+        content = try container.decode(String.self, forKey: .content)
+        folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
+        favorite = try container.decodeIfPresent(Bool.self, forKey: .favorite)
+        createdAt = try container.decode(Int.self, forKey: .createdAt)
+        updatedAt = try container.decode(Int.self, forKey: .updatedAt)
+        deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
+    }
+
+    init(id: String, type: PassVaultItemType, name: String, content: String, folderId: String?, favorite: Bool?, createdAt: Int, updatedAt: Int, deletedAt: Int? = nil) {
+        self.id = id
+        self.type = type
+        self.name = name
+        self.content = content
+        self.folderId = folderId
+        self.favorite = favorite
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+    }
 
     static func create(name: String, content: String = "", folderId: String? = nil) -> PassNoteItem {
         let now = Int(Date().timeIntervalSince1970 * 1000)
         return PassNoteItem(
             id: UUID().uuidString.lowercased(),
+            type: .note,
             name: name,
             content: content,
             folderId: folderId,
@@ -358,6 +559,7 @@ struct PassNoteItem: PassBaseItem {
 /// Credit/Debit Card item
 struct PassCardItem: PassBaseItem {
     let id: String
+    let type: PassVaultItemType
     var name: String
     var cardholderName: String
     var number: String
@@ -372,7 +574,46 @@ struct PassCardItem: PassBaseItem {
     var updatedAt: Int
     var deletedAt: Int?
 
-    static var itemType: PassVaultItemType { .card }
+    enum CodingKeys: String, CodingKey {
+        case id, type, name, cardholderName, number, expMonth, expYear, cvv, brand, notes, folderId, favorite, createdAt, updatedAt, deletedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decodeIfPresent(PassVaultItemType.self, forKey: .type) ?? .card
+        name = try container.decode(String.self, forKey: .name)
+        cardholderName = try container.decode(String.self, forKey: .cardholderName)
+        number = try container.decode(String.self, forKey: .number)
+        expMonth = try container.decode(String.self, forKey: .expMonth)
+        expYear = try container.decode(String.self, forKey: .expYear)
+        cvv = try container.decode(String.self, forKey: .cvv)
+        brand = try container.decodeIfPresent(String.self, forKey: .brand)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
+        favorite = try container.decodeIfPresent(Bool.self, forKey: .favorite)
+        createdAt = try container.decode(Int.self, forKey: .createdAt)
+        updatedAt = try container.decode(Int.self, forKey: .updatedAt)
+        deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
+    }
+
+    init(id: String, type: PassVaultItemType, name: String, cardholderName: String, number: String, expMonth: String, expYear: String, cvv: String, brand: String?, notes: String?, folderId: String?, favorite: Bool?, createdAt: Int, updatedAt: Int, deletedAt: Int? = nil) {
+        self.id = id
+        self.type = type
+        self.name = name
+        self.cardholderName = cardholderName
+        self.number = number
+        self.expMonth = expMonth
+        self.expYear = expYear
+        self.cvv = cvv
+        self.brand = brand
+        self.notes = notes
+        self.folderId = folderId
+        self.favorite = favorite
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+    }
 
     static func create(
         name: String,
@@ -388,6 +629,7 @@ struct PassCardItem: PassBaseItem {
         let now = Int(Date().timeIntervalSince1970 * 1000)
         return PassCardItem(
             id: UUID().uuidString.lowercased(),
+            type: .card,
             name: name,
             cardholderName: cardholderName,
             number: number,
@@ -407,6 +649,7 @@ struct PassCardItem: PassBaseItem {
 /// Bank Account item
 struct PassBankAccountItem: PassBaseItem {
     let id: String
+    let type: PassVaultItemType
     var name: String
     var bankName: String
     var accountType: PassBankAccountType
@@ -421,18 +664,58 @@ struct PassBankAccountItem: PassBaseItem {
     var updatedAt: Int
     var deletedAt: Int?
 
-    static var itemType: PassVaultItemType { .bankAccount }
-
     enum PassBankAccountType: String, Codable {
         case checking
         case savings
         case other
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, name, bankName, accountType, accountNumber, routingNumber, iban, swiftBic, notes, folderId, favorite, createdAt, updatedAt, deletedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decodeIfPresent(PassVaultItemType.self, forKey: .type) ?? .bankAccount
+        name = try container.decode(String.self, forKey: .name)
+        bankName = try container.decode(String.self, forKey: .bankName)
+        accountType = try container.decode(PassBankAccountType.self, forKey: .accountType)
+        accountNumber = try container.decode(String.self, forKey: .accountNumber)
+        routingNumber = try container.decodeIfPresent(String.self, forKey: .routingNumber)
+        iban = try container.decodeIfPresent(String.self, forKey: .iban)
+        swiftBic = try container.decodeIfPresent(String.self, forKey: .swiftBic)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
+        favorite = try container.decodeIfPresent(Bool.self, forKey: .favorite)
+        createdAt = try container.decode(Int.self, forKey: .createdAt)
+        updatedAt = try container.decode(Int.self, forKey: .updatedAt)
+        deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
+    }
+
+    init(id: String, type: PassVaultItemType, name: String, bankName: String, accountType: PassBankAccountType, accountNumber: String, routingNumber: String?, iban: String?, swiftBic: String?, notes: String?, folderId: String?, favorite: Bool?, createdAt: Int, updatedAt: Int, deletedAt: Int? = nil) {
+        self.id = id
+        self.type = type
+        self.name = name
+        self.bankName = bankName
+        self.accountType = accountType
+        self.accountNumber = accountNumber
+        self.routingNumber = routingNumber
+        self.iban = iban
+        self.swiftBic = swiftBic
+        self.notes = notes
+        self.folderId = folderId
+        self.favorite = favorite
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
     }
 }
 
 /// Encrypted File item (metadata only, file stored in R2)
 struct PassFileItem: PassBaseItem {
     let id: String
+    let type: PassVaultItemType
     var name: String
     var fileName: String
     var fileSize: Int
@@ -446,7 +729,27 @@ struct PassFileItem: PassBaseItem {
     var updatedAt: Int
     var deletedAt: Int?
 
-    static var itemType: PassVaultItemType { .file }
+    enum CodingKeys: String, CodingKey {
+        case id, type, name, fileName, fileSize, mimeType, r2Key, encryptionIv, notes, folderId, favorite, createdAt, updatedAt, deletedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decodeIfPresent(PassVaultItemType.self, forKey: .type) ?? .file
+        name = try container.decode(String.self, forKey: .name)
+        fileName = try container.decode(String.self, forKey: .fileName)
+        fileSize = try container.decode(Int.self, forKey: .fileSize)
+        mimeType = try container.decode(String.self, forKey: .mimeType)
+        r2Key = try container.decode(String.self, forKey: .r2Key)
+        encryptionIv = try container.decode(String.self, forKey: .encryptionIv)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
+        favorite = try container.decodeIfPresent(Bool.self, forKey: .favorite)
+        createdAt = try container.decode(Int.self, forKey: .createdAt)
+        updatedAt = try container.decode(Int.self, forKey: .updatedAt)
+        deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
+    }
 }
 
 // MARK: - Audit Types

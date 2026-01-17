@@ -20,25 +20,23 @@ struct PassItemRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: Theme.Spacing.md) {
+            HStack(spacing: Theme.Spacing.sm) {
                 // Type icon
-                Image(systemName: item.type.icon)
-                    .font(.title3)
-                    .foregroundStyle(Theme.Brand.primary)
-                    .frame(width: 32)
+                Image(systemName: item.isCorrupted ? "exclamationmark.triangle.fill" : item.type.icon)
+                    .font(.subheadline)
+                    .foregroundStyle(item.isCorrupted ? .orange : Theme.Brand.primary)
+                    .frame(width: 24)
 
                 // Item info
-                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text(item.name)
-                        .font(.body)
-                        .fontWeight(.medium)
+                        .font(.subheadline)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
-                    // Subtitle based on item type
                     if let subtitle = itemSubtitle {
                         Text(subtitle)
-                            .font(.caption)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -46,31 +44,24 @@ struct PassItemRow: View {
 
                 Spacer()
 
-                // Favorite indicator
                 if item.favorite {
                     Image(systemName: "star.fill")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.yellow)
                 }
 
-                // Quick copy button for passwords
                 if case .password = item, let onCopy = onCopyPassword {
                     Button {
                         onCopy()
                     } label: {
                         Image(systemName: "doc.on.doc")
-                            .font(.body)
+                            .font(.caption)
                             .foregroundStyle(Theme.Brand.primary)
                     }
                     .buttonStyle(.plain)
                 }
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
             }
-            .padding(.vertical, Theme.Spacing.sm)
-            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.xs)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -96,6 +87,8 @@ struct PassItemRow: View {
             return passkeyItem.rpName
         case .file(let fileItem):
             return fileItem.fileName
+        case .corrupted:
+            return "Corrupted - tap to delete"
         }
     }
 

@@ -13,6 +13,10 @@ struct PassView: View {
 
     @State private var selectedItem: PassVaultItem?
     @State private var isUnlocked = false
+    @State private var showingAddItem = false
+    @State private var editingItem: PassVaultItem?
+    @State private var showingTrash = false
+    @State private var showingFolders = false
 
     var body: some View {
         NavigationStack {
@@ -22,16 +26,40 @@ struct PassView: View {
                         passService: passService,
                         onSelectItem: { item in
                             selectedItem = item
+                        },
+                        onAddItem: {
+                            showingAddItem = true
+                        },
+                        onEditItem: { item in
+                            editingItem = item
                         }
                     )
                     .navigationTitle("Pass")
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button {
-                                passService.lock()
-                                isUnlocked = false
+                            Menu {
+                                Button {
+                                    showingFolders = true
+                                } label: {
+                                    Label("Folders", systemImage: "folder")
+                                }
+
+                                Button {
+                                    showingTrash = true
+                                } label: {
+                                    Label("Trash", systemImage: "trash")
+                                }
+
+                                Divider()
+
+                                Button {
+                                    passService.lock()
+                                    isUnlocked = false
+                                } label: {
+                                    Label("Lock Vault", systemImage: "lock.fill")
+                                }
                             } label: {
-                                Image(systemName: "lock.fill")
+                                Image(systemName: "ellipsis.circle")
                             }
                         }
                     }
@@ -55,6 +83,49 @@ struct PassView: View {
                         }
                     )
                 }
+            }
+            .sheet(isPresented: $showingAddItem) {
+                PassItemFormView(
+                    passService: passService,
+                    onSave: {
+                        showingAddItem = false
+                    },
+                    onCancel: {
+                        showingAddItem = false
+                    }
+                )
+            }
+            .sheet(item: $editingItem) { item in
+                PassItemFormView(
+                    passService: passService,
+                    editingItem: item,
+                    onSave: {
+                        editingItem = nil
+                    },
+                    onCancel: {
+                        editingItem = nil
+                    }
+                )
+            }
+            .sheet(isPresented: $showingTrash) {
+                PassTrashView(
+                    passService: passService,
+                    onDismiss: {
+                        showingTrash = false
+                    }
+                )
+            }
+            .sheet(isPresented: $showingFolders) {
+                PassFolderListView(
+                    passService: passService,
+                    onDismiss: {
+                        showingFolders = false
+                    },
+                    onSelectFolder: { folder in
+                        // TODO: Filter items by folder
+                        showingFolders = false
+                    }
+                )
             }
         }
         .task {
