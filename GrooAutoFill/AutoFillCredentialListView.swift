@@ -12,9 +12,24 @@ struct AutoFillCredentialListView: View {
     @ObservedObject var service: AutoFillService
     let serviceIdentifiers: [ASCredentialServiceIdentifier]
     let onSelect: (SharedPassPasswordItem) -> Void
+    let onSelectPasskey: ((SharedPassPasskeyItem) -> Void)?
     let onCancel: () -> Void
 
     @State private var searchText = ""
+
+    init(
+        service: AutoFillService,
+        serviceIdentifiers: [ASCredentialServiceIdentifier],
+        onSelect: @escaping (SharedPassPasswordItem) -> Void,
+        onSelectPasskey: ((SharedPassPasskeyItem) -> Void)? = nil,
+        onCancel: @escaping () -> Void
+    ) {
+        self.service = service
+        self.serviceIdentifiers = serviceIdentifiers
+        self.onSelect = onSelect
+        self.onSelectPasskey = onSelectPasskey
+        self.onCancel = onCancel
+    }
 
     private var displayedCredentials: [SharedPassPasswordItem] {
         if searchText.isEmpty {
@@ -24,6 +39,18 @@ struct AutoFillCredentialListView: View {
         }
     }
 
+    private var displayedPasskeys: [SharedPassPasskeyItem] {
+        if searchText.isEmpty {
+            return service.passkeys
+        } else {
+            return service.searchPasskeys(query: searchText)
+        }
+    }
+
+    private var hasAnyCredentials: Bool {
+        !displayedCredentials.isEmpty || !displayedPasskeys.isEmpty
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -31,7 +58,7 @@ struct AutoFillCredentialListView: View {
                     loadingView
                 } else if !service.isUnlocked {
                     unlockView
-                } else if displayedCredentials.isEmpty {
+                } else if !hasAnyCredentials {
                     emptyView
                 } else {
                     credentialsList
@@ -112,12 +139,12 @@ struct AutoFillCredentialListView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
 
-            Text("No Passwords Found")
+            Text("No Credentials Found")
                 .font(.title3)
                 .fontWeight(.medium)
 
             if !serviceIdentifiers.isEmpty {
-                Text("No saved passwords for this website")
+                Text("No saved passwords or passkeys for this website")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -129,17 +156,36 @@ struct AutoFillCredentialListView: View {
 
     private var credentialsList: some View {
         List {
-            ForEach(displayedCredentials) { credential in
-                Button {
-                    onSelect(credential)
-                } label: {
-                    CredentialRow(credential: credential)
+            // Passkeys section
+            if !displayedPasskeys.isEmpty {
+                Section("Passkeys") {
+                    ForEach(displayedPasskeys) { passkey in
+                        Button {
+                            onSelectPasskey?(passkey)
+                        } label: {
+                            PasskeyRow(passkey: passkey)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
+            }
+
+            // Passwords section
+            if !displayedCredentials.isEmpty {
+                Section(displayedPasskeys.isEmpty ? "" : "Passwords") {
+                    ForEach(displayedCredentials) { credential in
+                        Button {
+                            onSelect(credential)
+                        } label: {
+                            CredentialRow(credential: credential)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
         .listStyle(.plain)
-        .searchable(text: $searchText, prompt: "Search passwords")
+        .searchable(text: $searchText, prompt: "Search credentials")
     }
 }
 
@@ -163,6 +209,40 @@ struct CredentialRow: View {
                     .fontWeight(.medium)
 
                 Text(credential.username)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Passkey Row
+
+struct PasskeyRow: View {
+    let passkey: SharedPassPasskeyItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icon
+            Image(systemName: "person.badge.key.fill")
+                .font(.title3)
+                .foregroundStyle(.purple)
+                .frame(width: 32)
+
+            // Info
+            VStack(alignment: .leading, spacing: 2) {
+                Text(passkey.name)
+                    .font(.body)
+                    .fontWeight(.medium)
+
+                Text(passkey.userName)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

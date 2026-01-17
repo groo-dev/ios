@@ -3,10 +3,11 @@
 //  GrooAutoFill
 //
 //  AutoFill Credential Provider for Groo Pass.
-//  Provides password credentials to apps and Safari.
+//  Provides password and passkey credentials to apps and Safari.
 //
 
 import AuthenticationServices
+import CryptoKit
 import SwiftUI
 
 class CredentialProviderViewController: ASCredentialProviderViewController {
@@ -88,6 +89,54 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
     override func prepareInterfaceToProvideCredential(for credentialIdentity: ASPasswordCredentialIdentity) {
         // The credential identity contains the record identifier we stored
         // We need to find and return this credential after biometric auth
+        handlePasswordRequest(credentialIdentity)
+    }
+
+    /// Called to prepare UI for credential selection
+    /// The serviceIdentifiers describe the service the user is logging into
+    override func prepareCredentialList(for serviceIdentifiers: [ASCredentialServiceIdentifier]) {
+        updateServiceIdentifiers(serviceIdentifiers)
+
+        // Auto-unlock if possible
+        if service.hasVault {
+            Task {
+                do {
+                    try await service.unlock()
+                } catch {
+                    // User will need to tap unlock button
+                }
+            }
+        }
+    }
+
+    // MARK: - iOS 17+ Passkey Methods
+
+    /// Called for credential requests (iOS 17+) - handles both passwords and passkeys
+    @available(iOS 17.0, *)
+    override func provideCredentialWithoutUserInteraction(for credentialRequest: ASCredentialRequest) {
+        // We always require user interaction (biometric auth)
+        extensionContext.cancelRequest(
+            withError: NSError(
+                domain: ASExtensionErrorDomain,
+                code: ASExtensionError.userInteractionRequired.rawValue
+            )
+        )
+    }
+
+    /// Called when UI is needed to authenticate before providing credential (iOS 17+)
+    @available(iOS 17.0, *)
+    override func prepareInterfaceToProvideCredential(for credentialRequest: ASCredentialRequest) {
+        if let passkeyRequest = credentialRequest as? ASPasskeyCredentialRequest {
+            handlePasskeyAssertion(passkeyRequest)
+        } else if let passwordRequest = credentialRequest as? ASPasswordCredentialRequest,
+                  let passwordIdentity = passwordRequest.credentialIdentity as? ASPasswordCredentialIdentity {
+            // Delegate to existing password handling
+            handlePasswordRequest(passwordIdentity)
+        }
+    }
+
+    /// Handle password credential request
+    private func handlePasswordRequest(_ credentialIdentity: ASPasswordCredentialIdentity) {
         Task {
             do {
                 try await service.unlock()
@@ -105,19 +154,65 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
         }
     }
 
-    /// Called to prepare UI for credential selection
-    /// The serviceIdentifiers describe the service the user is logging into
-    override func prepareCredentialList(for serviceIdentifiers: [ASCredentialServiceIdentifier]) {
-        updateServiceIdentifiers(serviceIdentifiers)
+    /// Handle passkey assertion request (iOS 17+)
+    @available(iOS 17.0, *)
+    private func handlePasskeyAssertion(_ request: ASPasskeyCredentialRequest) {
+        Task {
+            do {
+                try await service.unlock()
 
-        // Auto-unlock if possible
-        if service.hasVault {
-            Task {
-                do {
-                    try await service.unlock()
-                } catch {
-                    // User will need to tap unlock button
+                // Find the passkey by credential ID
+                let passkeyIdentity = request.credentialIdentity as! ASPasskeyCredentialIdentity
+                guard let passkey = service.findPasskey(credentialId: passkeyIdentity.credentialID) else {
+                    extensionContext.cancelRequest(
+                        withError: NSError(
+                            domain: ASExtensionErrorDomain,
+                            code: ASExtensionError.credentialIdentityNotFound.rawValue
+                        )
+                    )
+                    return
                 }
+
+                // Build authenticator data with incremented sign count
+                let authenticatorData = SharedPasskeyCrypto.buildAuthenticatorData(
+                    rpId: passkey.rpId,
+                    signCount: passkey.signCount + 1
+                )
+
+                // Sign the assertion
+                let signature = try SharedPasskeyCrypto.signAssertion(
+                    privateKeyBase64: passkey.privateKey,
+                    authenticatorData: authenticatorData,
+                    clientDataHash: request.clientDataHash
+                )
+
+                // Decode credential ID and user handle from base64
+                guard let credentialIdData = Data(base64Encoded: passkey.credentialId),
+                      let userHandleData = Data(base64Encoded: passkey.userHandle) else {
+                    throw AutoFillError.decryptionFailed
+                }
+
+                // Create passkey assertion credential
+                let credential = ASPasskeyAssertionCredential(
+                    userHandle: userHandleData,
+                    relyingParty: passkey.rpId,
+                    signature: signature,
+                    clientDataHash: request.clientDataHash,
+                    authenticatorData: authenticatorData,
+                    credentialID: credentialIdData
+                )
+
+                // Complete the request
+                await extensionContext.completeAssertionRequest(using: credential)
+
+            } catch {
+                extensionContext.cancelRequest(
+                    withError: NSError(
+                        domain: ASExtensionErrorDomain,
+                        code: ASExtensionError.failed.rawValue,
+                        userInfo: [NSLocalizedDescriptionKey: error.localizedDescription]
+                    )
+                )
             }
         }
     }

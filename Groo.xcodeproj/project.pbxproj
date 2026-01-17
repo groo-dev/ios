@@ -19,6 +19,8 @@
 		1B2839F42F1B83BC008D348D /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2839E92F1B83BC008D348D /* SharedKeychain.swift */; };
 		1B2839F52F1B83BC008D348D /* SharedCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2839E82F1B83BC008D348D /* SharedCrypto.swift */; };
 		1B2839F62F1B83BC008D348D /* SharedVaultStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2839EB2F1B83BC008D348D /* SharedVaultStore.swift */; };
+		1B2839F82F1B9597008D348D /* SharedPasskeyCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2839F72F1B9597008D348D /* SharedPasskeyCrypto.swift */; };
+		1B2839F92F1B9597008D348D /* SharedPasskeyCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2839F72F1B9597008D348D /* SharedPasskeyCrypto.swift */; };
 		1B2850C42F14012D0046247D /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850BA2F14012D0046247D /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B2850D12F1401620046247D /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1B2850D02F1401620046247D /* WidgetKit.framework */; };
 		1B2850D32F1401620046247D /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1B2850D22F1401620046247D /* SwiftUI.framework */; };
@@ -82,6 +84,7 @@
 		1B2839E92F1B83BC008D348D /* SharedKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedKeychain.swift; sourceTree = "<group>"; };
 		1B2839EA2F1B83BC008D348D /* SharedPassModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPassModels.swift; sourceTree = "<group>"; };
 		1B2839EB2F1B83BC008D348D /* SharedVaultStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedVaultStore.swift; sourceTree = "<group>"; };
+		1B2839F72F1B9597008D348D /* SharedPasskeyCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPasskeyCrypto.swift; sourceTree = "<group>"; };
 		1B2850A72F13FF540046247D /* Groo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Groo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B2850BA2F14012D0046247D /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B2850CE2F1401620046247D /* WidgetExtensionExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WidgetExtensionExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -206,6 +209,7 @@
 		1B2839EC2F1B83BC008D348D /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				1B2839F72F1B9597008D348D /* SharedPasskeyCrypto.swift */,
 				1B2839E72F1B83BC008D348D /* SharedConfig.swift */,
 				1B2839E82F1B83BC008D348D /* SharedCrypto.swift */,
 				1B2839E92F1B83BC008D348D /* SharedKeychain.swift */,
@@ -465,6 +469,7 @@
 				1B2839F22F1B83BC008D348D /* SharedPassModels.swift in Sources */,
 				1B2839F32F1B83BC008D348D /* SharedConfig.swift in Sources */,
 				1B2839F42F1B83BC008D348D /* SharedKeychain.swift in Sources */,
+				1B2839F92F1B9597008D348D /* SharedPasskeyCrypto.swift in Sources */,
 				1B2839F52F1B83BC008D348D /* SharedCrypto.swift in Sources */,
 				1B2839F62F1B83BC008D348D /* SharedVaultStore.swift in Sources */,
 			);
@@ -474,6 +479,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1B2839F82F1B9597008D348D /* SharedPasskeyCrypto.swift in Sources */,
 				1B2839ED2F1B83BC008D348D /* SharedPassModels.swift in Sources */,
 				1B2839EE2F1B83BC008D348D /* SharedConfig.swift in Sources */,
 				1B2839EF2F1B83BC008D348D /* SharedKeychain.swift in Sources */,
@@ -534,7 +540,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = GrooAutoFill/GrooAutoFillDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = GrooAutoFill/Info.plist;
@@ -564,7 +570,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = GrooAutoFill/GrooAutoFill.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = GrooAutoFill/Info.plist;
@@ -717,7 +723,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Groo/Groo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -755,7 +761,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Groo/GrooRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -790,7 +796,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -819,7 +825,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -850,7 +856,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = WidgetExtension/WidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WidgetExtension/Info.plist;
@@ -881,7 +887,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = WidgetExtension/WidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WidgetExtension/Info.plist;
@@ -910,7 +916,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = KeyboardExtension/KeyboardExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = KeyboardExtension/Info.plist;
@@ -939,7 +945,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = KeyboardExtension/KeyboardExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = KeyboardExtension/Info.plist;

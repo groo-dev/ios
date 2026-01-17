@@ -35,6 +35,7 @@ class AutoFillService: ObservableObject {
     @Published var isLoading = false
     @Published var isUnlocked = false
     @Published var credentials: [SharedPassPasswordItem] = []
+    @Published var passkeys: [SharedPassPasskeyItem] = []
     @Published var error: String?
 
     private var encryptionKey: SymmetricKey?
@@ -108,6 +109,14 @@ class AutoFillService: ObservableObject {
             }
             return passwordItem
         }
+
+        // Extract passkey items (non-deleted only)
+        passkeys = vault.items.compactMap { item -> SharedPassPasskeyItem? in
+            guard let passkeyItem = item.passkeyItem, !passkeyItem.isDeleted else {
+                return nil
+            }
+            return passkeyItem
+        }
     }
 
     // MARK: - Search
@@ -164,6 +173,35 @@ class AutoFillService: ObservableObject {
             credential.name.lowercased().contains(lowercasedQuery) ||
             credential.username.lowercased().contains(lowercasedQuery) ||
             credential.urls.contains { $0.lowercased().contains(lowercasedQuery) }
+        }
+    }
+
+    // MARK: - Passkey Methods
+
+    /// Find a passkey by its credential ID
+    func findPasskey(credentialId: Data) -> SharedPassPasskeyItem? {
+        let credentialIdBase64 = credentialId.base64EncodedString()
+        return passkeys.first { $0.credentialId == credentialIdBase64 }
+    }
+
+    /// Filter passkeys by relying party ID
+    func filteredPasskeys(for rpId: String?) -> [SharedPassPasskeyItem] {
+        guard let rpId = rpId else { return passkeys }
+        return passkeys.filter { $0.rpId == rpId }
+    }
+
+    /// Search passkeys by query string
+    func searchPasskeys(query: String) -> [SharedPassPasskeyItem] {
+        guard !query.isEmpty else {
+            return passkeys
+        }
+
+        let lowercasedQuery = query.lowercased()
+
+        return passkeys.filter { passkey in
+            passkey.name.lowercased().contains(lowercasedQuery) ||
+            passkey.userName.lowercased().contains(lowercasedQuery) ||
+            passkey.rpId.lowercased().contains(lowercasedQuery)
         }
     }
 }
