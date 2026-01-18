@@ -17,6 +17,8 @@ struct PassView: View {
     @State private var editingItem: PassVaultItem?
     @State private var showingTrash = false
     @State private var showingFolders = false
+    @State private var showingHealth = false
+    @State private var showingSettings = false
 
     var body: some View {
         NavigationStack {
@@ -48,6 +50,20 @@ struct PassView: View {
                                     showingTrash = true
                                 } label: {
                                     Label("Trash", systemImage: "trash")
+                                }
+
+                                Divider()
+
+                                Button {
+                                    showingHealth = true
+                                } label: {
+                                    Label("Password Health", systemImage: "heart.text.square")
+                                }
+
+                                Button {
+                                    showingSettings = true
+                                } label: {
+                                    Label("Settings", systemImage: "gear")
                                 }
 
                                 Divider()
@@ -124,6 +140,26 @@ struct PassView: View {
                     onSelectFolder: { folder in
                         // TODO: Filter items by folder
                         showingFolders = false
+                    }
+                )
+            }
+            .sheet(isPresented: $showingHealth) {
+                PasswordHealthView(
+                    passService: passService,
+                    onDismiss: {
+                        showingHealth = false
+                    },
+                    onSelectItem: { item in
+                        showingHealth = false
+                        selectedItem = item
+                    }
+                )
+            }
+            .sheet(isPresented: $showingSettings) {
+                PassSettingsView(
+                    passService: passService,
+                    onDismiss: {
+                        showingSettings = false
                     }
                 )
             }

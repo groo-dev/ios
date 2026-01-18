@@ -251,6 +251,11 @@ class PassService {
         }
     }
 
+    /// Disable biometric unlock (remove stored key from keychain)
+    func disableBiometric() throws {
+        try keychain.deleteBiometricProtected(for: KeychainService.Key.passEncryptionKey)
+    }
+
     // MARK: - Read Operations (from in-memory vault)
 
     /// Get all items (excluding deleted)
