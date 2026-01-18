@@ -34,6 +34,22 @@ struct MainTabView: View {
                     Label("Drive", systemImage: "folder")
                 }
                 .tag(2)
+
+            NavigationStack {
+                SettingsView(
+                    padService: padService,
+                    passService: passService,
+                    onSignOut: onSignOut,
+                    onLock: {
+                        padService.lock()
+                        passService.lock()
+                    }
+                )
+            }
+            .tabItem {
+                Label("Settings", systemImage: "gearshape")
+            }
+            .tag(3)
         }
         .tint(Theme.Brand.primary)
     }

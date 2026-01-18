@@ -98,6 +98,11 @@ class PadService {
         keychain.biometricProtectedKeyExists(for: KeychainService.Key.padEncryptionKey)
     }
 
+    /// Disable biometric unlock (remove stored key from keychain)
+    func disableBiometric() throws {
+        try keychain.deleteBiometricProtected(for: KeychainService.Key.padEncryptionKey)
+    }
+
     /// Lock the service (clear encryption key from memory)
     func lock() {
         encryptionKey = nil
