@@ -9,6 +9,7 @@
 import UIKit
 import CryptoKit
 import Foundation
+import LocalAuthentication
 
 // MARK: - Errors
 
@@ -167,14 +168,16 @@ class PassService {
     }
 
     /// Unlock using biometric authentication
-    func unlockWithBiometric() async throws -> Bool {
+    /// - Parameter context: Optional shared LAContext for reusing authentication within a session
+    func unlockWithBiometric(context: LAContext? = nil) async throws -> Bool {
         isLoading = true
         defer { isLoading = false }
 
         // Load key from Keychain (triggers Face ID/Touch ID)
         let keyData = try keychain.loadBiometricProtected(
             for: KeychainService.Key.passEncryptionKey,
-            prompt: "Authenticate to unlock Pass"
+            prompt: "Authenticate to unlock Pass",
+            context: context
         )
         let key = SymmetricKey(data: keyData)
 

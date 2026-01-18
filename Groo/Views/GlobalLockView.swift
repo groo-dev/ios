@@ -150,10 +150,15 @@ struct GlobalLockView: View {
         Task {
             var anyUnlocked = false
 
-            // Try to unlock Pad with biometric (single biometric session)
+            // Create ONE shared context with reuse duration
+            // First keychain access triggers FaceID, subsequent accesses reuse authentication
+            let context = LAContext()
+            context.touchIDAuthenticationAllowableReuseDuration = 10
+
+            // Try to unlock Pad with biometric (triggers FaceID prompt)
             if padService.canUnlockWithBiometric && !padService.isUnlocked {
                 do {
-                    let success = try padService.unlockWithBiometric()
+                    let success = try padService.unlockWithBiometric(context: context)
                     if success {
                         anyUnlocked = true
                     }
@@ -162,10 +167,10 @@ struct GlobalLockView: View {
                 }
             }
 
-            // Try to unlock Pass with biometric (same biometric session if available)
+            // Try to unlock Pass with biometric (reuses authentication from shared context)
             if passService.canUnlockWithBiometric && !passService.isUnlocked {
                 do {
-                    let success = try await passService.unlockWithBiometric()
+                    let success = try await passService.unlockWithBiometric(context: context)
                     if success {
                         anyUnlocked = true
                     }

@@ -140,9 +140,13 @@ struct KeychainService {
     }
 
     /// Load biometric-protected data (will trigger Face ID/Touch ID prompt)
-    func loadBiometricProtected(for key: String, prompt: String = "Authenticate to access Pad") throws -> Data {
-        let context = LAContext()
-        context.localizedReason = prompt
+    /// - Parameters:
+    ///   - key: Keychain key to load
+    ///   - prompt: Localized reason shown in biometric prompt
+    ///   - context: Optional shared LAContext for reusing authentication within a session
+    func loadBiometricProtected(for key: String, prompt: String = "Authenticate to access Pad", context: LAContext? = nil) throws -> Data {
+        let ctx = context ?? LAContext()
+        ctx.localizedReason = prompt
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -150,7 +154,7 @@ struct KeychainService {
             kSecAttrAccount as String: key,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseAuthenticationContext as String: context,
+            kSecUseAuthenticationContext as String: ctx,
         ]
 
         var result: AnyObject?

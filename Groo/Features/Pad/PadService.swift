@@ -9,6 +9,7 @@
 import UIKit
 import CryptoKit
 import Foundation
+import LocalAuthentication
 
 // MARK: - Errors
 
@@ -82,8 +83,12 @@ class PadService {
     }
 
     /// Try to unlock using biometric authentication (retrieve key from Keychain)
-    func unlockWithBiometric() throws -> Bool {
-        let keyData = try keychain.loadBiometricProtected(for: KeychainService.Key.padEncryptionKey)
+    /// - Parameter context: Optional shared LAContext for reusing authentication within a session
+    func unlockWithBiometric(context: LAContext? = nil) throws -> Bool {
+        let keyData = try keychain.loadBiometricProtected(
+            for: KeychainService.Key.padEncryptionKey,
+            context: context
+        )
         encryptionKey = SymmetricKey(data: keyData)
         return true
     }
