@@ -22,52 +22,6 @@ enum KeychainError: Error {
 struct KeychainService {
     private let service = Config.keychainService
 
-    // MARK: - Shared Biometric Context
-
-    /// Shared context for biometric reuse across all KeychainService instances
-    private static var sharedContext: LAContext?
-    private static var contextCreatedAt: Date?
-    private static let contextValidityDuration: TimeInterval = 300  // 5 minutes
-
-    /// Pre-authenticate to enable biometric reuse for subsequent keychain calls.
-    /// Call this once at app startup after PAT auth to avoid multiple Face ID prompts.
-    func preAuthenticate(reason: String = "Authenticate to unlock Groo") async throws {
-        let context = LAContext()
-        context.touchIDAuthenticationAllowableReuseDuration = Self.contextValidityDuration
-
-        try await context.evaluatePolicy(
-            .deviceOwnerAuthenticationWithBiometrics,
-            localizedReason: reason
-        )
-
-        Self.sharedContext = context
-        Self.contextCreatedAt = Date()
-    }
-
-    /// Check if pre-authentication is still valid
-    var isPreAuthenticated: Bool {
-        guard let context = Self.sharedContext,
-              let createdAt = Self.contextCreatedAt else { return false }
-        return Date().timeIntervalSince(createdAt) < Self.contextValidityDuration
-            && context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
-    }
-
-    /// Get valid context (shared if available, new otherwise)
-    private func getContext() -> LAContext {
-        if isPreAuthenticated, let context = Self.sharedContext {
-            return context
-        }
-        let context = LAContext()
-        context.touchIDAuthenticationAllowableReuseDuration = Self.contextValidityDuration
-        return context
-    }
-
-    /// Clear shared context (call on sign out)
-    func clearSharedContext() {
-        Self.sharedContext = nil
-        Self.contextCreatedAt = nil
-    }
-
     // MARK: - String Storage
 
     func save(_ value: String, for key: String) throws {
@@ -185,9 +139,9 @@ struct KeychainService {
         }
     }
 
-    /// Load biometric-protected data (will trigger Face ID/Touch ID prompt if no valid shared context)
+    /// Load biometric-protected data (will trigger Face ID/Touch ID prompt)
     func loadBiometricProtected(for key: String, prompt: String = "Authenticate to access Pad") throws -> Data {
-        let context = getContext()
+        let context = LAContext()
         context.localizedReason = prompt
 
         let query: [String: Any] = [

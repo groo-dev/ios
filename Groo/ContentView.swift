@@ -15,6 +15,8 @@ struct ContentView: View {
     @State private var padService: PadService?
     @State private var syncService: SyncService?
     @State private var passService: PassService?
+    @State private var isGloballyUnlocked = false
+    @State private var needsGlobalUnlock = false
 
     private let keychain = KeychainService()
 
@@ -23,14 +25,27 @@ struct ContentView: View {
             if !isLoggedIn {
                 LoginView()
             } else if let padService, let syncService, let passService {
-                MainTabView(
-                    padService: padService,
-                    syncService: syncService,
-                    passService: passService,
-                    onSignOut: {
-                        signOut()
-                    }
-                )
+                if needsGlobalUnlock && !isGloballyUnlocked {
+                    GlobalLockView(
+                        padService: padService,
+                        passService: passService,
+                        onUnlock: {
+                            isGloballyUnlocked = true
+                        },
+                        onSignOut: {
+                            signOut()
+                        }
+                    )
+                } else {
+                    MainTabView(
+                        padService: padService,
+                        syncService: syncService,
+                        passService: passService,
+                        onSignOut: {
+                            signOut()
+                        }
+                    )
+                }
             }
         }
         .onAppear {
@@ -61,25 +76,22 @@ struct ContentView: View {
         let wasLoggedIn = isLoggedIn
         isLoggedIn = authService.isAuthenticated
 
-        // Pre-authenticate biometrics on login if biometric keys exist
+        // Check if global unlock is needed (biometric keys exist)
         if !wasLoggedIn && isLoggedIn {
-            Task {
-                if keychain.biometricProtectedKeyExists(for: KeychainService.Key.passEncryptionKey)
-                    || keychain.biometricProtectedKeyExists(for: KeychainService.Key.padEncryptionKey)
-                {
-                    try? await keychain.preAuthenticate()
-                }
-            }
+            needsGlobalUnlock = keychain.biometricProtectedKeyExists(for: KeychainService.Key.passEncryptionKey)
+                || keychain.biometricProtectedKeyExists(for: KeychainService.Key.padEncryptionKey)
+            isGloballyUnlocked = false
         }
     }
 
     private func signOut() {
-        keychain.clearSharedContext()
         padService?.lockAndClearKey()
         passService?.lockAndClearKey()
         syncService?.clearLocalStorage()
         try? authService.logout()
         isLoggedIn = false
+        isGloballyUnlocked = false
+        needsGlobalUnlock = false
     }
 }
 

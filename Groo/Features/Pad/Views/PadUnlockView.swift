@@ -116,12 +116,9 @@ struct PadUnlockView: View {
         }
         .onAppear {
             checkBiometricAvailability()
-            // Auto-trigger biometric if available
-            if canUseBiometric {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    unlockWithBiometric()
-                }
-            } else {
+            // Don't auto-trigger biometric - GlobalLockView handles that
+            // Show password field if biometric not available
+            if !canUseBiometric {
                 showPasswordField = true
                 isPasswordFocused = true
             }
