@@ -12,7 +12,6 @@ struct PadView: View {
     let syncService: SyncService
     let onSignOut: () -> Void
 
-    @State private var showSettings = false
     @State private var showAddItem = false
     @State private var isUnlocked = false
     @State private var listRefreshTrigger = UUID()
@@ -48,24 +47,6 @@ struct PadView: View {
                 refreshTrigger: listRefreshTrigger
             )
             .navigationTitle("Pad")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                }
-            }
-            .sheet(isPresented: $showSettings) {
-                PadSettingsView(
-                    onLock: {
-                        padService.lock()
-                        isUnlocked = false
-                    },
-                    onSignOut: onSignOut
-                )
-            }
             .sheet(isPresented: $showAddItem, onDismiss: {
                 listRefreshTrigger = UUID()
             }) {
