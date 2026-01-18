@@ -16,6 +16,8 @@ struct ContentView: View {
     @State private var syncService: SyncService?
     @State private var passService: PassService?
 
+    private let keychain = KeychainService()
+
     var body: some View {
         Group {
             if !isLoggedIn {
@@ -56,10 +58,23 @@ struct ContentView: View {
     }
 
     private func updateState() {
+        let wasLoggedIn = isLoggedIn
         isLoggedIn = authService.isAuthenticated
+
+        // Pre-authenticate biometrics on login if biometric keys exist
+        if !wasLoggedIn && isLoggedIn {
+            Task {
+                if keychain.biometricProtectedKeyExists(for: KeychainService.Key.passEncryptionKey)
+                    || keychain.biometricProtectedKeyExists(for: KeychainService.Key.padEncryptionKey)
+                {
+                    try? await keychain.preAuthenticate()
+                }
+            }
+        }
     }
 
     private func signOut() {
+        keychain.clearSharedContext()
         padService?.lockAndClearKey()
         passService?.lockAndClearKey()
         syncService?.clearLocalStorage()

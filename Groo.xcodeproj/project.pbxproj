@@ -540,7 +540,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = GrooAutoFill/GrooAutoFillDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = GrooAutoFill/Info.plist;
@@ -570,7 +570,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = GrooAutoFill/GrooAutoFill.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = GrooAutoFill/Info.plist;
@@ -723,7 +723,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Groo/Groo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -761,7 +761,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Groo/GrooRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -796,7 +796,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -825,7 +825,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -856,7 +856,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = WidgetExtension/WidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WidgetExtension/Info.plist;
@@ -887,7 +887,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = WidgetExtension/WidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WidgetExtension/Info.plist;
@@ -916,7 +916,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = KeyboardExtension/KeyboardExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = KeyboardExtension/Info.plist;
@@ -945,7 +945,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = KeyboardExtension/KeyboardExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = KeyboardExtension/Info.plist;
