@@ -11,6 +11,7 @@ import SwiftUI
 struct AutoFillCredentialListView: View {
     @ObservedObject var service: AutoFillService
     let serviceIdentifiers: [ASCredentialServiceIdentifier]
+    let rpId: String?
     let onSelect: (SharedPassPasswordItem) -> Void
     let onSelectPasskey: ((SharedPassPasskeyItem) -> Void)?
     let onCancel: () -> Void
@@ -20,12 +21,14 @@ struct AutoFillCredentialListView: View {
     init(
         service: AutoFillService,
         serviceIdentifiers: [ASCredentialServiceIdentifier],
+        rpId: String? = nil,
         onSelect: @escaping (SharedPassPasswordItem) -> Void,
         onSelectPasskey: ((SharedPassPasskeyItem) -> Void)? = nil,
         onCancel: @escaping () -> Void
     ) {
         self.service = service
         self.serviceIdentifiers = serviceIdentifiers
+        self.rpId = rpId
         self.onSelect = onSelect
         self.onSelectPasskey = onSelectPasskey
         self.onCancel = onCancel
@@ -41,7 +44,7 @@ struct AutoFillCredentialListView: View {
 
     private var displayedPasskeys: [SharedPassPasskeyItem] {
         if searchText.isEmpty {
-            return service.passkeys
+            return service.filteredPasskeys(for: rpId)
         } else {
             return service.searchPasskeys(query: searchText)
         }

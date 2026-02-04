@@ -147,16 +147,17 @@ class AutoFillService: ObservableObject {
             return credentials
         }
 
-        // Filter credentials that match any of the domains
+        // Filter credentials that match any of the domains (checks all URLs)
         return credentials.filter { credential in
-            guard let credentialDomain = credential.primaryDomain else {
-                return false
-            }
+            let credentialDomains = credential.domains
+            guard !credentialDomains.isEmpty else { return false }
 
             return searchDomains.contains { searchDomain in
-                // Match if either contains the other (handles subdomains)
-                credentialDomain.contains(searchDomain) ||
-                searchDomain.contains(credentialDomain)
+                credentialDomains.contains { credDomain in
+                    // Match if either contains the other (handles subdomains)
+                    credDomain.contains(searchDomain) ||
+                    searchDomain.contains(credDomain)
+                }
             }
         }
     }

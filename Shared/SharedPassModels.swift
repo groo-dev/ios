@@ -132,6 +132,15 @@ struct SharedPassPasswordItem: Codable, Identifiable {
         return host.lowercased().replacingOccurrences(of: "www.", with: "")
     }
 
+    /// Get domains from all URLs for matching
+    var domains: [String] {
+        urls.compactMap { urlString -> String? in
+            let str = urlString.hasPrefix("http") ? urlString : "https://\(urlString)"
+            guard let url = URL(string: str), let host = url.host else { return nil }
+            return host.lowercased().replacingOccurrences(of: "www.", with: "")
+        }
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, type, name, username, password, urls, deletedAt
     }

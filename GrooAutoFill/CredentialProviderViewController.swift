@@ -15,6 +15,7 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
     private let service = AutoFillService()
     private var hostingController: UIHostingController<AutoFillCredentialListView>?
     private var currentServiceIdentifiers: [ASCredentialServiceIdentifier] = []
+    private var passkeyRequestParameters: Any? // ASPasskeyCredentialRequestParameters (iOS 17+)
 
     // MARK: - Lifecycle
 
@@ -24,16 +25,7 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
     }
 
     private func setupUI() {
-        let contentView = AutoFillCredentialListView(
-            service: service,
-            serviceIdentifiers: currentServiceIdentifiers,
-            onSelect: { [weak self] credential in
-                self?.selectCredential(credential)
-            },
-            onCancel: { [weak self] in
-                self?.cancel()
-            }
-        )
+        let contentView = makeCredentialListView(serviceIdentifiers: currentServiceIdentifiers)
 
         let hostingController = UIHostingController(rootView: contentView)
         self.hostingController = hostingController
@@ -57,18 +49,34 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
 
         // Update the SwiftUI view with new identifiers
         if hostingController != nil {
-            let contentView = AutoFillCredentialListView(
-                service: service,
-                serviceIdentifiers: identifiers,
-                onSelect: { [weak self] credential in
-                    self?.selectCredential(credential)
-                },
-                onCancel: { [weak self] in
-                    self?.cancel()
-                }
-            )
+            let contentView = makeCredentialListView(serviceIdentifiers: identifiers)
             hostingController?.rootView = contentView
         }
+    }
+
+    private var currentRpId: String? {
+        if #available(iOS 17.0, *),
+           let params = passkeyRequestParameters as? ASPasskeyCredentialRequestParameters {
+            return params.relyingPartyIdentifier
+        }
+        return nil
+    }
+
+    private func makeCredentialListView(serviceIdentifiers: [ASCredentialServiceIdentifier]) -> AutoFillCredentialListView {
+        AutoFillCredentialListView(
+            service: service,
+            serviceIdentifiers: serviceIdentifiers,
+            rpId: currentRpId,
+            onSelect: { [weak self] credential in
+                self?.selectCredential(credential)
+            },
+            onSelectPasskey: { [weak self] passkey in
+                self?.selectPasskey(passkey)
+            },
+            onCancel: { [weak self] in
+                self?.cancel()
+            }
+        )
     }
 
     // MARK: - Credential Provider Methods
@@ -95,6 +103,27 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
     /// Called to prepare UI for credential selection
     /// The serviceIdentifiers describe the service the user is logging into
     override func prepareCredentialList(for serviceIdentifiers: [ASCredentialServiceIdentifier]) {
+        updateServiceIdentifiers(serviceIdentifiers)
+
+        // Auto-unlock if possible
+        if service.hasVault {
+            Task {
+                do {
+                    try await service.unlock()
+                } catch {
+                    // User will need to tap unlock button
+                }
+            }
+        }
+    }
+
+    /// Called to prepare UI for passkey credential selection (iOS 17+)
+    @available(iOS 17.0, *)
+    override func prepareCredentialList(
+        for serviceIdentifiers: [ASCredentialServiceIdentifier],
+        requestParameters: ASPasskeyCredentialRequestParameters
+    ) {
+        self.passkeyRequestParameters = requestParameters
         updateServiceIdentifiers(serviceIdentifiers)
 
         // Auto-unlock if possible
@@ -229,6 +258,58 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
             withSelectedCredential: passwordCredential,
             completionHandler: nil
         )
+    }
+
+    private func selectPasskey(_ passkey: SharedPassPasskeyItem) {
+        guard #available(iOS 17.0, *),
+              let params = passkeyRequestParameters as? ASPasskeyCredentialRequestParameters else {
+            return
+        }
+
+        Task {
+            do {
+                // Build authenticator data with incremented sign count
+                let authenticatorData = SharedPasskeyCrypto.buildAuthenticatorData(
+                    rpId: passkey.rpId,
+                    signCount: passkey.signCount + 1
+                )
+
+                // Sign the assertion
+                let signature = try SharedPasskeyCrypto.signAssertion(
+                    privateKeyBase64: passkey.privateKey,
+                    authenticatorData: authenticatorData,
+                    clientDataHash: params.clientDataHash
+                )
+
+                // Decode credential ID and user handle from base64
+                guard let credentialIdData = Data(base64Encoded: passkey.credentialId),
+                      let userHandleData = Data(base64Encoded: passkey.userHandle) else {
+                    throw AutoFillError.decryptionFailed
+                }
+
+                // Create passkey assertion credential
+                let credential = ASPasskeyAssertionCredential(
+                    userHandle: userHandleData,
+                    relyingParty: passkey.rpId,
+                    signature: signature,
+                    clientDataHash: params.clientDataHash,
+                    authenticatorData: authenticatorData,
+                    credentialID: credentialIdData
+                )
+
+                // Complete the request
+                await extensionContext.completeAssertionRequest(using: credential)
+
+            } catch {
+                extensionContext.cancelRequest(
+                    withError: NSError(
+                        domain: ASExtensionErrorDomain,
+                        code: ASExtensionError.failed.rawValue,
+                        userInfo: [NSLocalizedDescriptionKey: error.localizedDescription]
+                    )
+                )
+            }
+        }
     }
 
     private func cancel() {
