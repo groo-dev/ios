@@ -120,7 +120,16 @@ class SyncService {
 
         // Store encrypted items directly (no decryption)
         store.upsertPadItems(apiState.list)
+
+        // Store encrypted scratchpads
+        store.upsertScratchpads(apiState.scratchpads)
+
+        // Store active scratchpad ID
+        activeId = apiState.activeId
     }
+
+    /// Currently active scratchpad ID
+    private(set) var activeId: String = ""
 
     // MARK: - Local Operations (Immediate + Queue)
 
@@ -166,6 +175,109 @@ class SyncService {
     /// Clear local storage (on sign out)
     func clearLocalStorage() {
         store.clearAllPadItems()
+        store.clearAllScratchpads()
         store.clearPendingOperations()
     }
+
+    // MARK: - Scratchpad Operations
+
+    /// Get all encrypted scratchpads from local storage
+    func getEncryptedScratchpads() -> [LocalScratchpad] {
+        store.getAllScratchpads()
+    }
+
+    /// Get a single encrypted scratchpad by ID
+    func getEncryptedScratchpad(id: String) -> LocalScratchpad? {
+        store.getScratchpad(id: id)
+    }
+
+    /// Get active scratchpad from local storage
+    func getActiveScratchpad() -> LocalScratchpad? {
+        guard !activeId.isEmpty else { return nil }
+        return store.getScratchpad(id: activeId)
+    }
+
+    /// Update scratchpad content on server
+    func updateScratchpad(id: String, encryptedContent: PadEncryptedPayload) async throws {
+        let body = ScratchpadUpdateBody(encryptedContent: encryptedContent)
+        let _: ScratchpadUpdateResponse = try await api.put(APIClient.Endpoint.scratchpad(id), body: body)
+
+        // Update local storage
+        if let local = store.getScratchpad(id: id) {
+            let encryptedJSON = (try? JSONEncoder().encode(encryptedContent))
+                .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+            local.encryptedContentJSON = encryptedJSON
+            local.updatedAt = Date()
+            store.updateScratchpad(local)
+        }
+    }
+
+    /// Create a new scratchpad on server
+    func createScratchpad(encryptedContent: PadEncryptedPayload) async throws -> String {
+        let body = ScratchpadCreateBody(encryptedContent: encryptedContent)
+        let response: ScratchpadCreateResponse = try await api.post(APIClient.Endpoint.scratchpads, body: body)
+
+        // Add to local storage
+        let now = Date()
+        let scratchpad = LocalScratchpad(
+            id: response.id,
+            encryptedContentJSON: (try? JSONEncoder().encode(encryptedContent))
+                .flatMap { String(data: $0, encoding: .utf8) } ?? "{}",
+            createdAt: now,
+            updatedAt: now
+        )
+        store.saveScratchpad(scratchpad)
+
+        return response.id
+    }
+
+    /// Delete a scratchpad from server
+    func deleteScratchpad(id: String) async throws {
+        try await api.delete(APIClient.Endpoint.scratchpad(id))
+
+        // Remove from local storage
+        store.deleteScratchpad(id: id)
+    }
+
+    /// Add a file attachment to a scratchpad
+    func addFileToScratchpad(id: String, file: PadFileAttachment) async throws {
+        let body = ScratchpadAddFileBody(file: file)
+        let _: ScratchpadUpdateResponse = try await api.post(APIClient.Endpoint.scratchpadFiles(id), body: body)
+
+        // Update local storage
+        if let local = store.getScratchpad(id: id) {
+            var files = local.files
+            files.append(file)
+            local.files = files
+            local.updatedAt = Date()
+            store.updateScratchpad(local)
+        }
+    }
+
+    /// Clear scratchpads from local storage
+    func clearAllScratchpads() {
+        store.clearAllScratchpads()
+    }
+}
+
+// MARK: - Scratchpad API Types
+
+struct ScratchpadUpdateBody: Encodable {
+    let encryptedContent: PadEncryptedPayload
+}
+
+struct ScratchpadUpdateResponse: Decodable {
+    let success: Bool
+}
+
+struct ScratchpadCreateBody: Encodable {
+    let encryptedContent: PadEncryptedPayload
+}
+
+struct ScratchpadCreateResponse: Decodable {
+    let id: String
+}
+
+struct ScratchpadAddFileBody: Encodable {
+    let file: PadFileAttachment
 }

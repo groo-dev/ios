@@ -17,6 +17,7 @@ final class LocalStore {
     private init() {
         let schema = Schema([
             LocalPadItem.self,
+            LocalScratchpad.self,
             PendingOperation.self,
         ])
 
@@ -91,6 +92,63 @@ final class LocalStore {
         let items = getAllPadItems()
         for item in items {
             context.delete(item)
+        }
+        try? context.save()
+    }
+
+    // MARK: - Scratchpads
+
+    func getAllScratchpads() -> [LocalScratchpad] {
+        let descriptor = FetchDescriptor<LocalScratchpad>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    func getScratchpad(id: String) -> LocalScratchpad? {
+        let descriptor = FetchDescriptor<LocalScratchpad>(
+            predicate: #Predicate { $0.id == id }
+        )
+        return try? context.fetch(descriptor).first
+    }
+
+    func saveScratchpad(_ scratchpad: LocalScratchpad) {
+        context.insert(scratchpad)
+        try? context.save()
+    }
+
+    func deleteScratchpad(id: String) {
+        if let scratchpad = getScratchpad(id: id) {
+            context.delete(scratchpad)
+            try? context.save()
+        }
+    }
+
+    /// Upsert encrypted scratchpads from API (no decryption needed)
+    func upsertScratchpads(_ scratchpads: [String: PadScratchpad]) {
+        // Delete all existing scratchpads
+        let existing = getAllScratchpads()
+        for scratchpad in existing {
+            context.delete(scratchpad)
+        }
+
+        // Insert new scratchpads (stored encrypted)
+        for (_, scratchpad) in scratchpads {
+            context.insert(LocalScratchpad(from: scratchpad))
+        }
+
+        try? context.save()
+    }
+
+    /// Update a single scratchpad
+    func updateScratchpad(_ scratchpad: LocalScratchpad) {
+        try? context.save()
+    }
+
+    func clearAllScratchpads() {
+        let scratchpads = getAllScratchpads()
+        for scratchpad in scratchpads {
+            context.delete(scratchpad)
         }
         try? context.save()
     }

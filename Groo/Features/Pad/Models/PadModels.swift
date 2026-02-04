@@ -97,6 +97,32 @@ struct DecryptedFileAttachment: Identifiable, Equatable {
     let r2Key: String
 }
 
+/// Decrypted scratchpad for UI display
+struct DecryptedScratchpad: Identifiable, Equatable {
+    let id: String
+    var content: String
+    let files: [DecryptedFileAttachment]
+    let createdAt: Date
+    let updatedAt: Date
+
+    /// Extract title from first line of content
+    var title: String {
+        let firstLine = content.split(separator: "\n", maxSplits: 1).first
+        let trimmed = firstLine.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? ""
+        // Remove markdown heading prefix
+        let withoutPrefix = trimmed.hasPrefix("#") ? String(trimmed.drop(while: { $0 == "#" || $0 == " " })) : trimmed
+        return withoutPrefix.isEmpty ? "Untitled" : withoutPrefix
+    }
+
+    init(id: String, content: String, files: [DecryptedFileAttachment], createdAt: Int, updatedAt: Int) {
+        self.id = id
+        self.content = content
+        self.files = files
+        self.createdAt = Date(timeIntervalSince1970: Double(createdAt) / 1000)
+        self.updatedAt = Date(timeIntervalSince1970: Double(updatedAt) / 1000)
+    }
+}
+
 // MARK: - Conversion Helpers
 
 extension PadEncryptedPayload {

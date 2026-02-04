@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;">
+  <title>Editor</title>
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+  <div id="editor"></div>
+  <div id="debug" style="position:fixed;bottom:0;left:0;right:0;background:#ff0;color:#000;padding:8px;font-size:12px;z-index:9999;">HTML loaded, waiting for JS...</div>
+  <script>document.getElementById('debug').textContent = 'JS inline executed';</script>
+  <script src="editor.bundle.js"></script>
+</body>
+</html>

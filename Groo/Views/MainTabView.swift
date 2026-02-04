@@ -23,17 +23,23 @@ struct MainTabView: View {
                 }
                 .tag(0)
 
+            ScratchpadTabView(padService: padService, syncService: syncService)
+                .tabItem {
+                    Label("Scratchpad", systemImage: "note.text")
+                }
+                .tag(1)
+
             PassView(passService: passService, onSignOut: onSignOut)
                 .tabItem {
                     Label("Pass", systemImage: "key")
                 }
-                .tag(1)
+                .tag(2)
 
             DrivePlaceholderView()
                 .tabItem {
                     Label("Drive", systemImage: "folder")
                 }
-                .tag(2)
+                .tag(3)
 
             NavigationStack {
                 SettingsView(
@@ -49,7 +55,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("Settings", systemImage: "gearshape")
             }
-            .tag(3)
+            .tag(4)
         }
         .tint(Theme.Brand.primary)
     }

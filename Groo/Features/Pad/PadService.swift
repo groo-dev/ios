@@ -240,4 +240,38 @@ class PadService {
     func copyToClipboard(_ text: String) {
         UIPasteboard.general.string = text
     }
+
+    // MARK: - Scratchpad Operations
+
+    /// Decrypt a scratchpad for display
+    func decryptScratchpad(_ scratchpad: LocalScratchpad) throws -> DecryptedScratchpad {
+        guard let key = encryptionKey else {
+            throw PadError.noEncryptionKey
+        }
+
+        guard let encryptedPayload = scratchpad.encryptedContent else {
+            throw PadError.decryptionFailed
+        }
+
+        let content = try crypto.decrypt(encryptedPayload.toEncryptedPayload(), using: key)
+        let files = try decryptFileAttachments(scratchpad.files, using: key)
+
+        return DecryptedScratchpad(
+            id: scratchpad.id,
+            content: content,
+            files: files,
+            createdAt: Int(scratchpad.createdAt.timeIntervalSince1970 * 1000),
+            updatedAt: Int(scratchpad.updatedAt.timeIntervalSince1970 * 1000)
+        )
+    }
+
+    /// Encrypt content for scratchpad update
+    func encryptScratchpadContent(_ content: String) throws -> PadEncryptedPayload {
+        guard let key = encryptionKey else {
+            throw PadError.noEncryptionKey
+        }
+
+        let encrypted = try crypto.encrypt(content, using: key)
+        return encrypted.toPadEncryptedPayload()
+    }
 }

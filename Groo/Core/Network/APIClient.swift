@@ -209,6 +209,7 @@ extension APIClient {
         static let state = "/v1/state"
         static let files = "/v1/files"
         static let list = "/v1/list"
+        static let scratchpads = "/v1/scratchpads"
 
         static func file(_ key: String) -> String {
             "/v1/files/\(key)"
@@ -216,6 +217,14 @@ extension APIClient {
 
         static func listItem(_ id: String) -> String {
             "/v1/list/\(id)"
+        }
+
+        static func scratchpad(_ id: String) -> String {
+            "/v1/scratchpads/\(id)"
+        }
+
+        static func scratchpadFiles(_ id: String) -> String {
+            "/v1/scratchpads/\(id)/files"
         }
     }
 }
