@@ -181,8 +181,9 @@ class AutoFillService: ObservableObject {
 
     /// Find a passkey by its credential ID
     func findPasskey(credentialId: Data) -> SharedPassPasskeyItem? {
-        let credentialIdBase64 = credentialId.base64EncodedString()
-        return passkeys.first { $0.credentialId == credentialIdBase64 }
+        // Stored credentialId is base64url-encoded, so compare in same format
+        let credentialIdBase64URL = credentialId.base64URLEncodedString
+        return passkeys.first { $0.credentialId == credentialIdBase64URL }
     }
 
     /// Filter passkeys by relying party ID

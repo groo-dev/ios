@@ -82,8 +82,8 @@ class CredentialIdentityService {
         return items.compactMap { item -> ASPasskeyCredentialIdentity? in
             guard case .passkey(let passkeyItem) = item,
                   passkeyItem.deletedAt == nil,
-                  let credentialIdData = Data(base64Encoded: passkeyItem.credentialId),
-                  let userHandleData = Data(base64Encoded: passkeyItem.userHandle) else {
+                  let credentialIdData = Data(base64URLEncoded: passkeyItem.credentialId),
+                  let userHandleData = Data(base64URLEncoded: passkeyItem.userHandle) else {
                 return nil
             }
 

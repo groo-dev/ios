@@ -16,7 +16,7 @@ struct AutoFillCredentialListView: View {
     let onSelectPasskey: ((SharedPassPasskeyItem) -> Void)?
     let onCancel: () -> Void
 
-    @State private var searchText = ""
+    @State private var searchText: String
 
     init(
         service: AutoFillService,
@@ -32,6 +32,19 @@ struct AutoFillCredentialListView: View {
         self.onSelect = onSelect
         self.onSelectPasskey = onSelectPasskey
         self.onCancel = onCancel
+
+        // Pre-fill search bar with domain (like LastPass)
+        let domain = serviceIdentifiers.first.flatMap { identifier -> String? in
+            switch identifier.type {
+            case .domain:
+                return identifier.identifier
+            case .URL:
+                return URL(string: identifier.identifier)?.host
+            @unknown default:
+                return nil
+            }
+        }
+        _searchText = State(initialValue: domain ?? "")
     }
 
     private var displayedCredentials: [SharedPassPasswordItem] {

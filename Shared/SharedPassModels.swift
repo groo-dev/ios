@@ -8,6 +8,30 @@
 
 import Foundation
 
+// MARK: - Base64URL Helpers
+
+extension Data {
+    /// Initialize from a Base64URL-encoded string (used by WebAuthn for credentialId, userHandle)
+    init?(base64URLEncoded string: String) {
+        var base64 = string
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = base64.count % 4
+        if remainder > 0 {
+            base64 += String(repeating: "=", count: 4 - remainder)
+        }
+        self.init(base64Encoded: base64)
+    }
+
+    /// Encode to Base64URL string (no padding, URL-safe characters)
+    var base64URLEncodedString: String {
+        base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+}
+
 // MARK: - Vault Structure
 
 /// The complete vault structure (decrypted)
@@ -165,10 +189,10 @@ struct SharedPassPasskeyItem: Codable, Identifiable {
     var name: String
     var rpId: String
     var rpName: String
-    var credentialId: String   // base64 encoded
+    var credentialId: String   // base64url encoded
     var publicKey: String      // base64 encoded SPKI format
     var privateKey: String     // base64 encoded PKCS8 format
-    var userHandle: String     // base64 encoded
+    var userHandle: String     // base64url encoded
     var userName: String
     var signCount: Int
     var deletedAt: Int?

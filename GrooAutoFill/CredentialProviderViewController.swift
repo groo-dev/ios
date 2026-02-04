@@ -215,9 +215,9 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
                     clientDataHash: request.clientDataHash
                 )
 
-                // Decode credential ID and user handle from base64
-                guard let credentialIdData = Data(base64Encoded: passkey.credentialId),
-                      let userHandleData = Data(base64Encoded: passkey.userHandle) else {
+                // Decode credential ID and user handle from base64url
+                guard let credentialIdData = Data(base64URLEncoded: passkey.credentialId),
+                      let userHandleData = Data(base64URLEncoded: passkey.userHandle) else {
                     throw AutoFillError.decryptionFailed
                 }
 
@@ -281,9 +281,9 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
                     clientDataHash: params.clientDataHash
                 )
 
-                // Decode credential ID and user handle from base64
-                guard let credentialIdData = Data(base64Encoded: passkey.credentialId),
-                      let userHandleData = Data(base64Encoded: passkey.userHandle) else {
+                // Decode credential ID and user handle from base64url
+                guard let credentialIdData = Data(base64URLEncoded: passkey.credentialId),
+                      let userHandleData = Data(base64URLEncoded: passkey.userHandle) else {
                     throw AutoFillError.decryptionFailed
                 }
 
