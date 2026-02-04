@@ -2,10 +2,14 @@
 //  MainTabView.swift
 //  Groo
 //
-//  Tab-based navigation with Pad, Pass, and Drive tabs.
+//  Tab-based navigation with customizable tabs and Liquid Glass support.
 //
 
 import SwiftUI
+
+enum AppTab: String, Hashable {
+    case pad, scratchpad, pass, drive, settings
+}
 
 struct MainTabView: View {
     let padService: PadService
@@ -13,51 +17,61 @@ struct MainTabView: View {
     let passService: PassService
     let onSignOut: () -> Void
 
-    @State private var selectedTab = 0
+    @State private var selectedTab: AppTab = .pad
+    @AppStorage("tabCustomization") var customization: TabViewCustomization
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            PadView(padService: padService, syncService: syncService, onSignOut: onSignOut)
-                .tabItem {
-                    Label("Pad", systemImage: "doc.on.clipboard")
-                }
-                .tag(0)
-
-            ScratchpadTabView(padService: padService, syncService: syncService)
-                .tabItem {
-                    Label("Scratchpad", systemImage: "note.text")
-                }
-                .tag(1)
-
-            PassView(passService: passService, onSignOut: onSignOut)
-                .tabItem {
-                    Label("Pass", systemImage: "key")
-                }
-                .tag(2)
-
-            DrivePlaceholderView()
-                .tabItem {
-                    Label("Drive", systemImage: "folder")
-                }
-                .tag(3)
-
-            NavigationStack {
-                SettingsView(
-                    padService: padService,
-                    passService: passService,
-                    onSignOut: onSignOut,
-                    onLock: {
-                        padService.lock()
-                        passService.lock()
-                    }
-                )
+            Tab("Pad", systemImage: "doc.on.clipboard", value: .pad) {
+                PadView(padService: padService, syncService: syncService, onSignOut: onSignOut)
             }
-            .tabItem {
-                Label("Settings", systemImage: "gearshape")
+            .customizationID("pad")
+
+            Tab("Scratchpad", systemImage: "note.text", value: .scratchpad) {
+                ScratchpadTabView(padService: padService, syncService: syncService)
             }
-            .tag(4)
+            .customizationID("scratchpad")
+
+            Tab("Pass", systemImage: "key", value: .pass) {
+                PassView(passService: passService, onSignOut: onSignOut)
+            }
+            .customizationID("pass")
+
+            Tab("Drive", systemImage: "folder", value: .drive) {
+                DrivePlaceholderView()
+            }
+            .customizationID("drive")
+
+            Tab("Settings", systemImage: "gearshape", value: .settings) {
+                NavigationStack {
+                    SettingsView(
+                        padService: padService,
+                        passService: passService,
+                        onSignOut: onSignOut,
+                        onLock: {
+                            padService.lock()
+                            passService.lock()
+                        }
+                    )
+                }
+            }
+            .customizationID("settings")
+            .customizationBehavior(.disabled, for: .tabBar)
         }
+        .tabViewStyle(.sidebarAdaptable)
+        .tabViewCustomization($customization)
+        .modifier(TabBarMinimizeOnScrollModifier())
         .tint(Theme.Brand.primary)
+    }
+}
+
+private struct TabBarMinimizeOnScrollModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            content
+        }
     }
 }
 

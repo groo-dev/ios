@@ -234,6 +234,15 @@ class PassService {
         serverVersion = vaultResponse.version
         hasVaultSetup = true
 
+        // Save encrypted vault locally for AutoFill extension access
+        let metadata = PassVaultMetadata(
+            version: vaultResponse.version,
+            iv: vaultResponse.iv,
+            updatedAt: vaultResponse.updatedAt,
+            lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
+        )
+        try? await vaultStore.saveVault(encryptedData: encryptedData, metadata: metadata)
+
         return true
     }
 
