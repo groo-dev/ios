@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import QuickLook
+import WebKit
 
 // MARK: - File Icon Helper
 
@@ -51,7 +51,8 @@ struct FileAttachmentChip: View {
     let padService: PadService
 
     @State private var isDownloading = false
-    @State private var previewURL: URL?
+    @State private var previewData: Data?
+    @State private var showPreview = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -90,7 +91,15 @@ struct FileAttachmentChip: View {
         }
         .buttonStyle(.plain)
         .disabled(isDownloading)
-        .quickLookPreview($previewURL)
+        .sheet(isPresented: $showPreview) {
+            if let data = previewData {
+                FilePreviewSheet(
+                    data: data,
+                    mimeType: file.type,
+                    fileName: file.name
+                )
+            }
+        }
     }
 
     private func downloadAndPreview() {
@@ -102,24 +111,64 @@ struct FileAttachmentChip: View {
         Task {
             do {
                 let data = try await padService.downloadFile(file)
-
-                // Save to temp directory for QuickLook
-                let tempURL = FileManager.default.temporaryDirectory
-                    .appendingPathComponent(UUID().uuidString)
-                    .appendingPathComponent(file.name)
-
-                try FileManager.default.createDirectory(
-                    at: tempURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                try data.write(to: tempURL)
-
-                previewURL = tempURL
+                previewData = data
+                showPreview = true
             } catch {
                 errorMessage = error.localizedDescription
             }
             isDownloading = false
         }
+    }
+}
+
+// MARK: - File Preview Sheet
+
+struct FilePreviewSheet: View {
+    let data: Data
+    let mimeType: String
+    let fileName: String
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            FilePreviewWebView(data: data, mimeType: mimeType)
+                .ignoresSafeArea(edges: .bottom)
+                .navigationTitle(fileName)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            dismiss()
+                        }
+                    }
+                }
+        }
+    }
+}
+
+// MARK: - File Preview WebView
+
+struct FilePreviewWebView: UIViewRepresentable {
+    let data: Data
+    let mimeType: String
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.backgroundColor = .systemBackground
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        webView.load(
+            data,
+            mimeType: mimeType,
+            characterEncodingName: "utf-8",
+            baseURL: URL(string: "about:blank")!
+        )
     }
 }
 
