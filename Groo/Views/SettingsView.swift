@@ -51,6 +51,14 @@ struct SettingsView: View {
             }
 
             Section {
+                NavigationLink {
+                    CustomizeTabsView()
+                } label: {
+                    Label("Customize Tabs", systemImage: "slider.horizontal.3")
+                }
+            }
+
+            Section {
                 Button {
                     onLock()
                 } label: {

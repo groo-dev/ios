@@ -2,19 +2,21 @@
 //  MainTabView.swift
 //  Groo
 //
-//  Tab-based navigation with customizable tabs and Liquid Glass support.
+//  Tab-based navigation with customizable tab order.
 //
 
 import SwiftUI
 
 enum TabID: String, CaseIterable, Codable {
-    case pad, scratchpad, pass, drive, crypto, settings
+    case pad, pass, scratchpad, drive, crypto, settings
+
+    static let defaultOrder = "pad,pass,scratchpad,drive,crypto,settings"
 
     var title: String {
         switch self {
         case .pad: "Pad"
-        case .scratchpad: "Scratchpad"
         case .pass: "Pass"
+        case .scratchpad: "Scratchpad"
         case .drive: "Drive"
         case .crypto: "Crypto"
         case .settings: "Settings"
@@ -24,12 +26,18 @@ enum TabID: String, CaseIterable, Codable {
     var icon: String {
         switch self {
         case .pad: "doc.on.clipboard"
-        case .scratchpad: "note.text"
         case .pass: "key"
+        case .scratchpad: "note.text"
         case .drive: "folder"
         case .crypto: "bitcoinsign.circle"
         case .settings: "gearshape"
         }
+    }
+
+    static func fromStoredOrder(_ raw: String) -> [TabID] {
+        let ids = raw.split(separator: ",").compactMap { TabID(rawValue: String($0)) }
+        let missing = TabID.allCases.filter { !ids.contains($0) }
+        return ids + missing
     }
 }
 
@@ -39,22 +47,10 @@ struct MainTabView: View {
     let passService: PassService
     let onSignOut: () -> Void
 
-    @AppStorage("tabOrder") private var tabOrderRaw: String = "pad,pass,scratchpad,drive,crypto,settings"
-    @AppStorage("mainTabCount") private var mainTabCount: Int = 2
+    @AppStorage("tabOrder") private var tabOrderRaw: String = TabID.defaultOrder
 
     private var tabOrder: [TabID] {
-        let ids = tabOrderRaw.split(separator: ",").compactMap { TabID(rawValue: String($0)) }
-        // Ensure all tabs are present (handle additions/removals gracefully)
-        let missing = TabID.allCases.filter { !ids.contains($0) }
-        return ids + missing
-    }
-
-    private var mainTabs: [TabID] {
-        Array(tabOrder.prefix(mainTabCount))
-    }
-
-    private var moreTabs: [TabID] {
-        Array(tabOrder.dropFirst(mainTabCount))
+        TabID.fromStoredOrder(tabOrderRaw)
     }
 
     @ViewBuilder
@@ -85,29 +81,13 @@ struct MainTabView: View {
 
     var body: some View {
         TabView {
-            ForEach(mainTabs, id: \.self) { tab in
+            ForEach(tabOrder, id: \.self) { tab in
                 Tab(tab.title, systemImage: tab.icon) {
                     tabContent(for: tab)
                 }
             }
-
-            Tab("More", systemImage: "ellipsis") {
-                MoreTabView(
-                    moreTabs: moreTabs,
-                    padService: padService,
-                    syncService: syncService,
-                    passService: passService,
-                    onSignOut: onSignOut
-                )
-            }
-
-            Tab(role: .search) {
-                NavigationStack {
-                    Text("Search")
-                        .navigationTitle("Search")
-                }
-            }
         }
+        .tabViewStyle(.sidebarAdaptable)
         .modifier(TabBarMinimizeOnScrollModifier())
         .tint(Theme.Brand.primary)
     }
