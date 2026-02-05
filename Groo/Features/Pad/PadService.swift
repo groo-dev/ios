@@ -10,6 +10,7 @@ import UIKit
 import CryptoKit
 import Foundation
 import LocalAuthentication
+import UniformTypeIdentifiers
 
 // MARK: - Errors
 
@@ -239,6 +240,70 @@ class PadService {
     /// Copy text to system clipboard
     func copyToClipboard(_ text: String) {
         UIPasteboard.general.string = text
+    }
+
+    // MARK: - Create from Clipboard
+
+    /// Create a new encrypted item from clipboard contents (text, images, URLs).
+    /// Returns the created item, or nil if clipboard had no usable content.
+    func createFromClipboard() async throws -> PadListItem? {
+        let pasteboard = UIPasteboard.general
+
+        let hasText = pasteboard.hasStrings
+        let hasImages = pasteboard.hasImages
+        let hasURLs = pasteboard.hasURLs
+
+        guard hasText || hasImages || hasURLs else {
+            return nil
+        }
+
+        var text = ""
+        var files: [PadFileAttachment] = []
+
+        // Handle text
+        if let string = pasteboard.string, !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            text = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Handle images
+        if let images = pasteboard.images {
+            for (index, image) in images.enumerated() {
+                if let data = image.jpegData(compressionQuality: 0.8) {
+                    let fileName = "pasted_\(Date().timeIntervalSince1970)_\(index).jpg"
+                    let attachment = try await uploadFile(
+                        name: fileName,
+                        type: "image/jpeg",
+                        data: data
+                    )
+                    files.append(attachment)
+                }
+            }
+        }
+
+        // Handle file URLs (from Files app)
+        if let urls = pasteboard.urls {
+            for url in urls {
+                guard url.startAccessingSecurityScopedResource() else { continue }
+                defer { url.stopAccessingSecurityScopedResource() }
+
+                if let data = try? Data(contentsOf: url) {
+                    let fileName = url.lastPathComponent
+                    let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+                    let attachment = try await uploadFile(
+                        name: fileName,
+                        type: mimeType,
+                        data: data
+                    )
+                    files.append(attachment)
+                }
+            }
+        }
+
+        guard !text.isEmpty || !files.isEmpty else {
+            return nil
+        }
+
+        return try createEncryptedItem(text: text, files: files)
     }
 
     // MARK: - Scratchpad Operations

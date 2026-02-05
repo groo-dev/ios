@@ -41,17 +41,30 @@ struct PadView: View {
             PadListView(
                 padService: padService,
                 syncService: syncService,
-                onAddItem: {
-                    showAddItem = true
-                },
                 refreshTrigger: listRefreshTrigger
             )
             .navigationTitle("Pad")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showAddItem = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
             .sheet(isPresented: $showAddItem, onDismiss: {
                 listRefreshTrigger = UUID()
             }) {
                 AddItemSheet(padService: padService, syncService: syncService)
             }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            PasteFAB(
+                padService: padService,
+                syncService: syncService,
+                onItemAdded: { listRefreshTrigger = UUID() }
+            )
         }
         .tint(Theme.Brand.primary)
     }

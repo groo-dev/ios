@@ -10,7 +10,6 @@ import SwiftUI
 struct PadListView: View {
     let padService: PadService
     let syncService: SyncService
-    let onAddItem: () -> Void
     var refreshTrigger: UUID = UUID()
 
     @State private var items: [DecryptedListItem] = []
@@ -29,23 +28,12 @@ struct PadListView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            // Items list
-            Group {
-                if items.isEmpty && !isRefreshing {
-                    emptyState
-                } else {
-                    itemsList
-                }
+        Group {
+            if items.isEmpty && !isRefreshing {
+                emptyState
+            } else {
+                itemsList
             }
-
-            // FAB buttons
-            PadFABButtons(
-                padService: padService,
-                syncService: syncService,
-                onAddItem: onAddItem,
-                onItemAdded: { loadItems(animated: true) }
-            )
         }
         .searchable(text: $searchText, prompt: "Search items")
         .onAppear {
@@ -157,8 +145,7 @@ struct PadListView: View {
     NavigationStack {
         PadListView(
             padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
-            syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL)),
-            onAddItem: {}
+            syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL))
         )
     }
     .tint(Theme.Brand.primary)
