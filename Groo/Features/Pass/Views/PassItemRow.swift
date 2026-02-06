@@ -87,6 +87,8 @@ struct PassItemRow: View {
             return passkeyItem.rpName
         case .file(let fileItem):
             return fileItem.fileName
+        case .cryptoWallet(let walletItem):
+            return walletItem.address.prefix(6) + "..." + walletItem.address.suffix(4)
         case .corrupted:
             return "Corrupted - tap to delete"
         }

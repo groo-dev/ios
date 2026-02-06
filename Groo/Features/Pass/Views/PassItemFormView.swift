@@ -96,8 +96,8 @@ struct PassItemFormView: View {
                 _noteContent = State(initialValue: n.content)
                 _folderId = State(initialValue: n.folderId)
 
-            case .passkey, .file, .corrupted:
-                // Passkeys, files, and corrupted items are not editable via form
+            case .passkey, .file, .cryptoWallet, .corrupted:
+                // Passkeys, files, crypto wallets, and corrupted items are not editable via form
                 _name = State(initialValue: item.name)
             }
         }
@@ -133,7 +133,7 @@ struct PassItemFormView: View {
                     bankAccountFields
                 case .note:
                     noteFields
-                case .passkey, .file:
+                case .passkey, .file, .cryptoWallet:
                     EmptyView()
                 }
 
@@ -330,7 +330,7 @@ struct PassItemFormView: View {
             return !bankName.isEmpty && !accountNumber.isEmpty
         case .note:
             return !noteContent.trimmingCharacters(in: .whitespaces).isEmpty
-        case .passkey, .file:
+        case .passkey, .file, .cryptoWallet:
             return false
         }
     }
@@ -486,8 +486,8 @@ struct PassItemFormView: View {
                 updatedAt: now
             ))
 
-        case .passkey, .file:
-            fatalError("Passkeys and files cannot be created via form")
+        case .passkey, .file, .cryptoWallet:
+            fatalError("Passkeys, files, and crypto wallets cannot be created via form")
         }
     }
 }

@@ -26,6 +26,7 @@
 		1B2850D32F1401620046247D /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1B2850D22F1401620046247D /* SwiftUI.framework */; };
 		1B2850E42F1401620046247D /* WidgetExtensionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850CE2F1401620046247D /* WidgetExtensionExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B2850F42F14017A0046247D /* KeyboardExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850ED2F14017A0046247D /* KeyboardExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		1B48208B2F35625A0018D7FA /* web3swift in Frameworks */ = {isa = PBXBuildFile; productRef = 1B48208A2F35625A0018D7FA /* web3swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -177,6 +178,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1B48208B2F35625A0018D7FA /* web3swift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -302,6 +304,7 @@
 			);
 			name = Groo;
 			packageProductDependencies = (
+				1B48208A2F35625A0018D7FA /* web3swift */,
 			);
 			productName = Groo;
 			productReference = 1B2850A72F13FF540046247D /* Groo.app */;
@@ -409,6 +412,9 @@
 			);
 			mainGroup = 1B28509E2F13FF540046247D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1B2850A82F13FF540046247D /* Products */;
 			projectDirPath = "";
@@ -1027,6 +1033,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/web3swift-team/web3swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.3.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1B48208A2F35625A0018D7FA /* web3swift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */;
+			productName = web3swift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1B28509F2F13FF540046247D /* Project object */;
 }

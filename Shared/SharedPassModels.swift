@@ -56,6 +56,7 @@ enum SharedPassVaultItemType: String, Codable {
     case card
     case bankAccount = "bank_account"
     case file
+    case cryptoWallet = "crypto_wallet"
 }
 
 // MARK: - Vault Item

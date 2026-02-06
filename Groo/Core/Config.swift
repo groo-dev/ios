@@ -95,4 +95,30 @@ enum Config {
 
     // Note: We don't specify kSecAttrAccessGroup explicitly in keychain calls.
     // iOS automatically uses the first group from entitlements with team ID prefix.
+
+    // MARK: - Ethereum (public RPC + Blockscout, no API keys needed)
+
+    /// Public Ethereum JSON-RPC endpoint. Override via UserDefaults "ethereumRPCURL".
+    static var ethereumRPCURL: URL {
+        if let override = UserDefaults.standard.string(forKey: "ethereumRPCURL"),
+           let url = URL(string: override) {
+            return url
+        }
+        return URL(string: "https://eth.llamarpc.com")!
+    }
+
+    /// Blockscout API for token discovery. Override via UserDefaults "blockscoutBaseURL".
+    static var blockscoutBaseURL: URL {
+        if let override = UserDefaults.standard.string(forKey: "blockscoutBaseURL"),
+           let url = URL(string: override) {
+            return url
+        }
+        return URL(string: "https://eth.blockscout.com/api")!
+    }
+
+    // MARK: - CoinGecko
+
+    static var coinGeckoBaseURL: URL {
+        URL(string: "https://api.coingecko.com/api/v3")!
+    }
 }

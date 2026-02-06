@@ -93,6 +93,7 @@ enum PassVaultItemType: String, Codable, CaseIterable {
     case card
     case bankAccount = "bank_account"
     case file
+    case cryptoWallet = "crypto_wallet"
 
     var label: String {
         switch self {
@@ -102,6 +103,7 @@ enum PassVaultItemType: String, Codable, CaseIterable {
         case .card: "Card"
         case .bankAccount: "Bank Account"
         case .file: "File"
+        case .cryptoWallet: "Crypto Wallet"
         }
     }
 
@@ -113,6 +115,7 @@ enum PassVaultItemType: String, Codable, CaseIterable {
         case .card: "creditcard.fill"
         case .bankAccount: "building.columns"
         case .file: "doc.fill"
+        case .cryptoWallet: "bitcoinsign.circle"
         }
     }
 }
@@ -150,6 +153,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
     case card(PassCardItem)
     case bankAccount(PassBankAccountItem)
     case file(PassFileItem)
+    case cryptoWallet(PassCryptoWalletItem)
     case corrupted(PassCorruptedItem)
 
     var id: String {
@@ -160,6 +164,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.id
         case .bankAccount(let item): item.id
         case .file(let item): item.id
+        case .cryptoWallet(let item): item.id
         case .corrupted(let item): item.id
         }
     }
@@ -172,6 +177,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.name
         case .bankAccount(let item): item.name
         case .file(let item): item.name
+        case .cryptoWallet(let item): item.name
         case .corrupted: "⚠️ Corrupted Item"
         }
     }
@@ -184,6 +190,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card: .card
         case .bankAccount: .bankAccount
         case .file: .file
+        case .cryptoWallet: .cryptoWallet
         case .corrupted: .password  // Default, won't be used
         }
     }
@@ -196,6 +203,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.folderId
         case .bankAccount(let item): item.folderId
         case .file(let item): item.folderId
+        case .cryptoWallet(let item): item.folderId
         case .corrupted: nil
         }
     }
@@ -208,6 +216,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.favorite ?? false
         case .bankAccount(let item): item.favorite ?? false
         case .file(let item): item.favorite ?? false
+        case .cryptoWallet(let item): item.favorite ?? false
         case .corrupted: false
         }
     }
@@ -220,6 +229,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.deletedAt
         case .bankAccount(let item): item.deletedAt
         case .file(let item): item.deletedAt
+        case .cryptoWallet(let item): item.deletedAt
         case .corrupted: nil
         }
     }
@@ -232,6 +242,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.createdAt
         case .bankAccount(let item): item.createdAt
         case .file(let item): item.createdAt
+        case .cryptoWallet(let item): item.createdAt
         case .corrupted: 0
         }
     }
@@ -244,6 +255,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): item.updatedAt
         case .bankAccount(let item): item.updatedAt
         case .file(let item): item.updatedAt
+        case .cryptoWallet(let item): item.updatedAt
         case .corrupted: 0
         }
     }
@@ -268,6 +280,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case content  // note item
         case rpId, credentialId  // passkey item
         case fileName, r2Key  // file item
+        case address, seedPhrase  // crypto wallet item
     }
 
     init(from decoder: Decoder) throws {
@@ -297,6 +310,8 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
                 self = .bankAccount(try PassBankAccountItem(from: decoder))
             case .file:
                 self = .file(try PassFileItem(from: decoder))
+            case .cryptoWallet:
+                self = .cryptoWallet(try PassCryptoWalletItem(from: decoder))
             }
         } catch {
             // If decoding fails, create a corrupted item
@@ -318,6 +333,10 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         // Check for file-specific fields
         if container.contains(.fileName) && container.contains(.r2Key) {
             return .file
+        }
+        // Check for crypto wallet-specific fields
+        if container.contains(.address) && (container.contains(.seedPhrase) || container.contains(.password)) {
+            return .cryptoWallet
         }
         // Check for card-specific fields
         if container.contains(.cvv) || (container.contains(.number) && container.contains(.cardholderName)) {
@@ -343,6 +362,7 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .card(let item): try item.encode(to: encoder)
         case .bankAccount(let item): try item.encode(to: encoder)
         case .file(let item): try item.encode(to: encoder)
+        case .cryptoWallet(let item): try item.encode(to: encoder)
         case .corrupted(let item): try item.encode(to: encoder)
         }
     }
@@ -749,6 +769,91 @@ struct PassFileItem: PassBaseItem {
         createdAt = try container.decode(Int.self, forKey: .createdAt)
         updatedAt = try container.decode(Int.self, forKey: .updatedAt)
         deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
+    }
+}
+
+/// Crypto Wallet item
+struct PassCryptoWalletItem: PassBaseItem {
+    let id: String
+    let type: PassVaultItemType
+    var name: String
+    var address: String
+    var seedPhrase: String?
+    var privateKey: String?
+    var publicKey: String?
+    var derivationPath: String?
+    var notes: String?
+    var folderId: String?
+    var favorite: Bool?
+    var createdAt: Int
+    var updatedAt: Int
+    var deletedAt: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, name, address, seedPhrase, privateKey, publicKey, derivationPath, notes, folderId, favorite, createdAt, updatedAt, deletedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decodeIfPresent(PassVaultItemType.self, forKey: .type) ?? .cryptoWallet
+        name = try container.decode(String.self, forKey: .name)
+        address = try container.decode(String.self, forKey: .address)
+        seedPhrase = try container.decodeIfPresent(String.self, forKey: .seedPhrase)
+        privateKey = try container.decodeIfPresent(String.self, forKey: .privateKey)
+        publicKey = try container.decodeIfPresent(String.self, forKey: .publicKey)
+        derivationPath = try container.decodeIfPresent(String.self, forKey: .derivationPath)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
+        favorite = try container.decodeIfPresent(Bool.self, forKey: .favorite)
+        createdAt = try container.decode(Int.self, forKey: .createdAt)
+        updatedAt = try container.decode(Int.self, forKey: .updatedAt)
+        deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
+    }
+
+    init(id: String, type: PassVaultItemType, name: String, address: String, seedPhrase: String?, privateKey: String?, publicKey: String?, derivationPath: String?, notes: String?, folderId: String?, favorite: Bool?, createdAt: Int, updatedAt: Int, deletedAt: Int? = nil) {
+        self.id = id
+        self.type = type
+        self.name = name
+        self.address = address
+        self.seedPhrase = seedPhrase
+        self.privateKey = privateKey
+        self.publicKey = publicKey
+        self.derivationPath = derivationPath
+        self.notes = notes
+        self.folderId = folderId
+        self.favorite = favorite
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+    }
+
+    static func create(
+        name: String,
+        address: String,
+        seedPhrase: String? = nil,
+        privateKey: String? = nil,
+        publicKey: String? = nil,
+        derivationPath: String? = "m/44'/60'/0'/0/0",
+        notes: String? = nil,
+        folderId: String? = nil
+    ) -> PassCryptoWalletItem {
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        return PassCryptoWalletItem(
+            id: UUID().uuidString.lowercased(),
+            type: .cryptoWallet,
+            name: name,
+            address: address,
+            seedPhrase: seedPhrase,
+            privateKey: privateKey,
+            publicKey: publicKey,
+            derivationPath: derivationPath,
+            notes: notes,
+            folderId: folderId,
+            favorite: false,
+            createdAt: now,
+            updatedAt: now
+        )
     }
 }
 

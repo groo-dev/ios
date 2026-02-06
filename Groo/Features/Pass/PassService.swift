@@ -419,6 +419,10 @@ class PassService {
             fileItem.deletedAt = now
             fileItem.updatedAt = now
             updatedItem = .file(fileItem)
+        case .cryptoWallet(var walletItem):
+            walletItem.deletedAt = now
+            walletItem.updatedAt = now
+            updatedItem = .cryptoWallet(walletItem)
         case .corrupted:
             break // Corrupted items can be deleted via permanentlyDeleteItem
         }
@@ -469,6 +473,10 @@ class PassService {
             fileItem.deletedAt = nil
             fileItem.updatedAt = now
             updatedItem = .file(fileItem)
+        case .cryptoWallet(var walletItem):
+            walletItem.deletedAt = nil
+            walletItem.updatedAt = now
+            updatedItem = .cryptoWallet(walletItem)
         case .corrupted:
             return // Corrupted items cannot be restored
         }
@@ -544,6 +552,10 @@ class PassService {
             fileItem.favorite = !(fileItem.favorite ?? false)
             fileItem.updatedAt = now
             updatedItem = .file(fileItem)
+        case .cryptoWallet(var walletItem):
+            walletItem.favorite = !(walletItem.favorite ?? false)
+            walletItem.updatedAt = now
+            updatedItem = .cryptoWallet(walletItem)
         case .corrupted:
             return // Corrupted items cannot be favorited
         }
@@ -627,6 +639,10 @@ class PassService {
                 fileItem.folderId = nil
                 fileItem.updatedAt = now
                 updatedItem = .file(fileItem)
+            case .cryptoWallet(var walletItem):
+                walletItem.folderId = nil
+                walletItem.updatedAt = now
+                updatedItem = .cryptoWallet(walletItem)
             case .corrupted:
                 break // Corrupted items don't have folder IDs
             }

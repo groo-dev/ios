@@ -18,7 +18,7 @@ enum TabID: String, CaseIterable, Codable {
         case .pass: "Pass"
         case .scratchpad: "Scratchpad"
         case .drive: "Drive"
-        case .crypto: "Crypto"
+        case .crypto: "Wallet"
         case .settings: "Settings"
         }
     }
@@ -29,7 +29,7 @@ enum TabID: String, CaseIterable, Codable {
         case .pass: "key"
         case .scratchpad: "note.text"
         case .drive: "folder"
-        case .crypto: "bitcoinsign.circle"
+        case .crypto: "wallet.bifold"
         case .settings: "gearshape"
         }
     }
@@ -65,7 +65,7 @@ struct MainTabView: View {
         case .drive:
             DrivePlaceholderView()
         case .crypto:
-            CryptoPlaceholderView()
+            CryptoView(passService: passService)
         case .settings:
             SettingsView(
                 padService: padService,

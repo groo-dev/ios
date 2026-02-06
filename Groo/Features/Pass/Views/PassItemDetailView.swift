@@ -37,6 +37,8 @@ struct PassItemDetailView: View {
                     passkeyContent(passkeyItem)
                 case .file(let fileItem):
                     fileContent(fileItem)
+                case .cryptoWallet(let walletItem):
+                    cryptoWalletContent(walletItem)
                 case .corrupted(let corruptedItem):
                     corruptedContent(corruptedItem)
                 }
@@ -354,6 +356,68 @@ struct PassItemDetailView: View {
             }
 
             // TODO: Download button
+        }
+    }
+
+    // MARK: - Crypto Wallet Content
+
+    private func cryptoWalletContent(_ item: PassCryptoWalletItem) -> some View {
+        VStack(spacing: Theme.Spacing.md) {
+            fieldRow(
+                label: "Address",
+                value: item.address,
+                icon: "bitcoinsign.circle",
+                canCopy: true
+            )
+
+            if let derivationPath = item.derivationPath, !derivationPath.isEmpty {
+                fieldRow(
+                    label: "Derivation Path",
+                    value: derivationPath,
+                    icon: "point.bottomleft.forward.to.point.topright.scurvepath",
+                    canCopy: false
+                )
+            }
+
+            if item.seedPhrase != nil {
+                fieldRow(
+                    label: "Seed Phrase",
+                    value: showPassword ? (item.seedPhrase ?? "") : "••••••••••••",
+                    icon: "key.fill",
+                    canCopy: true,
+                    copyValue: item.seedPhrase,
+                    trailing: {
+                        Button {
+                            showPassword.toggle()
+                        } label: {
+                            Image(systemName: showPassword ? "eye.slash.fill" : "eye.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                )
+            }
+
+            if item.privateKey != nil {
+                fieldRow(
+                    label: "Private Key",
+                    value: showPassword ? (item.privateKey ?? "") : "••••••••••••",
+                    icon: "lock.fill",
+                    canCopy: true,
+                    copyValue: item.privateKey,
+                    trailing: {
+                        Button {
+                            showPassword.toggle()
+                        } label: {
+                            Image(systemName: showPassword ? "eye.slash.fill" : "eye.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                )
+            }
+
+            if let notes = item.notes, !notes.isEmpty {
+                notesSection(notes)
+            }
         }
     }
 
