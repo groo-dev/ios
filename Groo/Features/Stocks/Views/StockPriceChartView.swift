@@ -68,6 +68,7 @@ struct StockPriceChartView: View {
                                 )
                         }
                     }
+                    .sensoryFeedback(.selection, trigger: selectedPoint?.id)
             }
 
             // Loading overlay (when refreshing with existing chart)

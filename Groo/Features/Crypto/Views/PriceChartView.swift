@@ -65,6 +65,7 @@ struct PriceChartView: View {
                                 )
                         }
                     }
+                    .sensoryFeedback(.selection, trigger: selectedPoint?.id)
             }
 
             // Loading overlay (when refreshing with existing chart)
@@ -119,6 +120,20 @@ struct PriceChartView: View {
                 )
             )
             .interpolationMethod(.catmullRom)
+
+            if let selected = selectedPoint {
+                RuleMark(x: .value("Selected", selected.timestamp))
+                    .foregroundStyle(chartColor.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+
+                PointMark(
+                    x: .value("Selected", selected.timestamp),
+                    y: .value("Price", selected.price)
+                )
+                .symbol(Circle())
+                .symbolSize(36)
+                .foregroundStyle(chartColor)
+            }
         }
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
