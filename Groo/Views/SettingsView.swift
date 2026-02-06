@@ -16,6 +16,7 @@ struct SettingsView: View {
     let onSignOut: () -> Void
     let onLock: () -> Void
 
+    @AppStorage("displayCurrency") private var displayCurrency: String = "USD"
     @State private var showSignOutConfirm = false
     @State private var biometricEnabled: Bool = false
     @State private var biometricType: LABiometryType = .none
@@ -55,6 +56,19 @@ struct SettingsView: View {
                     CustomizeTabsView()
                 } label: {
                     Label("Customize Tabs", systemImage: "slider.horizontal.3")
+                }
+            }
+
+            Section {
+                NavigationLink {
+                    CurrencyPickerView(selectedCurrency: $displayCurrency)
+                } label: {
+                    HStack {
+                        Label("Display Currency", systemImage: "dollarsign.circle")
+                        Spacer()
+                        Text(displayCurrency)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 

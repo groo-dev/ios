@@ -20,6 +20,8 @@ final class LocalStore {
             LocalScratchpad.self,
             PendingOperation.self,
             CachedTokenPrice.self,
+            LocalStockHolding.self,
+            LocalStockTransaction.self,
         ])
 
         // Configure for App Group storage
@@ -226,6 +228,46 @@ final class LocalStore {
         for item in items {
             context.delete(item)
         }
+        try? context.save()
+    }
+
+    // MARK: - Stock Holdings
+
+    func getAllStockHoldings() -> [LocalStockHolding] {
+        let descriptor = FetchDescriptor<LocalStockHolding>()
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    func getStockHolding(symbol: String) -> LocalStockHolding? {
+        let descriptor = FetchDescriptor<LocalStockHolding>(
+            predicate: #Predicate { $0.symbol == symbol }
+        )
+        return try? context.fetch(descriptor).first
+    }
+
+    func getStockTransaction(id: String) -> LocalStockTransaction? {
+        let descriptor = FetchDescriptor<LocalStockTransaction>(
+            predicate: #Predicate { $0.id == id }
+        )
+        return try? context.fetch(descriptor).first
+    }
+
+    func saveStockHolding(_ holding: LocalStockHolding) {
+        context.insert(holding)
+        try? context.save()
+    }
+
+    func deleteStockHolding(_ holding: LocalStockHolding) {
+        context.delete(holding)
+        try? context.save()
+    }
+
+    func deleteStockTransaction(_ transaction: LocalStockTransaction) {
+        context.delete(transaction)
+        try? context.save()
+    }
+
+    func saveStockChanges() {
         try? context.save()
     }
 }

@@ -8,9 +8,7 @@
 import SwiftUI
 
 enum TabID: String, CaseIterable, Codable {
-    case pad, pass, scratchpad, drive, crypto, settings
-
-    static let defaultOrder = "pad,pass,scratchpad,drive,crypto,settings"
+    case stocks, crypto, pad, pass, drive, scratchpad, settings
 
     var title: String {
         switch self {
@@ -19,6 +17,7 @@ enum TabID: String, CaseIterable, Codable {
         case .scratchpad: "Scratchpad"
         case .drive: "Drive"
         case .crypto: "Wallet"
+        case .stocks: "Stocks"
         case .settings: "Settings"
         }
     }
@@ -30,14 +29,9 @@ enum TabID: String, CaseIterable, Codable {
         case .scratchpad: "note.text"
         case .drive: "folder"
         case .crypto: "wallet.bifold"
+        case .stocks: "chart.line.uptrend.xyaxis"
         case .settings: "gearshape"
         }
-    }
-
-    static func fromStoredOrder(_ raw: String) -> [TabID] {
-        let ids = raw.split(separator: ",").compactMap { TabID(rawValue: String($0)) }
-        let missing = TabID.allCases.filter { !ids.contains($0) }
-        return ids + missing
     }
 }
 
@@ -47,11 +41,8 @@ struct MainTabView: View {
     let passService: PassService
     let onSignOut: () -> Void
 
-    @AppStorage("tabOrder") private var tabOrderRaw: String = TabID.defaultOrder
-
-    private var tabOrder: [TabID] {
-        TabID.fromStoredOrder(tabOrderRaw)
-    }
+    @State private var selectedTab: TabID = .stocks
+    @State private var customization = TabViewCustomization()
 
     @ViewBuilder
     private func tabContent(for tab: TabID) -> some View {
@@ -66,6 +57,8 @@ struct MainTabView: View {
             DrivePlaceholderView()
         case .crypto:
             CryptoView(passService: passService)
+        case .stocks:
+            StocksView()
         case .settings:
             SettingsView(
                 padService: padService,
@@ -80,13 +73,43 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        TabView {
-            ForEach(tabOrder, id: \.self) { tab in
-                Tab(tab.title, systemImage: tab.icon) {
-                    tabContent(for: tab)
-                }
+        TabView(selection: $selectedTab) {
+            Tab("Stocks", systemImage: TabID.stocks.icon, value: TabID.stocks) {
+                tabContent(for: .stocks)
             }
+            .customizationID(TabID.stocks.rawValue)
+
+            Tab("Wallet", systemImage: TabID.crypto.icon, value: TabID.crypto) {
+                tabContent(for: .crypto)
+            }
+            .customizationID(TabID.crypto.rawValue)
+
+            Tab("Pad", systemImage: TabID.pad.icon, value: TabID.pad) {
+                tabContent(for: .pad)
+            }
+            .customizationID(TabID.pad.rawValue)
+
+            Tab("Pass", systemImage: TabID.pass.icon, value: TabID.pass) {
+                tabContent(for: .pass)
+            }
+            .customizationID(TabID.pass.rawValue)
+
+            Tab("Drive", systemImage: TabID.drive.icon, value: TabID.drive) {
+                tabContent(for: .drive)
+            }
+            .customizationID(TabID.drive.rawValue)
+
+            Tab("Scratchpad", systemImage: TabID.scratchpad.icon, value: TabID.scratchpad) {
+                tabContent(for: .scratchpad)
+            }
+            .customizationID(TabID.scratchpad.rawValue)
+
+            Tab("Settings", systemImage: TabID.settings.icon, value: TabID.settings) {
+                tabContent(for: .settings)
+            }
+            .customizationID(TabID.settings.rawValue)
         }
+        .tabViewCustomization($customization)
         .tabViewStyle(.sidebarAdaptable)
         .modifier(TabBarMinimizeOnScrollModifier())
         .tint(Theme.Brand.primary)
