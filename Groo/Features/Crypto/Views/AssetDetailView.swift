@@ -16,19 +16,23 @@ struct AssetDetailView: View {
 
     @State private var selectedTimeframe: ChartTimeframe = .day
     @State private var chartData: [PricePoint] = []
+    @State private var loadedCharts: [ChartTimeframe: [PricePoint]] = [:]
     @State private var isLoadingChart = false
     @State private var chartError: String?
     @State private var showSend = false
     @State private var showReceive = false
-    @State private var livePrice: CoinGeckoSimplePrice?
     @Environment(\.dismiss) private var dismiss
 
     private var displayPrice: Double {
-        livePrice?.usd ?? asset.price
+        asset.price
     }
 
     private var displayChange: Double {
-        livePrice?.usd_24h_change ?? asset.priceChange24h
+        if let first = chartData.first?.price, first > 0,
+           let last = chartData.last?.price {
+            return ((last - first) / first) * 100
+        }
+        return asset.priceChange24h
     }
 
     private var displayValue: Double {
@@ -44,16 +48,25 @@ struct AssetDetailView: View {
                         .font(.headline)
                         .foregroundStyle(.secondary)
 
-                    Text(formatCurrency(displayPrice))
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                    if displayPrice > 0 {
+                        Text(formatCurrency(displayPrice))
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .contentTransition(.numericText())
 
-                    HStack(spacing: 4) {
-                        Image(systemName: displayChange >= 0 ? "arrow.up.right" : "arrow.down.right")
-                        Text(formatPercent(displayChange))
+                        HStack(spacing: 4) {
+                            Image(systemName: displayChange >= 0 ? "arrow.up.right" : "arrow.down.right")
+                            Text(formatPercent(displayChange))
+                                .contentTransition(.numericText())
+                        }
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(displayChange >= 0 ? .green : .red)
+                        .animation(.default, value: displayChange)
+                    } else {
+                        Text("—")
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .foregroundStyle(.secondary)
                     }
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(displayChange >= 0 ? .green : .red)
                 }
                 .padding(.top, Theme.Spacing.md)
 
@@ -88,9 +101,10 @@ struct AssetDetailView: View {
                         .font(.title2)
                         .fontWeight(.semibold)
 
-                    Text(formatCurrency(displayValue))
+                    Text(displayPrice > 0 ? formatCurrency(displayValue) : "—")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .contentTransition(.numericText())
                 }
                 .padding()
 
@@ -161,7 +175,6 @@ struct AssetDetailView: View {
         }
         .task {
             await loadChart()
-            await fetchPriceIfNeeded()
         }
         .onChange(of: selectedTimeframe) {
             Task { await loadChart() }
@@ -170,31 +183,38 @@ struct AssetDetailView: View {
 
     // MARK: - Data Loading
 
-    private func fetchPriceIfNeeded() async {
-        guard asset.price == 0, let contract = asset.contractAddress else { return }
-        if let prices = try? await coinGeckoService.getTokenPrices(contracts: [contract]),
-           let price = prices[contract.lowercased()] {
-            livePrice = price
-        }
-    }
-
     private func loadChart() async {
+        // Use locally cached chart data if available
+        if let cached = loadedCharts[selectedTimeframe] {
+            chartData = cached
+            return
+        }
+
         isLoadingChart = true
         chartError = nil
         defer { isLoadingChart = false }
 
         do {
+            var points: [PricePoint]
             if let contract = asset.contractAddress {
-                chartData = try await coinGeckoService.getContractMarketChart(
+                points = try await coinGeckoService.getContractMarketChart(
                     contractAddress: contract,
                     days: selectedTimeframe.days
                 )
             } else {
-                chartData = try await coinGeckoService.getMarketChart(
+                points = try await coinGeckoService.getMarketChart(
                     coinId: "ethereum",
                     days: selectedTimeframe.days
                 )
             }
+
+            if selectedTimeframe == .hour {
+                let cutoff = Date().addingTimeInterval(-3600)
+                points = points.filter { $0.timestamp >= cutoff }
+            }
+
+            loadedCharts[selectedTimeframe] = points
+            chartData = points
         } catch {
             chartData = []
             chartError = error.localizedDescription
@@ -206,6 +226,7 @@ struct AssetDetailView: View {
     private func formatCurrency(_ value: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_US")
         formatter.currencyCode = "USD"
         formatter.maximumFractionDigits = value < 1 ? 4 : 2
         return formatter.string(from: NSNumber(value: value)) ?? "$0.00"

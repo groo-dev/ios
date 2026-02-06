@@ -19,6 +19,7 @@ final class LocalStore {
             LocalPadItem.self,
             LocalScratchpad.self,
             PendingOperation.self,
+            CachedTokenPrice.self,
         ])
 
         // Configure for App Group storage
@@ -176,6 +177,54 @@ final class LocalStore {
         let operations = getAllPendingOperations()
         for op in operations {
             context.delete(op)
+        }
+        try? context.save()
+    }
+
+    // MARK: - Cached Portfolio
+
+    func getCachedPortfolio(wallet: String) -> [CachedTokenPrice] {
+        let lowered = wallet.lowercased()
+        let descriptor = FetchDescriptor<CachedTokenPrice>(
+            predicate: #Predicate { $0.walletAddress == lowered },
+            sortBy: [SortDescriptor(\CachedTokenPrice.priceUSD, order: .reverse)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    func upsertCachedPortfolio(_ assets: [CryptoAsset], wallet: String) {
+        let lowered = wallet.lowercased()
+
+        // Delete existing cache for this wallet
+        let existing = getCachedPortfolio(wallet: lowered)
+        for item in existing {
+            context.delete(item)
+        }
+
+        // Insert fresh cache
+        let now = Date()
+        for asset in assets {
+            context.insert(CachedTokenPrice(
+                id: "\(lowered)_\(asset.id.lowercased())",
+                walletAddress: lowered,
+                symbol: asset.symbol,
+                name: asset.name,
+                balance: asset.balance,
+                priceUSD: asset.price,
+                priceChange24h: asset.priceChange24h,
+                decimals: asset.decimals,
+                contractAddress: asset.contractAddress,
+                updatedAt: now
+            ))
+        }
+
+        try? context.save()
+    }
+
+    func clearCachedPortfolio(wallet: String) {
+        let items = getCachedPortfolio(wallet: wallet)
+        for item in items {
+            context.delete(item)
         }
         try? context.save()
     }

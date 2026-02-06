@@ -35,6 +35,7 @@ struct PricePoint: Identifiable {
 
 /// Timeframe options for price charts
 enum ChartTimeframe: String, CaseIterable {
+    case hour = "1H"
     case day = "1D"
     case week = "1W"
     case month = "1M"
@@ -42,6 +43,7 @@ enum ChartTimeframe: String, CaseIterable {
 
     var days: Int {
         switch self {
+        case .hour: 1   // fetch 1 day, filter to last hour
         case .day: 1
         case .week: 7
         case .month: 30
@@ -115,6 +117,14 @@ struct CoinGeckoSimplePrice: Codable {
         case usd
         case usd_24h_change
     }
+}
+
+/// Result of a batch token price fetch, indicating completeness
+struct TokenPriceResult {
+    let prices: [String: CoinGeckoSimplePrice]
+    let isComplete: Bool       // all contracts priced or confirmed absent
+    let failedContracts: [String]  // contracts that never got a response
+    let failureReason: String? // human-readable reason when isComplete is false
 }
 
 // MARK: - Token Tracking

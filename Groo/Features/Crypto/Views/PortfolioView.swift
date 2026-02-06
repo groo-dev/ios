@@ -15,12 +15,16 @@ struct PortfolioView: View {
 
     @State private var assets: [CryptoAsset] = []
     @State private var isLoading = true
+    @State private var isRefreshing = false
+    @State private var staleReason: String?
+    @State private var isOffline = false
     @State private var error: String?
     @State private var selectedAsset: CryptoAsset?
     @State private var showAddWallet = false
     @State private var showReceive = false
     @State private var showWalletList = false
     @State private var otherTokensExpanded = false
+    @State private var showStaleReason = false
 
     private var trackedAssets: [CryptoAsset] {
         guard let wallet = walletManager.activeAddress else { return assets }
@@ -59,19 +63,60 @@ struct PortfolioView: View {
                                         .font(.caption2)
                                 }
                                 .foregroundStyle(.secondary)
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
                         }
 
                         Text(formatCurrency(totalValue))
                             .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .contentTransition(.numericText())
 
                         Text("Total Balance")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
+                        if isRefreshing {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Updating prices...")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .transition(.opacity)
+                        } else if isOffline {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                Image(systemName: "wifi.slash")
+                                    .font(.caption2)
+                                Text("You're offline")
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(.orange)
+                            .transition(.opacity)
+                        } else if staleReason != nil {
+                            Button {
+                                showStaleReason = true
+                            } label: {
+                                HStack(spacing: Theme.Spacing.xs) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.caption2)
+                                    Text("Prices may be outdated")
+                                        .font(.caption2)
+                                }
+                                .foregroundStyle(.orange)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.opacity)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Theme.Spacing.md)
                     .listRowBackground(Color.clear)
+                    .animation(.default, value: isRefreshing)
+                    .animation(.default, value: isOffline)
+                    .animation(.default, value: staleReason)
                 }
 
                 // Tracked assets
@@ -195,9 +240,11 @@ struct PortfolioView: View {
                 }
             }
             .task {
+                loadCachedPortfolio()
                 await loadPortfolio()
             }
             .onChange(of: walletManager.activeAddress) {
+                loadCachedPortfolio()
                 Task { await loadPortfolio() }
             }
             .alert("Error", isPresented: .init(
@@ -207,6 +254,11 @@ struct PortfolioView: View {
                 Button("OK") { error = nil }
             } message: {
                 Text(error ?? "")
+            }
+            .alert("Prices may be outdated", isPresented: $showStaleReason) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(staleReason ?? "")
             }
         }
     }
@@ -250,29 +302,66 @@ struct PortfolioView: View {
 
             // Value and change
             VStack(alignment: .trailing, spacing: 2) {
-                Text(formatCurrency(asset.value))
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                if asset.price > 0 {
+                    Text(formatCurrency(asset.value))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .contentTransition(.numericText())
 
-                HStack(spacing: 2) {
-                    Image(systemName: asset.priceChange24h >= 0 ? "arrow.up.right" : "arrow.down.right")
-                        .font(.caption2)
-                    Text(formatPercent(asset.priceChange24h))
-                        .font(.caption)
+                    HStack(spacing: 2) {
+                        Image(systemName: asset.priceChange24h >= 0 ? "arrow.up.right" : "arrow.down.right")
+                            .font(.caption2)
+                        Text(formatPercent(asset.priceChange24h))
+                            .font(.caption)
+                    }
+                    .foregroundStyle(asset.priceChange24h >= 0 ? .green : .red)
+                } else {
+                    Text("—")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
                 }
-                .foregroundStyle(asset.priceChange24h >= 0 ? .green : .red)
             }
         }
         .padding(.vertical, Theme.Spacing.xs)
+        .contentShape(Rectangle())
     }
 
     // MARK: - Data Loading
 
-    private func loadPortfolio() async {
-        isLoading = true
-        defer { isLoading = false }
-
+    private func loadCachedPortfolio() {
         guard let address = walletManager.activeAddress else { return }
+        let cached = LocalStore.shared.getCachedPortfolio(wallet: address)
+        guard !cached.isEmpty else { return }
+
+        assets = cached.map { item in
+            CryptoAsset(
+                id: item.contractAddress?.lowercased() ?? "eth",
+                symbol: item.symbol,
+                name: item.name,
+                balance: item.balance,
+                price: item.priceUSD,
+                priceChange24h: item.priceChange24h,
+                iconURL: nil,
+                decimals: item.decimals,
+                contractAddress: item.contractAddress
+            )
+        }.sorted { $0.value > $1.value }
+    }
+
+    private func loadPortfolio() async {
+        guard let address = walletManager.activeAddress else { return }
+
+        let hasCachedData = !assets.isEmpty
+        if hasCachedData {
+            isRefreshing = true
+        } else {
+            isLoading = true
+        }
+        defer {
+            isLoading = false
+            isRefreshing = false
+        }
 
         var loadedAssets: [CryptoAsset] = []
 
@@ -283,8 +372,21 @@ struct PortfolioView: View {
             async let tokenBalancesTask = ethereumService.getTokenBalances(address: address)
 
             let ethBalance = try await ethBalanceTask
-            let ethPrice = try await ethPriceTask
             let tokenBalances = try await tokenBalancesTask
+
+            // Handle ETH price failure separately so balances still update
+            var ethPriceFresh = true
+            var ethPrice: CoinGeckoSimplePrice
+            do {
+                ethPrice = try await ethPriceTask
+            } catch {
+                if let cachedEth = assets.first(where: { $0.id == "eth" }) {
+                    ethPrice = CoinGeckoSimplePrice(usd: cachedEth.price, usd_24h_change: cachedEth.priceChange24h)
+                    ethPriceFresh = false
+                } else {
+                    throw error
+                }
+            }
 
             // Add ETH asset
             loadedAssets.append(CryptoAsset(
@@ -336,23 +438,41 @@ struct PortfolioView: View {
 
             // Fetch prices for tracked + unknown tokens
             let contractsToPrice = trackedContracts + unknownContracts
-            var allPrices: [String: CoinGeckoSimplePrice] = [:]
+            let priceResult: TokenPriceResult
             if !contractsToPrice.isEmpty {
-                if let prices = try? await coinGeckoService.getTokenPrices(contracts: contractsToPrice) {
-                    allPrices = prices
-                }
+                priceResult = await coinGeckoService.getTokenPrices(contracts: contractsToPrice)
+            } else {
+                priceResult = TokenPriceResult(prices: [:], isComplete: true, failedContracts: [], failureReason: nil)
+            }
+            let allPrices = priceResult.prices
+
+            // Auto-classify unknown tokens — skip those that failed (no definitive answer)
+            let failedSet = Set(priceResult.failedContracts)
+            for contract in unknownContracts {
+                let key = contract.lowercased()
+                guard !failedSet.contains(key) else { continue }
+                let recognized = allPrices[key] != nil
+                TokenTrackingManager.setTrackingState(recognized, for: contract, wallet: address)
             }
 
-            // Auto-classify unknown tokens based on CoinGecko recognition
-            for contract in unknownContracts {
-                let recognized = allPrices[contract.lowercased()] != nil
-                TokenTrackingManager.setTrackingState(recognized, for: contract, wallet: address)
+            // Merge cached prices for failed contracts
+            var effectivePrices = allPrices
+            if !priceResult.isComplete || !ethPriceFresh {
+                let cachedItems = LocalStore.shared.getCachedPortfolio(wallet: address)
+                for item in cachedItems {
+                    guard let contract = item.contractAddress?.lowercased() else { continue }
+                    if effectivePrices[contract] == nil {
+                        effectivePrices[contract] = CoinGeckoSimplePrice(
+                            usd: item.priceUSD, usd_24h_change: item.priceChange24h
+                        )
+                    }
+                }
             }
 
             // Apply prices to assets
             loadedAssets = loadedAssets.map { asset in
                 guard let contract = asset.contractAddress,
-                      let price = allPrices[contract.lowercased()] else {
+                      let price = effectivePrices[contract.lowercased()] else {
                     return asset
                 }
                 return CryptoAsset(
@@ -369,9 +489,43 @@ struct PortfolioView: View {
             }
 
             // Sort by value (highest first)
-            assets = loadedAssets.sorted { $0.value > $1.value }
+            let allPricesFresh = ethPriceFresh && priceResult.isComplete
+
+            let sorted = loadedAssets.sorted { $0.value > $1.value }
+            withAnimation { assets = sorted }
+
+            if allPricesFresh {
+                LocalStore.shared.upsertCachedPortfolio(sorted, wallet: address)
+                staleReason = nil
+                isOffline = false
+            } else {
+                var reasons: [String] = []
+                if !ethPriceFresh { reasons.append("ETH price unavailable") }
+                if let r = priceResult.failureReason { reasons.append(r) }
+                staleReason = reasons.isEmpty ? "Some prices failed to load" : reasons.joined(separator: ". ")
+            }
         } catch {
-            self.error = error.localizedDescription
+            let urlError = error as? URLError
+            let networkDown = urlError?.code == .notConnectedToInternet
+                || urlError?.code == .networkConnectionLost
+                || urlError?.code == .dataNotAllowed
+                || urlError?.code == .timedOut
+
+            if hasCachedData {
+                if networkDown {
+                    isOffline = true
+                    staleReason = nil
+                } else {
+                    staleReason = error.localizedDescription
+                    isOffline = false
+                }
+            } else {
+                if networkDown {
+                    self.error = "No internet connection"
+                } else {
+                    self.error = error.localizedDescription
+                }
+            }
         }
     }
 
@@ -381,8 +535,8 @@ struct PortfolioView: View {
         TokenTrackingManager.setTrackingState(true, for: contract, wallet: wallet)
         // Fetch price for newly tracked token
         Task {
-            if let prices = try? await coinGeckoService.getTokenPrices(contracts: [contract]),
-               let price = prices[contract.lowercased()] {
+            let result = await coinGeckoService.getTokenPrices(contracts: [contract])
+            if let price = result.prices[contract.lowercased()] {
                 if let idx = assets.firstIndex(where: { $0.id == asset.id }) {
                     assets[idx] = CryptoAsset(
                         id: asset.id,
@@ -411,6 +565,7 @@ struct PortfolioView: View {
     private func formatCurrency(_ value: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_US")
         formatter.currencyCode = "USD"
         formatter.maximumFractionDigits = 2
         return formatter.string(from: NSNumber(value: value)) ?? "$0.00"

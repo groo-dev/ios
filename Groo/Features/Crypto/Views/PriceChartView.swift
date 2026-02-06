@@ -30,9 +30,9 @@ struct PriceChartView: View {
 
     var body: some View {
         ZStack {
-            if isLoading {
+            if isLoading && data.isEmpty {
                 ProgressView()
-            } else if data.isEmpty {
+            } else if !isLoading && data.isEmpty {
                 VStack(spacing: 4) {
                     Text("No chart data")
                         .font(.caption)
@@ -65,6 +65,14 @@ struct PriceChartView: View {
                                 )
                         }
                     }
+            }
+
+            // Loading overlay (when refreshing with existing chart)
+            if isLoading && !data.isEmpty {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(Theme.Spacing.sm)
             }
 
             // Scrub overlay
@@ -115,6 +123,7 @@ struct PriceChartView: View {
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
         .chartYScale(domain: minPrice * 0.999 ... maxPrice * 1.001)
+        .animation(.easeInOut(duration: 0.3), value: data.map(\.price))
     }
 
     // MARK: - Formatting
@@ -122,6 +131,7 @@ struct PriceChartView: View {
     private func formatPrice(_ price: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_US")
         formatter.currencyCode = "USD"
         formatter.maximumFractionDigits = price < 1 ? 4 : 2
         return formatter.string(from: NSNumber(value: price)) ?? "$0"
