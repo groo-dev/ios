@@ -20,9 +20,18 @@ struct StockDetailView: View {
     @State private var chartError: String?
     @State private var showAddTransaction = false
     @State private var editingTransaction: StockTransaction?
+    @State private var scrubbedPoint: StockPricePoint?
     @Environment(\.dismiss) private var dismiss
 
+    private var displayPrice: Double {
+        scrubbedPoint?.price ?? currentHolding.currentPrice
+    }
+
     private var displayChange: Double {
+        if let scrubbed = scrubbedPoint,
+           let first = chartPoints.first?.price, first > 0 {
+            return ((scrubbed.price - first) / first) * 100
+        }
         if let first = chartPoints.first?.price, first > 0,
            let last = chartPoints.last?.price {
             return ((last - first) / first) * 100
@@ -43,8 +52,8 @@ struct StockDetailView: View {
                         .font(.headline)
                         .foregroundStyle(.secondary)
 
-                    if currentHolding.currentPrice > 0 {
-                        Text(CurrencyFormatter.format(currentHolding.currentPrice, currencyCode: currentHolding.currency))
+                    if displayPrice > 0 {
+                        Text(CurrencyFormatter.format(displayPrice, currencyCode: currentHolding.currency))
                             .font(.system(size: 34, weight: .bold, design: .rounded))
                             .contentTransition(.numericText())
 
@@ -73,7 +82,8 @@ struct StockDetailView: View {
                     errorMessage: chartError,
                     currencyCode: currentHolding.currency,
                     timeframe: selectedTimeframe,
-                    tradingPeriod: selectedTimeframe == .day ? tradingPeriod : nil
+                    tradingPeriod: selectedTimeframe == .day ? tradingPeriod : nil,
+                    selectedPoint: $scrubbedPoint
                 )
                 .frame(height: 200)
                 .padding(.horizontal)

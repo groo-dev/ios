@@ -14,7 +14,7 @@ struct PriceChartView: View {
     let isPositive: Bool
     var errorMessage: String? = nil
 
-    @State private var selectedPoint: PricePoint?
+    @Binding var selectedPoint: PricePoint?
 
     private var chartColor: Color {
         isPositive ? .green : .red

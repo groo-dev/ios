@@ -21,13 +21,18 @@ struct AssetDetailView: View {
     @State private var chartError: String?
     @State private var showSend = false
     @State private var showReceive = false
+    @State private var scrubbedPoint: PricePoint?
     @Environment(\.dismiss) private var dismiss
 
     private var displayPrice: Double {
-        asset.price
+        scrubbedPoint?.price ?? asset.price
     }
 
     private var displayChange: Double {
+        if let scrubbed = scrubbedPoint,
+           let first = chartData.first?.price, first > 0 {
+            return ((scrubbed.price - first) / first) * 100
+        }
         if let first = chartData.first?.price, first > 0,
            let last = chartData.last?.price {
             return ((last - first) / first) * 100
@@ -75,7 +80,8 @@ struct AssetDetailView: View {
                     data: chartData,
                     isLoading: isLoadingChart,
                     isPositive: displayChange >= 0,
-                    errorMessage: chartError
+                    errorMessage: chartError,
+                    selectedPoint: $scrubbedPoint
                 )
                 .frame(height: 200)
                 .padding(.horizontal)

@@ -17,7 +17,7 @@ struct StockPriceChartView: View {
     var timeframe: StockChartTimeframe = .day
     var tradingPeriod: TradingPeriod? = nil
 
-    @State private var selectedPoint: StockPricePoint?
+    @Binding var selectedPoint: StockPricePoint?
 
     private var chartColor: Color {
         isPositive ? .green : .red
