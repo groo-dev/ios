@@ -135,7 +135,8 @@ struct StockPortfolioView: View {
                     }
                 }
             }
-            .navigationTitle("Stocks")
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .refreshable {
                 await portfolioManager.refreshPrices(using: yahooService)
             }

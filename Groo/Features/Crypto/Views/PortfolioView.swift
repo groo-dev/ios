@@ -182,7 +182,8 @@ struct PortfolioView: View {
                     }
                 }
             }
-            .navigationTitle("Wallet")
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .refreshable {
                 await loadPortfolio()
             }
