@@ -185,7 +185,7 @@ struct PortfolioView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .refreshable {
-                await loadPortfolio()
+                await loadPortfolio(forceRefresh: true)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -350,7 +350,7 @@ struct PortfolioView: View {
         }.sorted { $0.value > $1.value }
     }
 
-    private func loadPortfolio() async {
+    private func loadPortfolio(forceRefresh: Bool = false) async {
         guard let address = walletManager.activeAddress else { return }
 
         let hasCachedData = !assets.isEmpty
@@ -369,7 +369,7 @@ struct PortfolioView: View {
         do {
             // Load ETH balance, ETH price, and token balances concurrently
             async let ethBalanceTask = ethereumService.getEthBalance(address: address)
-            async let ethPriceTask = coinGeckoService.getEthPrice()
+            async let ethPriceTask = coinGeckoService.getEthPrice(forceRefresh: forceRefresh)
             async let tokenBalancesTask = ethereumService.getTokenBalances(address: address)
 
             let ethBalance = try await ethBalanceTask
@@ -441,7 +441,7 @@ struct PortfolioView: View {
             let contractsToPrice = trackedContracts + unknownContracts
             let priceResult: TokenPriceResult
             if !contractsToPrice.isEmpty {
-                priceResult = await coinGeckoService.getTokenPrices(contracts: contractsToPrice)
+                priceResult = await coinGeckoService.getTokenPrices(contracts: contractsToPrice, forceRefresh: forceRefresh)
             } else {
                 priceResult = TokenPriceResult(prices: [:], isComplete: true, failedContracts: [], failureReason: nil)
             }

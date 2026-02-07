@@ -3,7 +3,7 @@
 //  Groo
 //
 //  CoinGecko API client for price charts and token pricing.
-//  Includes in-memory caching to stay within free tier limits.
+//  Uses shared APICache for response caching and request deduplication.
 //
 
 import Foundation
@@ -11,23 +11,14 @@ import os
 
 actor CoinGeckoService {
     private let logger = Logger(subsystem: "dev.groo.ios", category: "CoinGeckoService")
-    private let session: URLSession
     private let decoder: JSONDecoder
 
     private let baseURL = URL(string: "https://api.coingecko.com/api/v3")!
-
-    // Cache with TTL
-    private var priceCache: [String: CacheEntry<CoinGeckoSimplePrice>] = [:]
-    private var chartCache: [String: CacheEntry<[PricePoint]>] = [:]
 
     private let priceTTL: TimeInterval = 300    // 5 minutes
     private let chartTTL: TimeInterval = 900    // 15 minutes
 
     init() {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 15
-        config.timeoutIntervalForResource = 30
-        self.session = URLSession(configuration: config)
         self.decoder = JSONDecoder()
     }
 
@@ -41,6 +32,17 @@ actor CoinGeckoService {
                 let delay = pow(2.0, Double(attempt))
                 logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
                 try? await Task.sleep(for: .seconds(delay))
+            } catch let error as APICacheError {
+                if case .httpError(let code, _) = error, code == 429 {
+                    lastError = CoinGeckoError.rateLimited
+                    let delay = pow(2.0, Double(attempt))
+                    logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
+                    try? await Task.sleep(for: .seconds(delay))
+                } else if case .httpError(let code, _) = error {
+                    throw CoinGeckoError.httpError(code)
+                } else {
+                    throw error
+                }
             }
         }
         throw lastError
@@ -49,13 +51,7 @@ actor CoinGeckoService {
     // MARK: - Price Charts
 
     /// Get market chart data for a coin
-    func getMarketChart(coinId: String, days: Int) async throws -> [PricePoint] {
-        let cacheKey = "\(coinId)_\(days)"
-
-        if let cached = chartCache[cacheKey], !cached.isExpired(ttl: chartTTL) {
-            return cached.value
-        }
-
+    func getMarketChart(coinId: String, days: Int, forceRefresh: Bool = false) async throws -> [PricePoint] {
         return try await withRetry {
             var components = URLComponents(url: self.baseURL.appendingPathComponent("coins/\(coinId)/market_chart"), resolvingAgainstBaseURL: false)!
             components.queryItems = [
@@ -63,36 +59,20 @@ actor CoinGeckoService {
                 URLQueryItem(name: "days", value: String(days))
             ]
 
-            let (data, response) = try await self.session.data(from: components.url!)
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                self.logger.error("Market chart request failed with HTTP \(statusCode)")
-                throw statusCode == 429 ? CoinGeckoError.rateLimited : CoinGeckoError.httpError(statusCode)
-            }
+            let data = try await APICache.shared.fetch(components.url!, ttl: self.chartTTL, forceRefresh: forceRefresh)
 
             let chart = try self.decoder.decode(CoinGeckoMarketChart.self, from: data)
-            let points = chart.prices.map { entry in
+            return chart.prices.map { entry in
                 PricePoint(
                     timestamp: Date(timeIntervalSince1970: entry[0] / 1000),
                     price: entry[1]
                 )
             }
-
-            self.chartCache[cacheKey] = CacheEntry(value: points)
-            return points
         }
     }
 
     /// Get market chart data for an ERC-20 token by contract address
-    func getContractMarketChart(contractAddress: String, days: Int) async throws -> [PricePoint] {
-        let cacheKey = "contract_\(contractAddress.lowercased())_\(days)"
-
-        if let cached = chartCache[cacheKey], !cached.isExpired(ttl: chartTTL) {
-            return cached.value
-        }
-
+    func getContractMarketChart(contractAddress: String, days: Int, forceRefresh: Bool = false) async throws -> [PricePoint] {
         return try await withRetry {
             var components = URLComponents(url: self.baseURL.appendingPathComponent("coins/ethereum/contract/\(contractAddress)/market_chart"), resolvingAgainstBaseURL: false)!
             components.queryItems = [
@@ -100,38 +80,22 @@ actor CoinGeckoService {
                 URLQueryItem(name: "days", value: String(days))
             ]
 
-            let (data, response) = try await self.session.data(from: components.url!)
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                self.logger.error("Contract chart request for \(contractAddress) failed with HTTP \(statusCode)")
-                throw statusCode == 429 ? CoinGeckoError.rateLimited : CoinGeckoError.httpError(statusCode)
-            }
+            let data = try await APICache.shared.fetch(components.url!, ttl: self.chartTTL, forceRefresh: forceRefresh)
 
             let chart = try self.decoder.decode(CoinGeckoMarketChart.self, from: data)
-            let points = chart.prices.map { entry in
+            return chart.prices.map { entry in
                 PricePoint(
                     timestamp: Date(timeIntervalSince1970: entry[0] / 1000),
                     price: entry[1]
                 )
             }
-
-            self.chartCache[cacheKey] = CacheEntry(value: points)
-            return points
         }
     }
 
     // MARK: - Token Prices
 
     /// Get ETH price in USD
-    func getEthPrice() async throws -> CoinGeckoSimplePrice {
-        let cacheKey = "ethereum"
-
-        if let cached = priceCache[cacheKey], !cached.isExpired(ttl: priceTTL) {
-            return cached.value
-        }
-
+    func getEthPrice(forceRefresh: Bool = false) async throws -> CoinGeckoSimplePrice {
         return try await withRetry {
             var components = URLComponents(url: self.baseURL.appendingPathComponent("simple/price"), resolvingAgainstBaseURL: false)!
             components.queryItems = [
@@ -140,28 +104,19 @@ actor CoinGeckoService {
                 URLQueryItem(name: "include_24hr_change", value: "true")
             ]
 
-            let (data, response) = try await self.session.data(from: components.url!)
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                self.logger.error("ETH price request failed with HTTP \(statusCode)")
-                throw statusCode == 429 ? CoinGeckoError.rateLimited : CoinGeckoError.httpError(statusCode)
-            }
-
+            let data = try await APICache.shared.fetch(components.url!, ttl: self.priceTTL, forceRefresh: forceRefresh)
             let result = try self.decoder.decode([String: CoinGeckoSimplePrice].self, from: data)
 
             guard let price = result["ethereum"] else {
                 throw CoinGeckoError.invalidResponse
             }
 
-            self.priceCache[cacheKey] = CacheEntry(value: price)
             return price
         }
     }
 
     /// Get token prices by contract addresses on Ethereum (one per request for free tier)
-    func getTokenPrices(contracts: [String]) async -> TokenPriceResult {
+    func getTokenPrices(contracts: [String], forceRefresh: Bool = false) async -> TokenPriceResult {
         guard !contracts.isEmpty else {
             return TokenPriceResult(prices: [:], isComplete: true, failedContracts: [], failureReason: nil)
         }
@@ -174,12 +129,6 @@ actor CoinGeckoService {
         // Free tier limits to 1 contract per request — fetch individually, skip failures
         for address in contracts {
             let key = address.lowercased()
-
-            // Check cache first
-            if let cached = priceCache[key], !cached.isExpired(ttl: priceTTL) {
-                prices[key] = cached.value
-                continue
-            }
 
             // If we already hit a rate limit, skip remaining without attempting
             if hitRateLimit {
@@ -196,20 +145,10 @@ actor CoinGeckoService {
                         URLQueryItem(name: "include_24hr_change", value: "true")
                     ]
 
-                    let (data, response) = try await self.session.data(from: components.url!)
-
-                    guard let httpResponse = response as? HTTPURLResponse,
-                          (200...299).contains(httpResponse.statusCode) else {
-                        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                        self.logger.error("Token price request for \(address) failed with HTTP \(statusCode)")
-                        throw statusCode == 429 ? CoinGeckoError.rateLimited : CoinGeckoError.httpError(statusCode)
-                    }
-
+                    let data = try await APICache.shared.fetch(components.url!, ttl: self.priceTTL, forceRefresh: forceRefresh)
                     let result = try self.decoder.decode([String: CoinGeckoSimplePrice].self, from: data)
                     for (addr, price) in result {
-                        let normalizedKey = addr.lowercased()
-                        prices[normalizedKey] = price
-                        self.priceCache[normalizedKey] = CacheEntry(value: price)
+                        prices[addr.lowercased()] = price
                     }
                 }
             } catch CoinGeckoError.rateLimited {
@@ -230,28 +169,6 @@ actor CoinGeckoService {
             failedContracts: failedContracts,
             failureReason: firstError
         )
-    }
-
-    /// Clear all caches
-    func clearCache() {
-        priceCache.removeAll()
-        chartCache.removeAll()
-    }
-}
-
-// MARK: - Cache
-
-private struct CacheEntry<T> {
-    let value: T
-    let timestamp: Date
-
-    init(value: T) {
-        self.value = value
-        self.timestamp = Date()
-    }
-
-    func isExpired(ttl: TimeInterval) -> Bool {
-        Date().timeIntervalSince(timestamp) > ttl
     }
 }
 

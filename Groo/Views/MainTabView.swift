@@ -8,10 +8,11 @@
 import SwiftUI
 
 enum TabID: String, CaseIterable, Codable {
-    case stocks, crypto, pad, pass, drive, scratchpad, settings
+    case home, stocks, crypto, pad, pass, drive, scratchpad, settings
 
     var title: String {
         switch self {
+        case .home: "Home"
         case .pad: "Pad"
         case .pass: "Pass"
         case .scratchpad: "Scratchpad"
@@ -24,6 +25,7 @@ enum TabID: String, CaseIterable, Codable {
 
     var icon: String {
         switch self {
+        case .home: "house"
         case .pad: "doc.on.clipboard"
         case .pass: "key"
         case .scratchpad: "note.text"
@@ -41,12 +43,14 @@ struct MainTabView: View {
     let passService: PassService
     let onSignOut: () -> Void
 
-    @AppStorage("selectedTab") private var selectedTab: TabID = .stocks
+    @AppStorage("selectedTab") private var selectedTab: TabID = .home
     @State private var customization = TabViewCustomization()
 
     @ViewBuilder
     private func tabContent(for tab: TabID) -> some View {
         switch tab {
+        case .home:
+            HomeView(padService: padService, syncService: syncService, passService: passService)
         case .pad:
             PadView(padService: padService, syncService: syncService, onSignOut: onSignOut)
         case .pass:
@@ -74,6 +78,11 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
+            Tab("Home", systemImage: TabID.home.icon, value: TabID.home) {
+                tabContent(for: .home)
+            }
+            .customizationID(TabID.home.rawValue)
+
             Tab("Stocks", systemImage: TabID.stocks.icon, value: TabID.stocks) {
                 tabContent(for: .stocks)
             }

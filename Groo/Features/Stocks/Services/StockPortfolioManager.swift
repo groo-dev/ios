@@ -98,7 +98,7 @@ class StockPortfolioManager {
 
     // MARK: - Refresh Prices
 
-    func refreshPrices(using service: YahooFinanceService) async {
+    func refreshPrices(using service: YahooFinanceService, forceRefresh: Bool = false) async {
         let symbols = holdings.map(\.symbol)
         guard !symbols.isEmpty else { return }
 
@@ -113,7 +113,7 @@ class StockPortfolioManager {
             isRefreshing = false
         }
 
-        let quotes = await service.getQuotes(symbols: symbols)
+        let quotes = await service.getQuotes(symbols: symbols, forceRefresh: forceRefresh)
 
         if quotes.isEmpty {
             // Complete failure
@@ -173,7 +173,7 @@ class StockPortfolioManager {
         // Fetch exchange rates
         let uniqueCurrencies = Set(holdings.map(\.currency))
         if uniqueCurrencies != Set([displayCurrency]) {
-            exchangeRates = await service.getExchangeRates(from: uniqueCurrencies, to: displayCurrency)
+            exchangeRates = await service.getExchangeRates(from: uniqueCurrencies, to: displayCurrency, forceRefresh: forceRefresh)
         } else {
             exchangeRates = [displayCurrency: 1.0]
         }

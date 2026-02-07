@@ -138,7 +138,7 @@ struct StockPortfolioView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .refreshable {
-                await portfolioManager.refreshPrices(using: yahooService)
+                await portfolioManager.refreshPrices(using: yahooService, forceRefresh: true)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
