@@ -226,4 +226,93 @@ class StockPortfolioManager {
         LocalStore.shared.deleteStockHolding(local)
         loadCachedHoldings()
     }
+
+    // MARK: - Backup / Restore
+
+    static func exportJSON() throws -> Data {
+        let stored = LocalStore.shared.getAllStockHoldings()
+        let backup = StockBackup(
+            version: 1,
+            exportedAt: Date(),
+            holdings: stored.map { holding in
+                BackupHolding(
+                    symbol: holding.symbol,
+                    companyName: holding.companyName,
+                    exchange: holding.exchange,
+                    currency: holding.currency,
+                    transactions: holding.transactions.map { tx in
+                        BackupTransaction(
+                            id: tx.id,
+                            type: tx.type,
+                            shares: tx.shares,
+                            totalCost: tx.totalCost,
+                            date: tx.date
+                        )
+                    }
+                )
+            }
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(backup)
+    }
+
+    static func importJSON(_ data: Data) -> Int {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let backup = try? decoder.decode(StockBackup.self, from: data) else { return 0 }
+
+        var imported = 0
+        for holding in backup.holdings {
+            let symbol = holding.symbol.uppercased()
+            guard LocalStore.shared.getStockHolding(symbol: symbol) == nil else { continue }
+
+            let local = LocalStockHolding(
+                symbol: symbol,
+                companyName: holding.companyName,
+                exchange: holding.exchange,
+                currency: holding.currency
+            )
+            LocalStore.shared.saveStockHolding(local)
+
+            for tx in holding.transactions {
+                let localTx = LocalStockTransaction(
+                    id: tx.id,
+                    type: tx.type,
+                    shares: tx.shares,
+                    totalCost: tx.totalCost,
+                    date: tx.date,
+                    holding: local
+                )
+                local.transactions.append(localTx)
+            }
+            LocalStore.shared.saveStockChanges()
+            imported += 1
+        }
+        return imported
+    }
+}
+
+// MARK: - Backup Models
+
+struct StockBackup: Codable {
+    let version: Int
+    let exportedAt: Date
+    let holdings: [BackupHolding]
+}
+
+struct BackupHolding: Codable {
+    let symbol: String
+    let companyName: String
+    let exchange: String
+    let currency: String
+    let transactions: [BackupTransaction]
+}
+
+struct BackupTransaction: Codable {
+    let id: String
+    let type: String
+    let shares: Double
+    let totalCost: Double
+    let date: Date
 }

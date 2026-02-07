@@ -22,6 +22,10 @@ struct SettingsView: View {
     @State private var biometricType: LABiometryType = .none
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var backupMessage: String?
+    @State private var showBackupAlert = false
+    @State private var isBackupLoading = false
+    @State private var lastBackupDate: Date?
 
     var body: some View {
         List {
@@ -86,6 +90,34 @@ struct SettingsView: View {
                 }
             }
 
+            Section {
+                Button {
+                    backupStocks()
+                } label: {
+                    HStack {
+                        Label("Backup to Pass", systemImage: "arrow.up.doc")
+                        if isBackupLoading {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(!passService.isUnlocked || isBackupLoading)
+
+                Button {
+                    restoreStocks()
+                } label: {
+                    Label("Restore from Pass", systemImage: "arrow.down.doc")
+                }
+                .disabled(!passService.isUnlocked || isBackupLoading)
+            } header: {
+                Text("Stocks Data")
+            } footer: {
+                if let date = lastBackupDate {
+                    Text("Last backup: \(date.formatted(date: .abbreviated, time: .shortened))")
+                }
+            }
+
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.appVersion)
                 LabeledContent("Build", value: Bundle.main.buildNumber)
@@ -110,9 +142,84 @@ struct SettingsView: View {
                 Text(error)
             }
         }
+        .alert("Stocks Data", isPresented: $showBackupAlert) {
+            Button("OK") {}
+        } message: {
+            if let message = backupMessage {
+                Text(message)
+            }
+        }
         .task {
             await loadBiometricState()
+            loadLastBackupDate()
         }
+    }
+
+    // MARK: - Stocks Backup / Restore
+
+    private func backupStocks() {
+        Task {
+            isBackupLoading = true
+            defer { isBackupLoading = false }
+
+            do {
+                let jsonData = try StockPortfolioManager.exportJSON()
+                guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+                    backupMessage = "Failed to encode backup data."
+                    showBackupAlert = true
+                    return
+                }
+
+                let existing = passService.getItems(type: .note).first { $0.name == "Stock Portfolio Backup" }
+                if case .note(var noteItem) = existing {
+                    noteItem.content = jsonString
+                    noteItem.updatedAt = Int(Date().timeIntervalSince1970 * 1000)
+                    try await passService.updateItem(.note(noteItem))
+                } else {
+                    let note = PassNoteItem.create(name: "Stock Portfolio Backup", content: jsonString)
+                    try await passService.addItem(.note(note))
+                }
+                lastBackupDate = Date()
+                backupMessage = "Backup saved to Pass vault."
+            } catch {
+                backupMessage = "Backup failed: \(error.localizedDescription)"
+            }
+            showBackupAlert = true
+        }
+    }
+
+    private func restoreStocks() {
+        Task {
+            isBackupLoading = true
+            defer { isBackupLoading = false }
+
+            let existing = passService.getItems(type: .note).first { $0.name == "Stock Portfolio Backup" }
+            guard case .note(let noteItem) = existing else {
+                backupMessage = "No backup found in Pass vault."
+                showBackupAlert = true
+                return
+            }
+
+            guard let data = noteItem.content.data(using: .utf8) else {
+                backupMessage = "Failed to read backup data."
+                showBackupAlert = true
+                return
+            }
+
+            let count = StockPortfolioManager.importJSON(data)
+            if count > 0 {
+                backupMessage = "Restored \(count) stock\(count == 1 ? "" : "s")."
+            } else {
+                backupMessage = "All stocks already exist."
+            }
+            showBackupAlert = true
+        }
+    }
+
+    private func loadLastBackupDate() {
+        guard passService.isUnlocked,
+              let existing = passService.getItems(type: .note).first(where: { $0.name == "Stock Portfolio Backup" }) else { return }
+        lastBackupDate = Date(timeIntervalSince1970: TimeInterval(existing.updatedAt) / 1000)
     }
 
     // MARK: - Biometric Helpers
