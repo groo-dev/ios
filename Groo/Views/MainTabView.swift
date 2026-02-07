@@ -41,7 +41,7 @@ struct MainTabView: View {
     let passService: PassService
     let onSignOut: () -> Void
 
-    @State private var selectedTab: TabID = .stocks
+    @AppStorage("selectedTab") private var selectedTab: TabID = .stocks
     @State private var customization = TabViewCustomization()
 
     @ViewBuilder

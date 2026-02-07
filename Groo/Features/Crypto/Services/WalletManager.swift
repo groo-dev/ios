@@ -38,8 +38,8 @@ class WalletManager {
     }
 
     private func resolveActiveAddress() {
-        let saved = UserDefaults.standard.string(forKey: "activeWalletAddress") ?? ""
-        if !saved.isEmpty && walletAddresses.contains(where: { $0.lowercased() == saved.lowercased() }) {
+        if let saved = UserDefaults.standard.string(forKey: "activeWalletAddress"),
+           !saved.isEmpty {
             activeAddress = saved
         } else {
             activeAddress = walletAddresses.first
@@ -286,6 +286,10 @@ class WalletManager {
 
         walletAddresses.removeAll { $0.lowercased() == address.lowercased() }
         saveCachedAddresses()
+
+        if activeAddress?.lowercased() == address.lowercased() {
+            setActiveAddress(walletAddresses.first ?? "")
+        }
     }
 }
 
