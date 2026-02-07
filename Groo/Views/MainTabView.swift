@@ -25,14 +25,14 @@ enum TabID: String, CaseIterable, Codable {
 
     var icon: String {
         switch self {
-        case .home: "house"
-        case .pad: "doc.on.clipboard"
-        case .pass: "key"
+        case .home: "square.grid.2x2"
+        case .pad: "list.bullet.rectangle"
+        case .pass: "key.horizontal"
         case .scratchpad: "note.text"
-        case .drive: "folder"
-        case .crypto: "wallet.bifold"
-        case .stocks: "chart.line.uptrend.xyaxis"
-        case .settings: "gearshape"
+        case .drive: "tray.2"
+        case .crypto: "creditcard"
+        case .stocks: "chart.xyaxis.line"
+        case .settings: "gear"
         }
     }
 }
@@ -45,6 +45,15 @@ struct MainTabView: View {
 
     @AppStorage("selectedTab") private var selectedTab: TabID = .home
     @State private var customization = TabViewCustomization()
+
+    private func tabLabel(for tab: TabID) -> some View {
+        Label {
+            Text(tab.title)
+        } icon: {
+            Image(systemName: tab.icon)
+                .environment(\.symbolVariants, .none)
+        }
+    }
 
     @ViewBuilder
     private func tabContent(for tab: TabID) -> some View {
@@ -78,43 +87,59 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            Tab("Home", systemImage: TabID.home.icon, value: TabID.home) {
+            Tab(value: TabID.home) {
                 tabContent(for: .home)
+            } label: {
+                tabLabel(for: .home)
             }
             .customizationID(TabID.home.rawValue)
 
-            Tab("Stocks", systemImage: TabID.stocks.icon, value: TabID.stocks) {
+            Tab(value: TabID.stocks) {
                 tabContent(for: .stocks)
+            } label: {
+                tabLabel(for: .stocks)
             }
             .customizationID(TabID.stocks.rawValue)
 
-            Tab("Wallet", systemImage: TabID.crypto.icon, value: TabID.crypto) {
+            Tab(value: TabID.crypto) {
                 tabContent(for: .crypto)
+            } label: {
+                tabLabel(for: .crypto)
             }
             .customizationID(TabID.crypto.rawValue)
 
-            Tab("Pad", systemImage: TabID.pad.icon, value: TabID.pad) {
+            Tab(value: TabID.pad) {
                 tabContent(for: .pad)
+            } label: {
+                tabLabel(for: .pad)
             }
             .customizationID(TabID.pad.rawValue)
 
-            Tab("Pass", systemImage: TabID.pass.icon, value: TabID.pass) {
+            Tab(value: TabID.pass) {
                 tabContent(for: .pass)
+            } label: {
+                tabLabel(for: .pass)
             }
             .customizationID(TabID.pass.rawValue)
 
-            Tab("Drive", systemImage: TabID.drive.icon, value: TabID.drive) {
+            Tab(value: TabID.drive) {
                 tabContent(for: .drive)
+            } label: {
+                tabLabel(for: .drive)
             }
             .customizationID(TabID.drive.rawValue)
 
-            Tab("Scratchpad", systemImage: TabID.scratchpad.icon, value: TabID.scratchpad) {
+            Tab(value: TabID.scratchpad) {
                 tabContent(for: .scratchpad)
+            } label: {
+                tabLabel(for: .scratchpad)
             }
             .customizationID(TabID.scratchpad.rawValue)
 
-            Tab("Settings", systemImage: TabID.settings.icon, value: TabID.settings) {
+            Tab(value: TabID.settings) {
                 tabContent(for: .settings)
+            } label: {
+                tabLabel(for: .settings)
             }
             .customizationID(TabID.settings.rawValue)
         }

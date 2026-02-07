@@ -28,6 +28,12 @@ struct HomeView: View {
     @State private var padItems: [DecryptedListItem] = []
     @State private var toastState = ToastState()
     @State private var isPasting = false
+    @State private var scrollOffset: CGFloat = 0
+
+    private var logoScale: CGFloat {
+        guard scrollOffset > 0 else { return 1 }
+        return 1 + scrollOffset / 150
+    }
 
     var body: some View {
         NavigationStack {
@@ -39,8 +45,23 @@ struct HomeView: View {
                 }
                 .padding(Theme.Spacing.lg)
             }
+            .onScrollGeometryChange(for: CGFloat.self) { geo in
+                -geo.contentOffset.y - geo.contentInsets.top
+            } action: { _, new in
+                scrollOffset = new
+            }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("Home")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Image(.grooLogo)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 30)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .scaleEffect(logoScale, anchor: .top)
+                }
+            }
         }
         .toast(isPresented: $toastState.isPresented, message: toastState.message, style: toastState.style)
         .onAppear { loadCachedData() }
