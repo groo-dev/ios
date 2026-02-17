@@ -16,6 +16,8 @@ struct AzanView: View {
     @State private var preferences: LocalAzanPreferences?
     @State private var showSettings = false
     @State private var selectedPrayer: Prayer?
+    @State private var showRecitations = false
+    @State private var showSurahs = false
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -35,6 +37,9 @@ struct AzanView: View {
 
                     // Today's prayer times
                     prayerTimesCard
+
+                    // Prayer reference
+                    referenceCard
 
                     // Audio playback (shown when playing)
                     if audioService.isPlaying {
@@ -76,6 +81,12 @@ struct AzanView: View {
             }
             .sheet(item: $selectedPrayer) { prayer in
                 PrayerDetailView(prayer: prayer)
+            }
+            .sheet(isPresented: $showRecitations) {
+                EssentialRecitationsSheet()
+            }
+            .sheet(isPresented: $showSurahs) {
+                ShortSurahsSheet()
             }
         }
         .onAppear { loadAndConfigure() }
@@ -203,6 +214,77 @@ struct AzanView: View {
                         .padding(.horizontal, Theme.Spacing.md)
                 }
             }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.lg)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+    }
+
+    // MARK: - Reference Card
+
+    private var referenceCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                showRecitations = true
+            } label: {
+                HStack(spacing: Theme.Spacing.md) {
+                    Image(systemName: "text.book.closed")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.Brand.primary)
+                        .frame(width: 24)
+
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                        Text("Essential Recitations")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                        Text("Full texts you need to memorize")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.md)
+            }
+            .buttonStyle(.plain)
+
+            Divider()
+                .padding(.leading, Theme.Spacing.lg + 24 + Theme.Spacing.md)
+
+            Button {
+                showSurahs = true
+            } label: {
+                HStack(spacing: Theme.Spacing.md) {
+                    Image(systemName: "book.pages")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.Brand.primary)
+                        .frame(width: 24)
+
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                        Text("Short Surahs")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                        Text("For recitation after al-Fatihah")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.md)
+            }
+            .buttonStyle(.plain)
         }
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.lg)

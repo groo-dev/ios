@@ -221,6 +221,31 @@ struct RakatGroupGuide: Identifiable {
     let notes: [String]
 }
 
+// MARK: - Prayer Recitation (Reference)
+
+struct PrayerRecitation: Identifiable {
+    let id: String
+    let name: String
+    let arabicText: String
+    let transliteration: String
+    let translation: String
+    let usedIn: String
+    let audioFileName: String?
+}
+
+// MARK: - Short Surah (Reference)
+
+struct ShortSurah: Identifiable {
+    let id: Int
+    let name: String
+    let arabicName: String
+    let verseCount: Int
+    let arabicText: String
+    let transliteration: String
+    let translation: String
+    let audioFileName: String
+}
+
 // MARK: - Prayer Guide Data
 
 struct PrayerGuideData: Identifiable {
