@@ -11,6 +11,7 @@ import UserNotifications
 
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     var pushService: PushService?
+    var azanAudioService: AzanAudioService?
 
     func application(
         _ application: UIApplication,
@@ -73,6 +74,18 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+
+        // Route Azan notification taps to audio playback
+        if let action = userInfo["action"] as? String, action == "azan" {
+            let prayerRaw = userInfo["prayer"] as? String
+            let prayer = prayerRaw.flatMap { Prayer(rawValue: $0) } ?? .dhuhr
+            Task { @MainActor in
+                azanAudioService?.playFullAzan(for: prayer)
+            }
+            completionHandler()
+            return
+        }
+
         pushService?.handleRemoteNotification(userInfo)
         completionHandler()
     }

@@ -27,6 +27,7 @@
 		1B2850E42F1401620046247D /* WidgetExtensionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850CE2F1401620046247D /* WidgetExtensionExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B2850F42F14017A0046247D /* KeyboardExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850ED2F14017A0046247D /* KeyboardExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B48208B2F35625A0018D7FA /* web3swift in Frameworks */ = {isa = PBXBuildFile; productRef = 1B48208A2F35625A0018D7FA /* web3swift */; };
+		1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = 1B9FA3702F44944100D792F5 /* Adhan */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -123,6 +124,13 @@
 			);
 			target = 1B2850EC2F14017A0046247D /* KeyboardExtension */;
 		};
+		1B9FA3712F44948900D792F5 /* Exceptions for "Groo" folder in "Groo" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1B2850A62F13FF540046247D /* Groo */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -136,6 +144,9 @@
 		};
 		1B2850A92F13FF540046247D /* Groo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1B9FA3712F44948900D792F5 /* Exceptions for "Groo" folder in "Groo" target */,
+			);
 			path = Groo;
 			sourceTree = "<group>";
 		};
@@ -178,6 +189,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */,
 				1B48208B2F35625A0018D7FA /* web3swift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -305,6 +317,7 @@
 			name = Groo;
 			packageProductDependencies = (
 				1B48208A2F35625A0018D7FA /* web3swift */,
+				1B9FA3702F44944100D792F5 /* Adhan */,
 			);
 			productName = Groo;
 			productReference = 1B2850A72F13FF540046247D /* Groo.app */;
@@ -414,6 +427,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */,
+				1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1B2850A82F13FF540046247D /* Products */;
@@ -733,10 +747,11 @@
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Groo Dev";
+				INFOPLIST_FILE = Groo/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos to add to your Pad items.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock Pad quickly and securely with Face ID instead of entering your password.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used to calculate accurate prayer times";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -771,9 +786,11 @@
 				DEVELOPMENT_TEAM = 5ZTZD96Q8H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Groo/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos to add to your Pad items.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock Pad quickly and securely with Face ID instead of entering your password.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used to calculate accurate prayer times";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -1043,6 +1060,14 @@
 				minimumVersion = 3.3.2;
 			};
 		};
+		1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/batoulapps/adhan-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.4.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1050,6 +1075,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */;
 			productName = web3swift;
+		};
+		1B9FA3702F44944100D792F5 /* Adhan */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */;
+			productName = Adhan;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -76,6 +76,20 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Prayer Times") {
+                NavigationLink {
+                    AzanSettingsView(
+                        preferences: LocalStore.shared.getAzanPreferences() ?? LocalAzanPreferences(),
+                        locationService: AzanLocationService(),
+                        onSave: { prefs in
+                            LocalStore.shared.saveAzanPreferences(prefs)
+                        }
+                    )
+                } label: {
+                    Label("Prayer Settings", systemImage: "moon.stars")
+                }
+            }
+
             Section {
                 Button {
                     onLock()

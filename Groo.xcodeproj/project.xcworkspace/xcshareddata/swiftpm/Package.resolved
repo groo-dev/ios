@@ -1,6 +1,15 @@
 {
-  "originHash" : "7dd1ade3156f281934bfb1da1635cce7061f24b02de7fe51336e77a97f013c82",
+  "originHash" : "ab3d1e71757f962d7c6ecfc0088265aea2fad3bf52fc520e461950c938c14e64",
   "pins" : [
+    {
+      "identity" : "adhan-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/batoulapps/adhan-swift",
+      "state" : {
+        "revision" : "6dc8309951fdaa0cd124c52b9a8de7e0da1ff2ce",
+        "version" : "1.4.0"
+      }
+    },
     {
       "identity" : "bigint",
       "kind" : "remoteSourceControl",

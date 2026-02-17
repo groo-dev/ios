@@ -14,18 +14,23 @@ struct GrooApp: App {
 
     @State private var authService = AuthService()
     @State private var pushService = PushService()
+    @State private var azanAudioService = AzanAudioService()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(authService)
                 .environment(pushService)
+                .environment(azanAudioService)
                 .modelContainer(LocalStore.shared.container)
                 .onAppear {
                     // Connect AppDelegate to PushService
                     appDelegate.pushService = pushService
+                    appDelegate.azanAudioService = azanAudioService
                     // Request push notification permission
                     setupPushNotifications()
+                    // Register Azan notification category
+                    registerAzanNotificationCategory()
                 }
         }
     }
@@ -41,5 +46,10 @@ struct GrooApp: App {
                 print("[GrooApp] Push authorization failed: \(error)")
             }
         }
+    }
+
+    private func registerAzanNotificationCategory() {
+        let notificationService = AzanNotificationService()
+        notificationService.registerCategory()
     }
 }

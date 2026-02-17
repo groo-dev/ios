@@ -8,7 +8,7 @@
 import SwiftUI
 
 enum TabID: String, CaseIterable, Codable {
-    case home, stocks, crypto, pad, pass, drive, scratchpad, settings
+    case home, stocks, crypto, azan, pad, pass, drive, scratchpad, settings
 
     var title: String {
         switch self {
@@ -19,6 +19,7 @@ enum TabID: String, CaseIterable, Codable {
         case .drive: "Drive"
         case .crypto: "Wallet"
         case .stocks: "Stocks"
+        case .azan: "Azan"
         case .settings: "Settings"
         }
     }
@@ -32,6 +33,7 @@ enum TabID: String, CaseIterable, Codable {
         case .drive: "tray.2"
         case .crypto: "creditcard"
         case .stocks: "chart.xyaxis.line"
+        case .azan: "moon.stars"
         case .settings: "gear"
         }
     }
@@ -70,6 +72,8 @@ struct MainTabView: View {
             DrivePlaceholderView()
         case .crypto:
             CryptoView(passService: passService)
+        case .azan:
+            AzanView()
         case .stocks:
             StocksView()
         case .settings:
@@ -107,6 +111,13 @@ struct MainTabView: View {
                 tabLabel(for: .crypto)
             }
             .customizationID(TabID.crypto.rawValue)
+
+            Tab(value: TabID.azan) {
+                tabContent(for: .azan)
+            } label: {
+                tabLabel(for: .azan)
+            }
+            .customizationID(TabID.azan.rawValue)
 
             Tab(value: TabID.pad) {
                 tabContent(for: .pad)

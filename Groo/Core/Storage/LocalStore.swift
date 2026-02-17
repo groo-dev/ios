@@ -22,6 +22,7 @@ final class LocalStore {
             CachedTokenPrice.self,
             LocalStockHolding.self,
             LocalStockTransaction.self,
+            LocalAzanPreferences.self,
         ])
 
         // Configure for App Group storage
@@ -33,7 +34,18 @@ final class LocalStore {
         do {
             container = try ModelContainer(for: schema, configurations: [config])
         } catch {
-            fatalError("Failed to create ModelContainer: \(error)")
+            // Schema migration failed — delete the store and retry
+            print("[LocalStore] Migration failed, recreating store: \(error)")
+            let url = config.url
+            let files = [url, url.appendingPathExtension("wal"), url.appendingPathExtension("shm")]
+            for file in files {
+                try? FileManager.default.removeItem(at: file)
+            }
+            do {
+                container = try ModelContainer(for: schema, configurations: [config])
+            } catch {
+                fatalError("Failed to create ModelContainer after reset: \(error)")
+            }
         }
     }
 
@@ -268,6 +280,29 @@ final class LocalStore {
     }
 
     func saveStockChanges() {
+        try? context.save()
+    }
+
+    // MARK: - Azan Preferences
+
+    func getAzanPreferences() -> LocalAzanPreferences? {
+        let id = "default"
+        let descriptor = FetchDescriptor<LocalAzanPreferences>(
+            predicate: #Predicate { $0.id == id }
+        )
+        return try? context.fetch(descriptor).first
+    }
+
+    func saveAzanPreferences(_ prefs: LocalAzanPreferences) {
+        // Delete existing and insert fresh
+        if let existing = getAzanPreferences() {
+            context.delete(existing)
+        }
+        context.insert(prefs)
+        try? context.save()
+    }
+
+    func saveAzanChanges() {
         try? context.save()
     }
 }

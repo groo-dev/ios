@@ -26,6 +26,7 @@ struct HomeView: View {
     @State private var cryptoTrendPositive = true
     @State private var cryptoTotal: Double = 0
     @State private var padItems: [DecryptedListItem] = []
+    @State private var prayerService = PrayerTimeService()
     @State private var toastState = ToastState()
     @State private var isPasting = false
     @State private var scrollOffset: CGFloat = 0
@@ -41,6 +42,7 @@ struct HomeView: View {
                 VStack(spacing: Theme.Spacing.lg) {
                     stocksCard
                     cryptoCard
+                    prayerCard
                     padCard
                 }
                 .padding(Theme.Spacing.lg)
@@ -229,6 +231,42 @@ struct HomeView: View {
         .cardStyle()
     }
 
+    // MARK: - Prayer Card
+
+    private var prayerCard: some View {
+        Button { selectedTab = .azan } label: {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                cardHeader(title: "Prayer Times", icon: TabID.azan.icon)
+
+                if let countdown = prayerService.nextPrayer {
+                    HStack {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text(countdown.displayName)
+                                .font(.title2.bold())
+                                .foregroundStyle(.primary)
+
+                            Text(countdown.formattedTime)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Text(countdown.formattedCountdown)
+                            .font(.title3.bold().monospacedDigit())
+                            .foregroundStyle(Theme.Brand.primary)
+                    }
+                } else {
+                    Text("Set up prayer times")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .cardStyle()
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Helpers
 
     private func cardHeader(title: String, icon: String) -> some View {
@@ -243,7 +281,19 @@ struct HomeView: View {
         }
     }
 
+    private func loadPrayerData() {
+        if let prefs = LocalStore.shared.getAzanPreferences(),
+           prefs.latitude != 0 || prefs.longitude != 0 {
+            prayerService.configure(
+                latitude: prefs.latitude,
+                longitude: prefs.longitude,
+                preferences: prefs
+            )
+        }
+    }
+
     private func loadCachedData() {
+        loadPrayerData()
         stockManager.loadCachedHoldings()
 
         if walletManager == nil {
