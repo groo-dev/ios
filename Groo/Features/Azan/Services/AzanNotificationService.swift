@@ -117,9 +117,10 @@ class AzanNotificationService {
                 // Also check the previous evening (day - 1 after Maghrib → next Hijri day)
                 // to catch the first Suhoor of Ramadan.
                 let islamicCal = Calendar(identifier: .islamicUmmAlQura)
-                let hijriMonth = islamicCal.component(.month, from: dayEntry.date)
+                let adjustedDate = Calendar.current.date(byAdding: .day, value: preferences.hijriDateAdjustment, to: dayEntry.date) ?? dayEntry.date
+                let hijriMonth = islamicCal.component(.month, from: adjustedDate)
                 let prevDayHijriMonth: Int = {
-                    guard let prev = Calendar.current.date(byAdding: .day, value: -1, to: dayEntry.date) else { return 0 }
+                    guard let prev = Calendar.current.date(byAdding: .day, value: -1, to: adjustedDate) else { return 0 }
                     return islamicCal.component(.month, from: prev)
                 }()
                 // Include if this day is Ramadan, or if yesterday was the last day

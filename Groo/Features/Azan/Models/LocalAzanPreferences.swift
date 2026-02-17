@@ -45,6 +45,10 @@ final class LocalAzanPreferences {
     var jumuahReminderEnabled: Bool
     var jumuahReminderMinutes: Int
 
+    // MARK: - Hijri Calendar
+
+    var hijriDateAdjustment: Int    // -2...+2 days to match local moon sighting
+
     // MARK: - Ramadan
 
     var suhoorReminderEnabled: Bool
@@ -85,6 +89,7 @@ final class LocalAzanPreferences {
         ishaNotification: Bool = true,
         jumuahReminderEnabled: Bool = false,
         jumuahReminderMinutes: Int = 60,
+        hijriDateAdjustment: Int = 0,
         suhoorReminderEnabled: Bool = false,
         suhoorReminderMinutes: Int = 30,
         azanSound: String = "default",
@@ -116,6 +121,7 @@ final class LocalAzanPreferences {
         self.ishaNotification = ishaNotification
         self.jumuahReminderEnabled = jumuahReminderEnabled
         self.jumuahReminderMinutes = jumuahReminderMinutes
+        self.hijriDateAdjustment = hijriDateAdjustment
         self.suhoorReminderEnabled = suhoorReminderEnabled
         self.suhoorReminderMinutes = suhoorReminderMinutes
         self.azanSound = azanSound

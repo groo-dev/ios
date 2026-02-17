@@ -147,6 +147,12 @@ struct AzanSettingsView: View {
 
             // Ramadan
             Section {
+                Stepper(
+                    "Hijri Date: \(preferences.hijriDateAdjustment > 0 ? "+" : "")\(preferences.hijriDateAdjustment) \(abs(preferences.hijriDateAdjustment) == 1 ? "day" : "days")",
+                    value: $preferences.hijriDateAdjustment,
+                    in: -2...2
+                )
+
                 Toggle("Suhoor Reminder", isOn: $preferences.suhoorReminderEnabled)
 
                 if preferences.suhoorReminderEnabled {
@@ -160,7 +166,7 @@ struct AzanSettingsView: View {
             } header: {
                 Text("Ramadan")
             } footer: {
-                Text("Ramadan is automatically detected. Suhoor reminders fire before Fajr during Ramadan.")
+                Text("Adjust if Ramadan start doesn't match your local moon sighting. Suhoor reminders fire before Fajr during Ramadan.")
             }
 
             // Sound

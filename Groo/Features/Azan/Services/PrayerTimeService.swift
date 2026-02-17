@@ -237,12 +237,16 @@ class PrayerTimeService {
         // iOS uses midnight for Islamic day boundaries, but the Islamic day
         // actually starts at Maghrib. After Maghrib we check tomorrow's Hijri
         // date to match the religious reality.
-        let hijriCheckDate: Date
+        let hijriBase: Date
         if isAfterMaghrib, let tomorrow = gregorianCal.date(byAdding: .day, value: 1, to: now) {
-            hijriCheckDate = tomorrow
+            hijriBase = tomorrow
         } else {
-            hijriCheckDate = now
+            hijriBase = now
         }
+
+        // Apply user's hijri date adjustment to match local moon sighting
+        let hijriAdjustment = preferences?.hijriDateAdjustment ?? 0
+        let hijriCheckDate = gregorianCal.date(byAdding: .day, value: hijriAdjustment, to: hijriBase) ?? hijriBase
 
         let hijriComponents = islamicCal.dateComponents([.month, .day, .year], from: hijriCheckDate)
 
