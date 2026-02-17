@@ -15,6 +15,7 @@ struct AzanView: View {
     @State private var audioService = AzanAudioService()
     @State private var preferences: LocalAzanPreferences?
     @State private var showSettings = false
+    @State private var selectedPrayer: Prayer?
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -72,6 +73,9 @@ struct AzanView: View {
                         }
                     )
                 }
+            }
+            .sheet(item: $selectedPrayer) { prayer in
+                PrayerDetailView(prayer: prayer)
             }
         }
         .onAppear { loadAndConfigure() }
@@ -188,9 +192,11 @@ struct AzanView: View {
 
             let prayers = prayerService.todayPrayers
             ForEach(prayers) { entry in
-                PrayerTimeRow(entry: entry) { prayer in
+                PrayerTimeRow(entry: entry, onToggleNotification: { prayer in
                     toggleNotification(for: prayer)
-                }
+                }, onTapPrayer: { prayer in
+                    selectedPrayer = prayer
+                })
 
                 if entry.id != prayers.last?.id {
                     Divider()

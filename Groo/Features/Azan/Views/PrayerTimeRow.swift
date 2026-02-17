@@ -10,6 +10,7 @@ import SwiftUI
 struct PrayerTimeRow: View {
     let entry: PrayerTimeEntry
     let onToggleNotification: (Prayer) -> Void
+    var onTapPrayer: ((Prayer) -> Void)?
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
@@ -60,6 +61,11 @@ struct PrayerTimeRow: View {
                         .foregroundStyle(entry.notificationEnabled ? Theme.Brand.primary : Color.secondary)
                 }
                 .buttonStyle(.plain)
+
+                // Chevron for tappable rows
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.quaternary)
             }
         }
         .padding(.vertical, Theme.Spacing.sm)
@@ -70,6 +76,12 @@ struct PrayerTimeRow: View {
                     .fill(Theme.Brand.primary.opacity(0.08))
                 : nil
         )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !entry.prayer.isInfoOnly {
+                onTapPrayer?(entry.prayer)
+            }
+        }
     }
 
     private var iconColor: Color {
