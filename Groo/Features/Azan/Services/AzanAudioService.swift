@@ -14,8 +14,10 @@ import Foundation
 class AzanAudioService {
     private(set) var isPlaying = false
     private(set) var currentPrayer: Prayer?
+    private(set) var playbackProgress: Double = 0
 
     private var audioPlayer: AVAudioPlayer?
+    private var progressTimer: Timer?
 
     // MARK: - Playback
 
@@ -44,6 +46,8 @@ class AzanAudioService {
             audioPlayer?.play()
             isPlaying = true
             currentPrayer = prayer
+            playbackProgress = 0
+            startProgressTimer()
         } catch {
             print("[AzanAudio] Playback failed: \(error)")
             isPlaying = false
@@ -51,10 +55,13 @@ class AzanAudioService {
     }
 
     func stopAzan() {
+        progressTimer?.invalidate()
+        progressTimer = nil
         audioPlayer?.stop()
         audioPlayer = nil
         isPlaying = false
         currentPrayer = nil
+        playbackProgress = 0
 
         // Deactivate audio session
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -70,17 +77,27 @@ class AzanAudioService {
 
     // MARK: - Available Sounds
 
+    private static let soundLabels: [String: String] = [
+        "ahmad-al-nafees": "Ahmad al-Nafees",
+        "hafiz-mustafa-ozcan": "Hafiz Mustafa Özcan (Turkey)",
+        "karl-jenkins": "Karl Jenkins - Mass for Peace",
+        "mishary-rashid-one-tv": "Mishary Rashid Alafasy (One TV Dubai)",
+        "mishary-rashid-alafasy": "Mishary Rashid Alafasy",
+        "mishary-rashid-alafasy-2": "Mishary Rashid Alafasy (2)",
+        "mansour-al-zahrani": "Mansour Al-Zahrani",
+    ]
+
     var availableSounds: [String] {
         var sounds = ["default"]
-        let extensions = ["caf", "m4a", "mp3", "aiff"]
-
-        for ext in extensions {
-            if let urls = Bundle.main.urls(forResourcesWithExtension: ext, subdirectory: "Sounds") {
-                sounds.append(contentsOf: urls.map { $0.deletingPathExtension().lastPathComponent })
-            }
+        if let urls = Bundle.main.urls(forResourcesWithExtension: "m4a", subdirectory: nil) {
+            sounds.append(contentsOf: urls.map { $0.deletingPathExtension().lastPathComponent }.sorted())
         }
-
         return sounds
+    }
+
+    static func displayName(for sound: String) -> String {
+        if sound == "default" { return "Default" }
+        return soundLabels[sound] ?? sound
     }
 
     // MARK: - Private
@@ -88,15 +105,29 @@ class AzanAudioService {
     private func findAudioFile(named name: String) -> URL? {
         let extensions = ["m4a", "caf", "mp3", "aiff"]
         for ext in extensions {
-            // Check Sounds subdirectory first
-            if let url = Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Sounds") {
-                return url
-            }
-            // Check bundle root
             if let url = Bundle.main.url(forResource: name, withExtension: ext) {
                 return url
             }
         }
         return nil
+    }
+
+    private func startProgressTimer() {
+        progressTimer?.invalidate()
+        progressTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateProgress()
+            }
+        }
+    }
+
+    private func updateProgress() {
+        guard let player = audioPlayer, player.isPlaying else {
+            if isPlaying {
+                stopAzan()
+            }
+            return
+        }
+        playbackProgress = player.currentTime / max(player.duration, 1)
     }
 }

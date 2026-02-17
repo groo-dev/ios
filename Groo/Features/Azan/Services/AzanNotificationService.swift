@@ -182,10 +182,11 @@ class AzanNotificationService {
             "timestamp": Int(time.timeIntervalSince1970),
         ]
 
-        // Use custom sound if available
+        // Use custom sound if available (notification clips are named <sound>_clip.caf)
         let soundName = prayer == .fajr ? preferences.fajrAzanSound : preferences.azanSound
         if soundName != "default" {
-            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: soundName))
+            let clipFile = "\(soundName)_clip.caf"
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: clipFile))
         } else {
             content.sound = .default
         }
