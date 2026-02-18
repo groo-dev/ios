@@ -24,7 +24,7 @@ struct PrayerTimeRow: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 HStack(spacing: Theme.Spacing.sm) {
                     Text(entry.displayName)
-                        .font(.body.weight(entry.isNext ? .semibold : .regular))
+                        .font(.body.weight(entry.isCurrent || entry.isNext ? .semibold : .regular))
                         .foregroundStyle(entry.isPassed ? .secondary : .primary)
 
                     if let ramadanLabel = entry.ramadanLabel {
@@ -48,7 +48,7 @@ struct PrayerTimeRow: View {
 
             // Time
             Text(entry.displayTime)
-                .font(.body.monospacedDigit().weight(entry.isNext ? .semibold : .regular))
+                .font(.body.monospacedDigit().weight(entry.isCurrent || entry.isNext ? .semibold : .regular))
                 .foregroundStyle(entry.isPassed ? .secondary : .primary)
 
             // Notification bell (hide for info-only rows)
@@ -71,10 +71,7 @@ struct PrayerTimeRow: View {
         .padding(.vertical, Theme.Spacing.sm)
         .padding(.horizontal, Theme.Spacing.md)
         .background(
-            entry.isNext
-                ? RoundedRectangle(cornerRadius: Theme.Radius.sm)
-                    .fill(Theme.Brand.primary.opacity(0.08))
-                : nil
+            rowBackground
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -84,7 +81,19 @@ struct PrayerTimeRow: View {
         }
     }
 
+    @ViewBuilder
+    private var rowBackground: some View {
+        if entry.isCurrent, let urgency = entry.currentUrgency {
+            RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                .fill(urgency.color.opacity(0.08))
+        } else if entry.isNext {
+            RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                .fill(Theme.Brand.primary.opacity(0.08))
+        }
+    }
+
     private var iconColor: Color {
+        if entry.isCurrent, let urgency = entry.currentUrgency { return urgency.color }
         if entry.isNext { return Theme.Brand.primary }
         if entry.isPassed { return .secondary }
         return .primary

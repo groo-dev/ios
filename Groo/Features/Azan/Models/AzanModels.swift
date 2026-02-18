@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 // MARK: - Prayer
 
@@ -115,6 +116,8 @@ struct PrayerTimeEntry: Identifiable {
     let time: Date
     let isNext: Bool
     let isPassed: Bool
+    let isCurrent: Bool
+    let currentUrgency: PrayerDeadline.Urgency?
     let notificationEnabled: Bool
     let adjustment: Int
     let fridayLabel: String?
@@ -163,6 +166,68 @@ struct PrayerCountdown {
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
         return formatter.string(from: time)
+    }
+}
+
+// MARK: - Prayer Deadline (Qaza Countdown)
+
+struct PrayerDeadline {
+    let prayer: Prayer
+    let deadline: Date
+    let remaining: TimeInterval
+
+    var formattedRemaining: String {
+        let hours = Int(remaining) / 3600
+        let minutes = (Int(remaining) % 3600) / 60
+        let seconds = Int(remaining) % 60
+
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%d:%02d", minutes, seconds)
+        }
+    }
+
+    // MARK: - Urgency
+
+    enum Urgency {
+        case plenty, warning, urgent
+
+        var color: Color {
+            switch self {
+            case .plenty: Theme.Brand.primary
+            case .warning: Theme.Colors.warning
+            case .urgent: Theme.Colors.error
+            }
+        }
+    }
+
+    private var warningThreshold: TimeInterval {
+        switch prayer {
+        case .fajr: 25 * 60
+        case .dhuhr: 40 * 60
+        case .asr: 25 * 60
+        case .maghrib: 30 * 60
+        case .isha: 35 * 60
+        default: 25 * 60
+        }
+    }
+
+    private var urgentThreshold: TimeInterval {
+        switch prayer {
+        case .fajr: 15 * 60
+        case .dhuhr: 30 * 60
+        case .asr: 15 * 60
+        case .maghrib: 20 * 60
+        case .isha: 25 * 60
+        default: 15 * 60
+        }
+    }
+
+    var urgency: Urgency {
+        if remaining < urgentThreshold { return .urgent }
+        if remaining < warningThreshold { return .warning }
+        return .plenty
     }
 }
 

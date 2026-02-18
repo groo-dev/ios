@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import WidgetKit
 
 struct AzanView: View {
     @State private var prayerService = PrayerTimeService()
@@ -127,6 +128,22 @@ struct AzanView: View {
             Text(countdown.formattedTime)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            // Qaza countdown
+            if let deadline = prayerService.currentPrayerDeadline, deadline.remaining > 0 {
+                Divider()
+                    .padding(.horizontal, Theme.Spacing.lg)
+
+                HStack(spacing: Theme.Spacing.xs) {
+                    Image(systemName: deadline.urgency == .plenty
+                          ? "exclamationmark.circle"
+                          : "exclamationmark.circle.fill")
+                        .font(.caption2)
+                    Text("\(deadline.prayer.displayName) ends in \(deadline.formattedRemaining)")
+                        .font(.subheadline)
+                }
+                .foregroundStyle(deadline.urgency.color)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(Theme.Spacing.xl)
@@ -229,103 +246,60 @@ struct AzanView: View {
 
     private var referenceCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button {
+            referenceRow(icon: "text.book.closed", title: "Essential Recitations", subtitle: "Full texts you need to memorize") {
                 showRecitations = true
-            } label: {
-                HStack(spacing: Theme.Spacing.md) {
-                    Image(systemName: "text.book.closed")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.Brand.primary)
-                        .frame(width: 24)
-
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                        Text("Essential Recitations")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-                        Text("Full texts you need to memorize")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.vertical, Theme.Spacing.md)
             }
-            .buttonStyle(.plain)
 
             Divider()
                 .padding(.leading, Theme.Spacing.lg + 24 + Theme.Spacing.md)
 
-            Button {
+            referenceRow(icon: "book.pages", title: "Short Surahs", subtitle: "For recitation after al-Fatihah") {
                 showSurahs = true
-            } label: {
-                HStack(spacing: Theme.Spacing.md) {
-                    Image(systemName: "book.pages")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.Brand.primary)
-                        .frame(width: 24)
-
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                        Text("Short Surahs")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-                        Text("For recitation after al-Fatihah")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.vertical, Theme.Spacing.md)
             }
-            .buttonStyle(.plain)
 
             Divider()
                 .padding(.leading, Theme.Spacing.lg + 24 + Theme.Spacing.md)
 
-            Button {
+            referenceRow(icon: "hands.and.sparkles.fill", title: "Daily Duas", subtitle: "Supplications for everyday moments") {
                 showDuas = true
-            } label: {
-                HStack(spacing: Theme.Spacing.md) {
-                    Image(systemName: "hands.and.sparkles.fill")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.Brand.primary)
-                        .frame(width: 24)
-
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                        Text("Daily Duas")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-                        Text("Supplications for everyday moments")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.vertical, Theme.Spacing.md)
             }
-            .buttonStyle(.plain)
         }
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.lg)
                 .fill(Color(.secondarySystemGroupedBackground))
         )
+    }
+
+    // MARK: - Reference Row
+
+    private func referenceRow(icon: String, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: Theme.Spacing.md) {
+                Image(systemName: icon)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.Brand.primary)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                    Text(title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.md)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Audio Card
@@ -384,6 +358,8 @@ struct AzanView: View {
 
         guard let prefs = preferences else { return }
 
+        prefs.syncToAppGroup()
+
         if prefs.useDeviceLocation {
             Task {
                 await locationService.requestLocation()
@@ -398,6 +374,7 @@ struct AzanView: View {
                     prefs.longitude = locationService.longitude
                     prefs.locationName = locationService.locationName
                     store.saveAzanChanges()
+                    prefs.syncToAppGroup()
 
                     await rescheduleNotifications()
                 }
@@ -443,6 +420,8 @@ struct AzanView: View {
         let lon = updatedPrefs.useDeviceLocation ? locationService.longitude : updatedPrefs.longitude
 
         prayerService.configure(latitude: lat, longitude: lon, preferences: updatedPrefs)
+        updatedPrefs.syncToAppGroup()
+        WidgetCenter.shared.reloadTimelines(ofKind: "AzanWidget")
         Task { await rescheduleNotifications() }
     }
 

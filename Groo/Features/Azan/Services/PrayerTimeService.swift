@@ -14,6 +14,7 @@ import Foundation
 class PrayerTimeService {
     private(set) var todayPrayers: [PrayerTimeEntry] = []
     private(set) var nextPrayer: PrayerCountdown?
+    private(set) var currentPrayerDeadline: PrayerDeadline?
     private(set) var ramadanInfo: RamadanInfo?
 
     private var countdownTimer: Timer?
@@ -46,12 +47,16 @@ class PrayerTimeService {
         let now = Date()
         let nextAdhanPrayer = prayerTimes.nextPrayer(at: now)
 
+        // Update next prayer and deadline first so we can derive isCurrent for rows
+        updateNextPrayer(prayerTimes: prayerTimes, now: now)
+
         todayPrayers = Prayer.allCases
             .filter { preferences?.isVisible(prayer: $0) ?? ($0 != .sunset) }
             .map { prayer in
                 let time = adjustedTime(for: prayer, from: prayerTimes)
                 let isNext = matchesPrayer(prayer, adhanPrayer: nextAdhanPrayer)
-                let isPassed = time < now && !isNext
+                let isCurrent = !prayer.isInfoOnly && prayer == currentPrayerDeadline?.prayer
+                let isPassed = time < now && !isNext && !isCurrent
                 let isFriday = cal.component(.weekday, from: now) == 6
 
                 return PrayerTimeEntry(
@@ -59,6 +64,8 @@ class PrayerTimeService {
                     time: time,
                     isNext: isNext,
                     isPassed: isPassed,
+                    isCurrent: isCurrent,
+                    currentUrgency: isCurrent ? currentPrayerDeadline?.urgency : nil,
                     notificationEnabled: preferences?.isNotificationEnabled(for: prayer) ?? false,
                     adjustment: preferences?.adjustment(for: prayer) ?? 0,
                     fridayLabel: (prayer == .dhuhr && isFriday) ? "Jumu'ah" : nil,
@@ -66,7 +73,6 @@ class PrayerTimeService {
                 )
             }
 
-        updateNextPrayer(prayerTimes: prayerTimes, now: now)
         updateRamadanInfo(prayerTimes: prayerTimes)
     }
 
@@ -192,6 +198,7 @@ class PrayerTimeService {
                   let coords = currentCoordinates,
                   let params = currentParams else {
                 nextPrayer = nil
+                currentPrayerDeadline = nil
                 return
             }
             let components = cal.dateComponents([.year, .month, .day], from: tomorrow)
@@ -202,17 +209,95 @@ class PrayerTimeService {
                     time: fajrTime,
                     remaining: fajrTime.timeIntervalSince(now)
                 )
+
+                // After all prayers today, Isha is active until tomorrow's Fajr
+                let ishaTime = adjustedTime(for: .isha, from: prayerTimes)
+                if now >= ishaTime {
+                    let remaining = fajrTime.timeIntervalSince(now)
+                    if remaining > 0 {
+                        currentPrayerDeadline = PrayerDeadline(
+                            prayer: .isha,
+                            deadline: fajrTime,
+                            remaining: remaining
+                        )
+                    } else {
+                        currentPrayerDeadline = nil
+                    }
+                } else {
+                    currentPrayerDeadline = nil
+                }
             }
             return
         }
 
-        let prayer = mapAdhanPrayer(adhanNext)
+        var prayer = mapAdhanPrayer(adhanNext)
+        // Sunrise is not a prayer — show Dhuhr as the next prayer instead
+        if prayer == .sunrise {
+            prayer = .dhuhr
+        }
         let time = adjustedTime(for: prayer, from: prayerTimes)
         nextPrayer = PrayerCountdown(
             prayer: prayer,
             time: time,
             remaining: max(0, time.timeIntervalSince(now))
         )
+
+        // Determine current active prayer and its qaza cutoff
+        updateCurrentPrayerDeadline(prayerTimes: prayerTimes, now: now)
+    }
+
+    private func updateCurrentPrayerDeadline(prayerTimes: PrayerTimes, now: Date) {
+        // Find the most recent prayer that has started but whose qaza cutoff hasn't passed
+        let prayerOrder: [Prayer] = [.fajr, .dhuhr, .asr, .maghrib, .isha]
+
+        for prayer in prayerOrder.reversed() {
+            let startTime = adjustedTime(for: prayer, from: prayerTimes)
+            guard now >= startTime else { continue }
+
+            let cutoff = qazaCutoff(for: prayer, from: prayerTimes)
+            let remaining = cutoff.timeIntervalSince(now)
+            if remaining > 0 {
+                currentPrayerDeadline = PrayerDeadline(
+                    prayer: prayer,
+                    deadline: cutoff,
+                    remaining: remaining
+                )
+            } else {
+                currentPrayerDeadline = nil
+            }
+            return
+        }
+
+        currentPrayerDeadline = nil
+    }
+
+    private func qazaCutoff(for prayer: Prayer, from prayerTimes: PrayerTimes) -> Date {
+        switch prayer {
+        case .fajr:
+            return prayerTimes.sunrise
+        case .dhuhr:
+            return adjustedTime(for: .asr, from: prayerTimes)
+        case .asr:
+            return adjustedTime(for: .maghrib, from: prayerTimes)
+        case .maghrib:
+            return adjustedTime(for: .isha, from: prayerTimes)
+        case .isha:
+            // Tomorrow's Fajr
+            let cal = Calendar.current
+            if let tomorrow = cal.date(byAdding: .day, value: 1, to: prayerTimes.fajr),
+               let coords = currentCoordinates,
+               let params = currentParams {
+                let components = cal.dateComponents([.year, .month, .day], from: tomorrow)
+                if let tomorrowTimes = PrayerTimes(coordinates: coords, date: components, calculationParameters: params) {
+                    return adjustedTime(for: .fajr, from: tomorrowTimes)
+                }
+            }
+            // Fallback: midnight
+            return cal.startOfDay(for: cal.date(byAdding: .day, value: 1, to: prayerTimes.fajr) ?? Date())
+        default:
+            // sunrise/sunset are info-only, not applicable
+            return Date()
+        }
     }
 
     private func mapAdhanPrayer(_ adhanPrayer: Adhan.Prayer) -> Prayer {
@@ -289,7 +374,8 @@ class PrayerTimeService {
 
     private func tickCountdown() {
         guard let current = nextPrayer else { return }
-        let remaining = current.time.timeIntervalSince(Date())
+        let now = Date()
+        let remaining = current.time.timeIntervalSince(now)
         if remaining <= 0 {
             recalculate()
         } else {
@@ -298,6 +384,20 @@ class PrayerTimeService {
                 time: current.time,
                 remaining: remaining
             )
+
+            // Tick qaza deadline
+            if let deadline = currentPrayerDeadline {
+                let deadlineRemaining = deadline.deadline.timeIntervalSince(now)
+                if deadlineRemaining <= 0 {
+                    currentPrayerDeadline = nil
+                } else {
+                    currentPrayerDeadline = PrayerDeadline(
+                        prayer: deadline.prayer,
+                        deadline: deadline.deadline,
+                        remaining: deadlineRemaining
+                    )
+                }
+            }
         }
     }
 
