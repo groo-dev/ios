@@ -14,6 +14,7 @@ struct PrayerDetailView: View {
     @AppStorage("prayerGuideMadhab") private var madhabRaw = FiqhMadhab.hanafi.rawValue
     @AppStorage("prayerGuideRole") private var roleRaw = PrayerRole.munfarid.rawValue
     @AppStorage("prayerGuideTraveling") private var isTraveling = false
+    @AppStorage("prayerGuideQaza") private var isQaza = false
 
     @Environment(\.dismiss) private var dismiss
 
@@ -29,7 +30,7 @@ struct PrayerDetailView: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                    if let guide = PrayerGuideDataProvider.guide(for: prayer, madhab: madhab, role: role, isTraveling: isTraveling) {
+                    if let guide = PrayerGuideDataProvider.guide(for: prayer, madhab: madhab, role: role, isTraveling: isTraveling, isQaza: isQaza) {
                         VStack(spacing: Theme.Spacing.lg) {
                             headerSection(guide)
                             settingsSection
@@ -78,7 +79,7 @@ struct PrayerDetailView: View {
                 .font(.title2.bold())
                 .environment(\.layoutDirection, .rightToLeft)
 
-            Text("\(prayer.displayName) · \(guide.fardCount) Fard Rakats")
+            Text("\(prayer.displayName)\(isQaza ? " · Qaza" : "") · \(guide.fardCount) Fard Rakats")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -132,13 +133,15 @@ struct PrayerDetailView: View {
                             .padding(.vertical, Theme.Spacing.sm)
                             .background(
                                 Capsule()
-                                    .fill(role == r ? Theme.Brand.primary : Color(.tertiarySystemGroupedBackground))
+                                    .fill((isQaza ? .munfarid : role) == r ? Theme.Brand.primary : Color(.tertiarySystemGroupedBackground))
                             )
-                            .foregroundStyle(role == r ? .white : .primary)
+                            .foregroundStyle((isQaza ? .munfarid : role) == r ? .white : .primary)
                         }
                         .buttonStyle(.plain)
+                        .disabled(isQaza)
                     }
                 }
+                .opacity(isQaza ? 0.5 : 1.0)
             }
 
             Divider()
@@ -150,6 +153,20 @@ struct PrayerDetailView: View {
                         .font(.subheadline)
                         .foregroundStyle(isTraveling ? Theme.Brand.primary : .secondary)
                     Text("Traveling (Musāfir)")
+                        .font(.subheadline.weight(.medium))
+                }
+            }
+            .tint(Theme.Brand.primary)
+
+            Divider()
+
+            // Qaza (Makeup) toggle
+            Toggle(isOn: $isQaza) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.subheadline)
+                        .foregroundStyle(isQaza ? Theme.Brand.primary : .secondary)
+                    Text("Qaza (Makeup)")
                         .font(.subheadline.weight(.medium))
                 }
             }
