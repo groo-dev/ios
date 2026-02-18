@@ -18,6 +18,7 @@ struct AzanView: View {
     @State private var selectedPrayer: Prayer?
     @State private var showRecitations = false
     @State private var showSurahs = false
+    @State private var showDuas = false
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -87,6 +88,9 @@ struct AzanView: View {
             }
             .sheet(isPresented: $showSurahs) {
                 ShortSurahsSheet()
+            }
+            .sheet(isPresented: $showDuas) {
+                DailyDuasSheet()
             }
         }
         .onAppear { loadAndConfigure() }
@@ -271,6 +275,38 @@ struct AzanView: View {
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.primary)
                         Text("For recitation after al-Fatihah")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.md)
+            }
+            .buttonStyle(.plain)
+
+            Divider()
+                .padding(.leading, Theme.Spacing.lg + 24 + Theme.Spacing.md)
+
+            Button {
+                showDuas = true
+            } label: {
+                HStack(spacing: Theme.Spacing.md) {
+                    Image(systemName: "hands.and.sparkles.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.Brand.primary)
+                        .frame(width: 24)
+
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                        Text("Daily Duas")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                        Text("Supplications for everyday moments")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

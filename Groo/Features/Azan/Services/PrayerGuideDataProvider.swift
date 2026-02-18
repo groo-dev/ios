@@ -12,12 +12,12 @@ enum PrayerGuideDataProvider {
 
     // MARK: - Public API
 
-    static func guide(for prayer: Prayer, madhab: FiqhMadhab, role: PrayerRole, isTraveling: Bool) -> PrayerGuideData? {
+    static func guide(for prayer: Prayer, madhab: FiqhMadhab, role: PrayerRole, isTraveling: Bool, isQaza: Bool) -> PrayerGuideData? {
         guard !prayer.isInfoOnly else { return nil }
 
         switch madhab {
         case .hanafi:
-            return hanafiGuide(for: prayer, role: role, isTraveling: isTraveling)
+            return hanafiGuide(for: prayer, role: role, isTraveling: isTraveling, isQaza: isQaza)
         case .shafii, .maliki, .hanbali:
             return nil
         }
@@ -320,18 +320,145 @@ enum PrayerGuideDataProvider {
         ]
     }
 
+    // MARK: - Daily Duas
+
+    static func dailyDuas() -> [PrayerRecitation] {
+        [
+            PrayerRecitation(
+                id: "waking-up",
+                name: "Du'ā' upon Waking",
+                arabicText: "الْحَمْدُ لِلَّهِ الَّذِي أَحْيَانَا بَعْدَ مَا أَمَاتَنَا وَإِلَيْهِ النُّشُورُ",
+                transliteration: "Al-ḥamdu lillāh illadhī aḥyānā ba'da mā amātanā wa ilayhin-nushūr.",
+                translation: "All praise is due to Allah, who gave us life after causing us to die, and to Him is the resurrection.",
+                usedIn: "Upon waking",
+                audioFileName: "dua-waking-up"
+            ),
+            PrayerRecitation(
+                id: "before-sleep",
+                name: "Du'ā' before Sleeping",
+                arabicText: "بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا",
+                transliteration: "Bismika Allāhumma amūtu wa aḥyā.",
+                translation: "In Your name, O Allah, I die and I live.",
+                usedIn: "Before sleep",
+                audioFileName: "dua-before-sleep"
+            ),
+            PrayerRecitation(
+                id: "leaving-home",
+                name: "Du'ā' when Leaving Home",
+                arabicText: "بِسْمِ اللَّهِ تَوَكَّلْتُ عَلَى اللَّهِ وَلَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ",
+                transliteration: "Bismillāh, tawakkaltu 'alallāh, wa lā ḥawla wa lā quwwata illā billāh.",
+                translation: "In the name of Allah, I place my trust in Allah, and there is no power nor strength except with Allah.",
+                usedIn: "Leaving home",
+                audioFileName: "dua-leaving-home"
+            ),
+            PrayerRecitation(
+                id: "entering-home",
+                name: "Du'ā' when Entering Home",
+                arabicText: "بِسْمِ اللَّهِ وَلَجْنَا وَبِسْمِ اللَّهِ خَرَجْنَا وَعَلَى اللَّهِ رَبِّنَا تَوَكَّلْنَا",
+                transliteration: "Bismillāhi walajnā, wa bismillāhi kharajnā, wa 'alallāhi Rabbinā tawakkalnā.",
+                translation: "In the name of Allah we enter, and in the name of Allah we leave, and upon Allah our Lord we place our trust.",
+                usedIn: "Entering home",
+                audioFileName: "dua-entering-home"
+            ),
+            PrayerRecitation(
+                id: "entering-mosque",
+                name: "Du'ā' when Entering the Mosque",
+                arabicText: "اللَّهُمَّ افْتَحْ لِي أَبْوَابَ رَحْمَتِكَ",
+                transliteration: "Allāhumma-ftaḥ lī abwāba raḥmatik.",
+                translation: "O Allah, open for me the doors of Your mercy.",
+                usedIn: "Entering mosque",
+                audioFileName: "dua-entering-mosque"
+            ),
+            PrayerRecitation(
+                id: "leaving-mosque",
+                name: "Du'ā' when Leaving the Mosque",
+                arabicText: "اللَّهُمَّ إِنِّي أَسْأَلُكَ مِنْ فَضْلِكَ",
+                transliteration: "Allāhumma innī as'aluka min faḍlik.",
+                translation: "O Allah, I ask You from Your bounty.",
+                usedIn: "Leaving mosque",
+                audioFileName: "dua-leaving-mosque"
+            ),
+            PrayerRecitation(
+                id: "before-eating",
+                name: "Bismillāh before Eating",
+                arabicText: "بِسْمِ اللَّهِ",
+                transliteration: "Bismillāh.",
+                translation: "In the name of Allah.",
+                usedIn: "Before eating",
+                audioFileName: "dua-before-eating"
+            ),
+            PrayerRecitation(
+                id: "after-eating",
+                name: "Du'ā' after Eating",
+                arabicText: "الْحَمْدُ لِلَّهِ الَّذِي أَطْعَمَنَا وَسَقَانَا وَجَعَلَنَا مُسْلِمِينَ",
+                transliteration: "Al-ḥamdu lillāh illadhī aṭ'amanā wa saqānā wa ja'alanā muslimīn.",
+                translation: "All praise is due to Allah, who fed us and gave us drink and made us Muslims.",
+                usedIn: "After eating",
+                audioFileName: "dua-after-eating"
+            ),
+            PrayerRecitation(
+                id: "entering-restroom",
+                name: "Du'ā' when Entering the Restroom",
+                arabicText: "اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الْخُبُثِ وَالْخَبَائِثِ",
+                transliteration: "Allāhumma innī a'ūdhu bika minal-khubuthi wal-khabā'ith.",
+                translation: "O Allah, I seek refuge in You from the male and female evil spirits.",
+                usedIn: "Entering restroom",
+                audioFileName: "dua-entering-restroom"
+            ),
+            PrayerRecitation(
+                id: "leaving-restroom",
+                name: "Du'ā' when Leaving the Restroom",
+                arabicText: "غُفْرَانَكَ",
+                transliteration: "Ghufrānak.",
+                translation: "I seek Your forgiveness.",
+                usedIn: "Leaving restroom",
+                audioFileName: "dua-leaving-restroom"
+            ),
+            PrayerRecitation(
+                id: "after-wudu",
+                name: "Du'ā' after Wuḍū'",
+                arabicText: "أَشْهَدُ أَنْ لَا إِلَٰهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ وَأَشْهَدُ أَنَّ مُحَمَّدًا عَبْدُهُ وَرَسُولُهُ",
+                transliteration: "Ash-hadu an lā ilāha illallāhu waḥdahū lā sharīka lah, wa ash-hadu anna Muḥammadan 'abduhū wa rasūluh.",
+                translation: "I bear witness that there is no god but Allah alone, with no partner, and I bear witness that Muhammad is His servant and messenger.",
+                usedIn: "After wuḍū'",
+                audioFileName: "dua-after-wudu"
+            ),
+            PrayerRecitation(
+                id: "after-adhan",
+                name: "Du'ā' after the Adhān",
+                arabicText: "اللَّهُمَّ رَبَّ هَذِهِ الدَّعْوَةِ التَّامَّةِ وَالصَّلَاةِ الْقَائِمَةِ آتِ مُحَمَّدًا الْوَسِيلَةَ وَالْفَضِيلَةَ وَابْعَثْهُ مَقَامًا مَحْمُودًا الَّذِي وَعَدْتَهُ",
+                transliteration: "Allāhumma Rabba hādhihid-da'watit-tāmmah, waṣ-ṣalātil-qā'imah, āti Muḥammadan al-wasīlata wal-faḍīlah, wab'ath-hu maqāman maḥmūdan illadhī wa'adtah.",
+                translation: "O Allah, Lord of this perfect call and established prayer, grant Muhammad the intercession and the honor, and raise him to the praiseworthy station You have promised him.",
+                usedIn: "After adhān",
+                audioFileName: "dua-after-adhan"
+            ),
+            PrayerRecitation(
+                id: "riding-vehicle",
+                name: "Du'ā' when Riding / Traveling",
+                arabicText: "سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ وَإِنَّا إِلَىٰ رَبِّنَا لَمُنْقَلِبُونَ",
+                transliteration: "Subḥānal-ladhī sakhkhara lanā hādhā wa mā kunnā lahū muqrinīn, wa innā ilā Rabbinā lamunqalibūn.",
+                translation: "Glory be to Him who has subjected this to us, and we could never have it by our efforts, and to our Lord we shall surely return.",
+                usedIn: "Riding a vehicle",
+                audioFileName: "dua-riding-vehicle"
+            ),
+        ]
+    }
+
     // MARK: - Hanafi Guide Assembly
 
-    private static func hanafiGuide(for prayer: Prayer, role: PrayerRole, isTraveling: Bool) -> PrayerGuideData {
-        let rakats = hanafiRakats(for: prayer, isTraveling: isTraveling)
+    private static func hanafiGuide(for prayer: Prayer, role: PrayerRole, isTraveling: Bool, isQaza: Bool) -> PrayerGuideData {
+        let effectiveRole: PrayerRole = isQaza ? .munfarid : role
+        let allRakats = hanafiRakats(for: prayer, isTraveling: isTraveling)
+        let rakats = isQaza ? allRakats.filter { $0.category == .fard || $0.category == .wajib } : allRakats
         let groups = rakats.map { unit in
-            hanafiGroupGuide(prayer: prayer, unit: unit, role: role)
+            hanafiGroupGuide(prayer: prayer, unit: unit, role: effectiveRole, isQaza: isQaza)
         }
-        let notes = hanafiGeneralNotes(for: prayer, role: role, isTraveling: isTraveling)
+        let notes = hanafiGeneralNotes(for: prayer, role: effectiveRole, isTraveling: isTraveling, isQaza: isQaza)
+        let name = isQaza ? "قضاء \(arabicName(for: prayer))" : arabicName(for: prayer)
 
         return PrayerGuideData(
             prayer: prayer,
-            arabicName: arabicName(for: prayer),
+            arabicName: name,
             rakatBreakdown: rakats,
             groups: groups,
             generalNotes: notes
@@ -434,14 +561,14 @@ enum PrayerGuideDataProvider {
 
     // MARK: - Per-Group Guide Builder
 
-    private static func hanafiGroupGuide(prayer: Prayer, unit: RakatUnit, role: PrayerRole) -> RakatGroupGuide {
+    private static func hanafiGroupGuide(prayer: Prayer, unit: RakatUnit, role: PrayerRole, isQaza: Bool) -> RakatGroupGuide {
         // Non-fard groups are always prayed alone
         let effectiveRole: PrayerRole = unit.category == .fard ? role : .munfarid
         let mode = recitationMode(prayer: prayer, unit: unit)
         let title = groupDisplayTitle(prayer: prayer, unit: unit)
-        let niyyah = groupNiyyah(prayer: prayer, unit: unit, role: effectiveRole)
+        let niyyah = groupNiyyah(prayer: prayer, unit: unit, role: effectiveRole, isQaza: isQaza)
         let rakats = hanafiRakatDetails(prayer: prayer, unit: unit, role: effectiveRole, mode: mode)
-        let notes = groupNotes(prayer: prayer, unit: unit)
+        let notes = groupNotes(prayer: prayer, unit: unit, isQaza: isQaza)
 
         return RakatGroupGuide(
             unit: unit,
@@ -494,7 +621,7 @@ enum PrayerGuideDataProvider {
 
     // MARK: - Per-Group Niyyah
 
-    private static func groupNiyyah(prayer: Prayer, unit: RakatUnit, role: PrayerRole) -> NiyyahText {
+    private static func groupNiyyah(prayer: Prayer, unit: RakatUnit, role: PrayerRole, isQaza: Bool) -> NiyyahText {
         let count = unit.count
         let prayerArabicName = arabicNiyyahName(for: prayer)
         let prayerEnglish = prayer.displayName.lowercased()
@@ -526,15 +653,19 @@ enum PrayerGuideDataProvider {
             categoryEnglish = "nafl after"
         }
 
+        let qazaArabic = isQaza ? "قَضَاءَ " : ""
+        let qazaTranslit = isQaza ? "qaḍā'a " : ""
+        let qazaEnglish = isQaza ? "qaza (makeup) " : ""
+
         let roleArabic = unit.category == .fard ? niyyahRoleArabic(role) : ""
         let roleTranslit = unit.category == .fard ? niyyahRoleTransliteration(role) : ""
         let roleEnglish = unit.category == .fard ? niyyahRoleEnglish(role) : ""
 
-        let arabic = "نَوَيْتُ أَنْ أُصَلِّيَ \(count) رَكَعَاتِ صَلَاةِ \(prayerArabicName) \(categoryArabic)\(roleArabic) مُتَوَجِّهًا إِلَى جِهَةِ الْكَعْبَةِ الشَّرِيفَةِ اللَّهُ أَكْبَرُ"
+        let arabic = "نَوَيْتُ أَنْ أُصَلِّيَ \(qazaArabic)\(count) رَكَعَاتِ صَلَاةِ \(prayerArabicName) \(categoryArabic)\(roleArabic) مُتَوَجِّهًا إِلَى جِهَةِ الْكَعْبَةِ الشَّرِيفَةِ اللَّهُ أَكْبَرُ"
 
-        let translit = "Nawaitu an usalliya \(count) raka'āti ṣalāt al-\(prayerEnglish) \(categoryTranslit)\(roleTranslit) mutawajjihan ilā jihat al-Ka'bati ash-sharīfah. Allāhu Akbar."
+        let translit = "Nawaitu an usalliya \(qazaTranslit)\(count) raka'āti ṣalāt al-\(prayerEnglish) \(categoryTranslit)\(roleTranslit) mutawajjihan ilā jihat al-Ka'bati ash-sharīfah. Allāhu Akbar."
 
-        let english = "I intend to pray \(count) rak'ahs \(categoryEnglish) \(prayer.displayName)\(roleEnglish), facing the Ka'bah. Allah is the Greatest."
+        let english = "I intend to pray \(count) rak'ahs \(isQaza ? "of " : "")\(qazaEnglish)\(categoryEnglish) \(prayer.displayName)\(roleEnglish), facing the Ka'bah. Allah is the Greatest."
 
         return NiyyahText(arabic: arabic, transliteration: translit, english: english)
     }
@@ -966,7 +1097,7 @@ enum PrayerGuideDataProvider {
 
     // MARK: - Per-Group Notes
 
-    private static func groupNotes(prayer: Prayer, unit: RakatUnit) -> [String] {
+    private static func groupNotes(prayer: Prayer, unit: RakatUnit, isQaza: Bool) -> [String] {
         var notes: [String] = []
 
         switch unit.category {
@@ -981,7 +1112,9 @@ enum PrayerGuideDataProvider {
         case .sunnahGhairMuakkadah:
             notes.append("Non-emphasized sunnah — rewarded for praying, no blame for skipping.")
         case .fard:
-            break // Fard-specific notes handled in general notes
+            if isQaza {
+                notes.append("Recitation is flexible when praying Qaza alone — you may recite aloud or silently.")
+            }
         case .wajib:
             notes.append("Witr is wajib in Hanafi fiqh — higher obligation than sunnah.")
             notes.append("Qunūt du'ā' is recited in the 3rd rak'ah before rukū'.")
@@ -998,12 +1131,22 @@ enum PrayerGuideDataProvider {
 
     // MARK: - General Notes (Travel, Role, etc.)
 
-    private static func hanafiGeneralNotes(for prayer: Prayer, role: PrayerRole, isTraveling: Bool) -> [String] {
+    private static func hanafiGeneralNotes(for prayer: Prayer, role: PrayerRole, isTraveling: Bool, isQaza: Bool) -> [String] {
         var notes: [String] = []
+
+        if isQaza {
+            notes.append("Qaza (makeup) prayer: only the fard portion is made up. Sunnah prayers are not repeated.")
+            if prayer == .isha {
+                notes.append("Witr is included because it is wajib in Hanafi fiqh.")
+            }
+            notes.append("No Azan or Iqamah is required for Qaza prayers.")
+            notes.append("Avoid the 3 prohibited times (sunrise, zenith, sunset).")
+            notes.append("Qaza is prayed alone (munfarid).")
+        }
 
         switch prayer {
         case .fajr:
-            if isTraveling {
+            if isTraveling && !isQaza {
                 notes.append("Fajr sunnah is still recommended even when traveling.")
             }
         case .dhuhr:
@@ -1011,7 +1154,9 @@ enum PrayerGuideDataProvider {
                 notes.append("Qasr: Fard shortened from 4 to 2 rak'ahs. Sunnah prayers become optional.")
             }
         case .asr:
-            notes.append("No nafl prayers after Asr fard until Maghrib.")
+            if !isQaza {
+                notes.append("No nafl prayers after Asr fard until Maghrib.")
+            }
             if isTraveling {
                 notes.append("Qasr: Fard shortened from 4 to 2 rak'ahs.")
             }
@@ -1025,16 +1170,18 @@ enum PrayerGuideDataProvider {
             break
         }
 
-        switch role {
-        case .imam:
-            notes.append("As imam, recite aloud in Fajr, Maghrib (first 2), and Isha (first 2). Silent in Dhuhr and Asr.")
-            notes.append("Say \"Sami' Allāhu liman ḥamidah\" aloud when rising from rukū'.")
-        case .muqtadi:
-            notes.append("In Hanafi fiqh, do NOT recite Surah al-Fātiḥah behind the imam — stand silently during qiyām.")
-            notes.append("Follow the imam's movements. Do not move ahead of or simultaneously with the imam.")
-            notes.append("If you join late (masbūq), complete the remaining rak'ahs after the imam's salām.")
-        case .munfarid:
-            break
+        if !isQaza {
+            switch role {
+            case .imam:
+                notes.append("As imam, recite aloud in Fajr, Maghrib (first 2), and Isha (first 2). Silent in Dhuhr and Asr.")
+                notes.append("Say \"Sami' Allāhu liman ḥamidah\" aloud when rising from rukū'.")
+            case .muqtadi:
+                notes.append("In Hanafi fiqh, do NOT recite Surah al-Fātiḥah behind the imam — stand silently during qiyām.")
+                notes.append("Follow the imam's movements. Do not move ahead of or simultaneously with the imam.")
+                notes.append("If you join late (masbūq), complete the remaining rak'ahs after the imam's salām.")
+            case .munfarid:
+                break
+            }
         }
 
         if isTraveling {
