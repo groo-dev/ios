@@ -208,6 +208,8 @@ struct AzanSettingsView: View {
                 Toggle("Play Full Azan on Tap", isOn: $preferences.playFullAzanOnTap)
             } header: {
                 Text("Sound")
+            } footer: {
+                Text("Notification volume is controlled by Ringer & Alerts in iOS Settings → Sounds & Haptics, not the side volume buttons.")
             }
 
             // Time Adjustments

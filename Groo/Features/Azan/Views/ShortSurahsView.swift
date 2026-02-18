@@ -76,54 +76,52 @@ struct ShortSurahsView: View {
 
         return VStack(alignment: .leading, spacing: 0) {
             // Header row
-            HStack {
-                // Tap area for expand/collapse
-                Button {
-                    withAnimation(.easeInOut(duration: Theme.Animation.fast)) {
-                        expandedId = isExpanded ? nil : surah.id
-                    }
-                } label: {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        Text("\(surah.id)")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(Theme.Brand.primary)
-                            .frame(width: 28, alignment: .center)
+            Button {
+                withAnimation(.easeInOut(duration: Theme.Animation.fast)) {
+                    expandedId = isExpanded ? nil : surah.id
+                }
+            } label: {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Text("\(surah.id)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Theme.Brand.primary)
+                        .frame(width: 28, alignment: .center)
 
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                            HStack(spacing: Theme.Spacing.sm) {
-                                Text(surah.name)
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(.primary)
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            Text(surah.name)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.primary)
 
-                                Text(surah.arabicName)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Text("\(surah.verseCount) verses")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                            Text(surah.arabicName)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
 
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.semibold))
+                        Text("\(surah.verseCount) verses")
+                            .font(.caption2)
                             .foregroundStyle(.tertiary)
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
                     }
-                }
-                .buttonStyle(.plain)
 
-                // Play button (always visible)
-                audioButton(fileName: surah.audioFileName)
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+                .padding(.vertical, Theme.Spacing.md)
+                .padding(.horizontal, Theme.Spacing.lg)
             }
-            .padding(.vertical, Theme.Spacing.md)
-            .padding(.horizontal, Theme.Spacing.lg)
+            .buttonStyle(.plain)
 
             // Expanded content
             if isExpanded {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    // Audio play button
+                    audioButton(fileName: surah.audioFileName)
+
                     // Arabic
                     Text(surah.arabicText)
                         .font(.callout)
@@ -159,10 +157,18 @@ struct ShortSurahsView: View {
         return Button {
             audioService.play(fileName)
         } label: {
-            Image(systemName: isPlaying ? "stop.fill" : "play.fill")
-                .font(.caption)
-                .foregroundStyle(isPlaying ? .red : Theme.Brand.primary)
-                .frame(width: Theme.Size.minTapTarget, height: Theme.Size.minTapTarget)
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                    .font(.caption)
+                Text(isPlaying ? "Stop" : "Play Audio")
+                    .font(.caption.weight(.medium))
+            }
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
+            .background(
+                Capsule().fill(isPlaying ? Color.red.opacity(0.12) : Theme.Brand.primary.opacity(0.12))
+            )
+            .foregroundStyle(isPlaying ? .red : Theme.Brand.primary)
         }
         .buttonStyle(.plain)
     }

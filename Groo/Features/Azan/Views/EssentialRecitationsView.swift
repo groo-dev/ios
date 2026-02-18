@@ -102,6 +102,7 @@ struct EssentialRecitationsView: View {
                         .foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
+                .contentShape(Rectangle())
                 .padding(.vertical, Theme.Spacing.md)
                 .padding(.horizontal, Theme.Spacing.lg)
             }

@@ -177,4 +177,28 @@ final class LocalAzanPreferences {
     var parsedMadhab: AzanMadhab {
         AzanMadhab(rawValue: madhab) ?? .hanafi
     }
+
+    // MARK: - App Group Sync (for Widget)
+
+    func syncToAppGroup() {
+        guard let defaults = UserDefaults(suiteName: appGroupIdentifier) else { return }
+        defaults.set(latitude, forKey: "azan_latitude")
+        defaults.set(longitude, forKey: "azan_longitude")
+        defaults.set(calculationMethod, forKey: "azan_calculationMethod")
+        defaults.set(madhab, forKey: "azan_madhab")
+        defaults.set(fajrAdjustment, forKey: "azan_fajrAdjustment")
+        defaults.set(sunriseAdjustment, forKey: "azan_sunriseAdjustment")
+        defaults.set(dhuhrAdjustment, forKey: "azan_dhuhrAdjustment")
+        defaults.set(asrAdjustment, forKey: "azan_asrAdjustment")
+        defaults.set(maghribAdjustment, forKey: "azan_maghribAdjustment")
+        defaults.set(ishaAdjustment, forKey: "azan_ishaAdjustment")
+    }
+
+    private var appGroupIdentifier: String {
+        #if DEBUG
+        "group.dev.groo.ios.debug"
+        #else
+        "group.dev.groo.ios"
+        #endif
+    }
 }

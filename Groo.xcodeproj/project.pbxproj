@@ -28,6 +28,7 @@
 		1B2850F42F14017A0046247D /* KeyboardExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850ED2F14017A0046247D /* KeyboardExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B48208B2F35625A0018D7FA /* web3swift in Frameworks */ = {isa = PBXBuildFile; productRef = 1B48208A2F35625A0018D7FA /* web3swift */; };
 		1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = 1B9FA3702F44944100D792F5 /* Adhan */; };
+		C469004D4292690B7FEA6654 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = B026D97D28BCC53D8ED6E1D0 /* Adhan */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -205,6 +206,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C469004D4292690B7FEA6654 /* Adhan in Frameworks */,
 				1B2850D32F1401620046247D /* SwiftUI.framework in Frameworks */,
 				1B2850D12F1401620046247D /* WidgetKit.framework in Frameworks */,
 			);
@@ -362,6 +364,7 @@
 			);
 			name = WidgetExtensionExtension;
 			packageProductDependencies = (
+				B026D97D28BCC53D8ED6E1D0 /* Adhan */,
 			);
 			productName = WidgetExtensionExtension;
 			productReference = 1B2850CE2F1401620046247D /* WidgetExtensionExtension.appex */;
@@ -1077,6 +1080,11 @@
 			productName = web3swift;
 		};
 		1B9FA3702F44944100D792F5 /* Adhan */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */;
+			productName = Adhan;
+		};
+		B026D97D28BCC53D8ED6E1D0 /* Adhan */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */;
 			productName = Adhan;
