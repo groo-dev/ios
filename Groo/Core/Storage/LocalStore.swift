@@ -23,6 +23,7 @@ final class LocalStore {
             LocalStockHolding.self,
             LocalStockTransaction.self,
             LocalAzanPreferences.self,
+            PrayerLog.self,
         ])
 
         // Configure for App Group storage
@@ -304,5 +305,45 @@ final class LocalStore {
 
     func saveAzanChanges() {
         try? context.save()
+    }
+
+    // MARK: - Prayer Logs
+
+    func getPrayerLogs(forDateString dateString: String) -> [PrayerLog] {
+        let descriptor = FetchDescriptor<PrayerLog>(
+            predicate: #Predicate { $0.dateString == dateString }
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    func getPrayerLogs(from startDate: String, to endDate: String) -> [PrayerLog] {
+        let descriptor = FetchDescriptor<PrayerLog>(
+            predicate: #Predicate { $0.dateString >= startDate && $0.dateString <= endDate }
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    func savePrayerLog(_ log: PrayerLog) {
+        // Upsert: delete existing log for same prayer+date, then insert
+        let logId = log.id
+        let descriptor = FetchDescriptor<PrayerLog>(
+            predicate: #Predicate { $0.id == logId }
+        )
+        if let existing = try? context.fetch(descriptor).first {
+            context.delete(existing)
+        }
+        context.insert(log)
+        try? context.save()
+    }
+
+    func deletePrayerLog(dateString: String, prayer: Prayer) {
+        let logId = "\(dateString)_\(prayer.rawValue)"
+        let descriptor = FetchDescriptor<PrayerLog>(
+            predicate: #Predicate { $0.id == logId }
+        )
+        if let existing = try? context.fetch(descriptor).first {
+            context.delete(existing)
+            try? context.save()
+        }
     }
 }

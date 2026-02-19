@@ -50,6 +50,33 @@ enum Prayer: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+// MARK: - Prayer Status
+
+enum PrayerStatus: String, CaseIterable, Codable {
+    case onTime, late
+
+    var displayName: String {
+        switch self {
+        case .onTime: "On Time"
+        case .late: "Qaza"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .onTime: "checkmark.circle.fill"
+        case .late: "clock.arrow.circlepath"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .onTime: Theme.Colors.success
+        case .late: Theme.Colors.warning
+        }
+    }
+}
+
 // MARK: - Calculation Method
 
 enum AzanCalculationMethod: String, CaseIterable, Codable, Identifiable {

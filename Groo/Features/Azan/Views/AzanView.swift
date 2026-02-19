@@ -14,6 +14,7 @@ struct AzanView: View {
     @State private var locationService = AzanLocationService()
     @State private var notificationService = AzanNotificationService()
     @State private var audioService = AzanAudioService()
+    @State private var trackingService = PrayerTrackingService()
     @State private var preferences: LocalAzanPreferences?
     @State private var showSettings = false
     @State private var selectedPrayer: Prayer?
@@ -36,6 +37,9 @@ struct AzanView: View {
                     if let ramadan = prayerService.ramadanInfo {
                         ramadanCard(ramadan)
                     }
+
+                    // Tracker summary
+                    TrackerSummaryCard(trackingService: trackingService)
 
                     // Today's prayer times
                     prayerTimesCard
@@ -94,10 +98,14 @@ struct AzanView: View {
                 DailyDuasSheet()
             }
         }
-        .onAppear { loadAndConfigure() }
+        .onAppear {
+            loadAndConfigure()
+            trackingService.recalculate()
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 prayerService.recalculate()
+                trackingService.recalculate()
                 Task { await rescheduleNotifications() }
             }
         }
@@ -107,6 +115,10 @@ struct AzanView: View {
 
     private func nextPrayerCard(_ countdown: PrayerCountdown) -> some View {
         VStack(spacing: Theme.Spacing.md) {
+            // Progress ring
+            ProgressRing(completed: trackingService.todayCompletedCount, total: trackingService.todayRequiredCount)
+                .padding(.bottom, Theme.Spacing.xxs)
+
             // Show "Time until Iftar" during Ramadan fasting hours
             if let ramadan = prayerService.ramadanInfo, ramadan.isRamadan, countdown.prayer == .maghrib {
                 Text("Time until Iftar")
@@ -143,6 +155,9 @@ struct AzanView: View {
                         .font(.subheadline)
                 }
                 .foregroundStyle(deadline.urgency.color)
+
+                // "I prayed" button for the active prayer
+                iPrayedButton(for: deadline.prayer)
             }
         }
         .frame(maxWidth: .infinity)
@@ -151,6 +166,40 @@ struct AzanView: View {
             RoundedRectangle(cornerRadius: Theme.Radius.lg)
                 .fill(Color(.secondarySystemGroupedBackground))
         )
+    }
+
+    @ViewBuilder
+    private func iPrayedButton(for prayer: Prayer) -> some View {
+        let today = trackingService.todayDateString()
+
+        if let status = trackingService.todayLogs[prayer] {
+            // Confirmed state
+            HStack(spacing: Theme.Spacing.xs) {
+                Image(systemName: status.icon)
+                Text("\(prayer.displayName) — \(status.displayName)")
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(status.color)
+            .padding(.vertical, Theme.Spacing.sm)
+        } else {
+            // Action button
+            Button {
+                trackingService.logPrayer(dateString: today, prayer: prayer, status: .onTime)
+            } label: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("I prayed \(prayer.displayName)")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.sm)
+                .background(
+                    Capsule()
+                        .fill(Theme.Colors.success)
+                )
+            }
+        }
     }
 
     // MARK: - Ramadan Card
