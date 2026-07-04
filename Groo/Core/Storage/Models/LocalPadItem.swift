@@ -9,6 +9,7 @@
 
 import Foundation
 import SwiftData
+import os
 
 @Model
 final class LocalPadItem {
@@ -33,18 +34,36 @@ final class LocalPadItem {
 
     /// Get encrypted text payload
     var encryptedText: PadEncryptedPayload? {
-        guard let data = encryptedTextJSON.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(PadEncryptedPayload.self, from: data)
+        guard let data = encryptedTextJSON.data(using: .utf8) else {
+            Log.pad.error("Item \(self.id, privacy: .public): encryptedTextJSON is not valid UTF-8")
+            return nil
+        }
+        do {
+            return try JSONDecoder().decode(PadEncryptedPayload.self, from: data)
+        } catch {
+            Log.pad.error("Item \(self.id, privacy: .public): failed to decode encrypted text payload: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     /// Get encrypted file attachments
     var files: [PadFileAttachment] {
         get {
             guard let data = filesJSON else { return [] }
-            return (try? JSONDecoder().decode([PadFileAttachment].self, from: data)) ?? []
+            do {
+                return try JSONDecoder().decode([PadFileAttachment].self, from: data)
+            } catch {
+                Log.pad.error("Item \(self.id, privacy: .public): failed to decode file attachments: \(String(describing: error), privacy: .public)")
+                return []
+            }
         }
         set {
-            filesJSON = try? JSONEncoder().encode(newValue)
+            do {
+                filesJSON = try JSONEncoder().encode(newValue)
+            } catch {
+                // Keep the previous value rather than silently dropping attachments
+                Log.pad.error("Item \(self.id, privacy: .public): failed to encode file attachments: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 }
@@ -52,16 +71,36 @@ final class LocalPadItem {
 // MARK: - Conversion from API Model
 
 extension LocalPadItem {
-    /// Create from API model (PadListItem) - stores encrypted data directly
-    convenience init(from apiItem: PadListItem) {
-        let encryptedJSON = (try? JSONEncoder().encode(apiItem.encryptedText))
-            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+    /// Create from API model (PadListItem) - stores encrypted data directly.
+    /// Fails (returns nil) if the payload can't be encoded, so callers skip
+    /// caching instead of storing a "{}" placeholder ciphertext.
+    convenience init?(from apiItem: PadListItem) {
+        let encryptedJSON: String
+        do {
+            let data = try JSONEncoder().encode(apiItem.encryptedText)
+            guard let json = String(data: data, encoding: .utf8) else {
+                Log.pad.error("Item \(apiItem.id, privacy: .public): encoded payload is not valid UTF-8; skipping local cache")
+                return nil
+            }
+            encryptedJSON = json
+        } catch {
+            Log.pad.error("Item \(apiItem.id, privacy: .public): failed to encode payload: \(String(describing: error), privacy: .public); skipping local cache")
+            return nil
+        }
+
+        let filesJSON: Data?
+        do {
+            filesJSON = try JSONEncoder().encode(apiItem.files)
+        } catch {
+            Log.pad.error("Item \(apiItem.id, privacy: .public): failed to encode file attachments: \(String(describing: error), privacy: .public)")
+            filesJSON = nil
+        }
 
         self.init(
             id: apiItem.id,
             encryptedTextJSON: encryptedJSON,
             createdAt: Date(timeIntervalSince1970: Double(apiItem.createdAt) / 1000),
-            filesJSON: try? JSONEncoder().encode(apiItem.files)
+            filesJSON: filesJSON
         )
     }
 

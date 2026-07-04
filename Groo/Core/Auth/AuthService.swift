@@ -8,6 +8,7 @@
 
 import UIKit
 import Foundation
+import os
 
 // MARK: - Types
 
@@ -62,12 +63,25 @@ class AuthService {
     // MARK: - Logout
 
     func logout() throws {
+        // A failed credential wipe must be visible, but logout itself proceeds.
         // Clear PAT token
-        try? keychain.delete(for: KeychainService.Key.patToken)
+        do {
+            try keychain.delete(for: KeychainService.Key.patToken)
+        } catch {
+            Log.store.fault("Logout: failed to delete PAT token: \(String(describing: error), privacy: .public)")
+        }
 
         // Clear encryption data
-        try? keychain.delete(for: KeychainService.Key.encryptionKey)
-        try? keychain.delete(for: KeychainService.Key.encryptionSalt)
+        do {
+            try keychain.delete(for: KeychainService.Key.encryptionKey)
+        } catch {
+            Log.store.fault("Logout: failed to delete encryption key: \(String(describing: error), privacy: .public)")
+        }
+        do {
+            try keychain.delete(for: KeychainService.Key.encryptionSalt)
+        } catch {
+            Log.store.fault("Logout: failed to delete encryption salt: \(String(describing: error), privacy: .public)")
+        }
 
         isAuthenticated = false
     }
@@ -76,9 +90,14 @@ class AuthService {
 
     /// Get the stored PAT token
     func getPatToken() throws -> String {
-        guard let token = try? keychain.loadString(for: KeychainService.Key.patToken) else {
+        do {
+            return try keychain.loadString(for: KeychainService.Key.patToken)
+        } catch KeychainError.itemNotFound {
             throw AuthError.notAuthenticated
+        } catch {
+            // A keychain fault is not "not signed in" — log and keep the real cause
+            Log.store.error("Failed to load PAT token: \(String(describing: error), privacy: .public)")
+            throw error
         }
-        return token
     }
 }

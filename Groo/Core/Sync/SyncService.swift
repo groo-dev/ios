@@ -10,6 +10,7 @@
 import Foundation
 import CryptoKit
 import Network
+import os
 
 @MainActor
 @Observable
@@ -59,12 +60,13 @@ class SyncService {
 
         do {
             // Push pending operations first
-            await pushPendingOperations()
+            let pushSucceeded = await pushPendingOperations()
 
             // Pull latest from server (stores encrypted)
             try await pullFromServer()
 
-            state.status = .idle
+            // Don't report a clean sync if any push operation failed
+            state.status = pushSucceeded ? .idle : .error("Some changes couldn't be synced")
             state.lastSyncedAt = Date()
         } catch {
             state.status = .error(error.localizedDescription)
@@ -76,41 +78,45 @@ class SyncService {
 
     // MARK: - Push Operations
 
-    private func pushPendingOperations() async {
+    /// Returns true if every pending operation was pushed successfully.
+    private func pushPendingOperations() async -> Bool {
         let operations = store.getAllPendingOperations()
-        print("[Sync] Pending operations: \(operations.count)")
+        Log.sync.debug("Pending operations: \(operations.count)")
+
+        var allSucceeded = true
 
         for operation in operations {
-            print("[Sync] Processing \(operation.operationType): \(operation.id) (itemId: \(operation.itemId))")
+            Log.sync.debug("Processing \(operation.operationType.rawValue, privacy: .public): \(operation.id, privacy: .public) (itemId: \(operation.itemId, privacy: .public))")
             do {
                 switch operation.operationType {
                 case .create:
-                    print("[Sync] CREATE: Posting item \(operation.itemId)")
-                    if let item = operation.getCreatePayload() {
-                        let _: AddItemResponse = try await api.post(APIClient.Endpoint.list, body: item)
-                        print("[Sync] CREATE: Success")
-                    } else {
-                        print("[Sync] CREATE: No payload, removing stale operation")
+                    guard let item = operation.getCreatePayload() else {
+                        // Do NOT remove the operation — the user's offline-created
+                        // item must survive for diagnosis. Skip it this pass.
+                        Log.sync.error("CREATE operation \(operation.id, privacy: .public) has missing or undecodable payload; keeping for diagnosis")
+                        allSucceeded = false
+                        continue
                     }
+                    let _: AddItemResponse = try await api.post(APIClient.Endpoint.list, body: item)
 
                 case .delete:
-                    print("[Sync] DELETE: Deleting item \(operation.itemId)")
                     do {
                         try await api.delete(APIClient.Endpoint.listItem(operation.itemId))
-                        print("[Sync] DELETE: Success")
                     } catch APIError.httpError(statusCode: 404, _) {
-                        print("[Sync] DELETE: 404 - item already gone, treating as success")
+                        Log.sync.debug("DELETE \(operation.itemId, privacy: .public): 404 - item already gone, treating as success")
                     }
                 }
 
                 // Remove successful operation
-                print("[Sync] Removing operation \(operation.id)")
-                store.removePendingOperation(operation)
+                try store.removePendingOperation(operation)
             } catch {
                 // Keep failed operations for retry
-                print("[Sync] FAILED operation \(operation.id): \(error)")
+                Log.sync.error("Failed to push operation \(operation.id, privacy: .public): \(String(describing: error), privacy: .public)")
+                allSucceeded = false
             }
         }
+
+        return allSucceeded
     }
 
     // MARK: - Pull from Server
@@ -139,8 +145,16 @@ class SyncService {
         store.savePadItem(from: encryptedItem)
 
         // Queue for sync
-        let operation = PendingOperation.createItem(encryptedItem)
-        store.addPendingOperation(operation)
+        guard let operation = PendingOperation.createItem(encryptedItem) else {
+            Log.sync.error("Failed to queue create operation for item \(encryptedItem.id, privacy: .public): payload could not be encoded")
+            state.status = .error("Couldn't queue item for sync")
+            return
+        }
+        do {
+            try store.addPendingOperation(operation)
+        } catch {
+            state.status = .error("Couldn't queue item for sync")
+        }
         state.pendingOperationsCount = store.getAllPendingOperations().count
 
         // Try to sync immediately if online
@@ -156,7 +170,11 @@ class SyncService {
 
         // Queue for sync
         let operation = PendingOperation.deleteItem(id: id)
-        store.addPendingOperation(operation)
+        do {
+            try store.addPendingOperation(operation)
+        } catch {
+            state.status = .error("Couldn't queue deletion for sync")
+        }
         state.pendingOperationsCount = store.getAllPendingOperations().count
 
         // Try to sync immediately if online
@@ -202,13 +220,21 @@ class SyncService {
         let body = ScratchpadUpdateBody(encryptedContent: encryptedContent)
         let _: ScratchpadUpdateResponse = try await api.put(APIClient.Endpoint.scratchpad(id), body: body)
 
-        // Update local storage
+        // Update local storage. Never write a placeholder payload — on encode
+        // failure, keep the previous local copy and log.
         if let local = store.getScratchpad(id: id) {
-            let encryptedJSON = (try? JSONEncoder().encode(encryptedContent))
-                .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-            local.encryptedContentJSON = encryptedJSON
-            local.updatedAt = Date()
-            store.updateScratchpad(local)
+            do {
+                let data = try JSONEncoder().encode(encryptedContent)
+                guard let encryptedJSON = String(data: data, encoding: .utf8) else {
+                    Log.sync.error("Scratchpad \(id, privacy: .public) update: encoded payload is not valid UTF-8; skipping local cache update")
+                    return
+                }
+                local.encryptedContentJSON = encryptedJSON
+                local.updatedAt = Date()
+                store.updateScratchpad(local)
+            } catch {
+                Log.sync.error("Scratchpad \(id, privacy: .public) update: failed to encode payload: \(String(describing: error), privacy: .public); skipping local cache update")
+            }
         }
     }
 
@@ -217,16 +243,25 @@ class SyncService {
         let body = ScratchpadCreateBody(encryptedContent: encryptedContent)
         let response: ScratchpadCreateResponse = try await api.post(APIClient.Endpoint.scratchpads, body: body)
 
-        // Add to local storage
+        // Add to local storage. Never write a placeholder payload — on encode
+        // failure, skip caching locally and log (the server copy is authoritative).
         let now = Date()
-        let scratchpad = LocalScratchpad(
-            id: response.id,
-            encryptedContentJSON: (try? JSONEncoder().encode(encryptedContent))
-                .flatMap { String(data: $0, encoding: .utf8) } ?? "{}",
-            createdAt: now,
-            updatedAt: now
-        )
-        store.saveScratchpad(scratchpad)
+        do {
+            let data = try JSONEncoder().encode(encryptedContent)
+            if let encryptedJSON = String(data: data, encoding: .utf8) {
+                let scratchpad = LocalScratchpad(
+                    id: response.id,
+                    encryptedContentJSON: encryptedJSON,
+                    createdAt: now,
+                    updatedAt: now
+                )
+                store.saveScratchpad(scratchpad)
+            } else {
+                Log.sync.error("Scratchpad \(response.id, privacy: .public) create: encoded payload is not valid UTF-8; skipping local cache")
+            }
+        } catch {
+            Log.sync.error("Scratchpad \(response.id, privacy: .public) create: failed to encode payload: \(String(describing: error), privacy: .public); skipping local cache")
+        }
 
         return response.id
     }

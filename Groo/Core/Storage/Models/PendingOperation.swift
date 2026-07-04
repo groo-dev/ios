@@ -8,6 +8,7 @@
 
 import Foundation
 import SwiftData
+import os
 
 enum OperationType: String, Codable {
     case create
@@ -44,11 +45,18 @@ struct CreateItemPayload: Codable {
 }
 
 extension PendingOperation {
-    /// Create a pending create operation
-    static func createItem(_ item: PadListItem) -> PendingOperation {
+    /// Create a pending create operation.
+    /// Fails (returns nil) if the payload can't be encoded, so a bad payload
+    /// is rejected at enqueue time instead of becoming an unpushable operation.
+    static func createItem(_ item: PadListItem) -> PendingOperation? {
         let payload = CreateItemPayload(item: item)
-        let payloadData = try? JSONEncoder().encode(payload)
-        return PendingOperation(type: .create, itemId: item.id, payload: payloadData)
+        do {
+            let payloadData = try JSONEncoder().encode(payload)
+            return PendingOperation(type: .create, itemId: item.id, payload: payloadData)
+        } catch {
+            Log.sync.error("Failed to encode create payload for item \(item.id, privacy: .public): \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     /// Create a pending delete operation
@@ -59,6 +67,11 @@ extension PendingOperation {
     /// Get the create payload if this is a create operation
     func getCreatePayload() -> PadListItem? {
         guard operationType == .create, let data = payloadJSON else { return nil }
-        return try? JSONDecoder().decode(CreateItemPayload.self, from: data).item
+        do {
+            return try JSONDecoder().decode(CreateItemPayload.self, from: data).item
+        } catch {
+            Log.sync.error("Failed to decode payload for pending operation \(self.id, privacy: .public): \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 }

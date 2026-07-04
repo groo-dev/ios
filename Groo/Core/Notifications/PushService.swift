@@ -9,6 +9,7 @@
 import UIKit
 import Foundation
 import UserNotifications
+import os
 
 // MARK: - Types
 
@@ -34,6 +35,7 @@ struct DeviceRegistration: Encodable {
 class PushService {
     private(set) var isRegistered = false
     private(set) var deviceToken: String?
+    private(set) var lastRegistrationError: String?
 
     private let keychain = KeychainService()
 
@@ -67,8 +69,7 @@ class PushService {
 
     func registerDeviceToken(_ tokenData: Data) async throws {
         let tokenString = tokenData.map { String(format: "%02x", $0) }.joined()
-        print("[PushService] registerDeviceToken called")
-        print("[PushService] Token: \(tokenString.prefix(16))...")
+        Log.push.debug("registerDeviceToken called")
 
         // Cache the token
         try keychain.save(tokenString, for: KeychainService.Key.deviceToken)
@@ -76,10 +77,9 @@ class PushService {
 
         // Get PAT for auth
         guard let patToken = try? keychain.loadString(for: KeychainService.Key.patToken) else {
-            print("[PushService] ERROR: No PAT token in keychain")
+            Log.push.error("No PAT token in keychain, can't register device")
             throw PushError.noAuthToken
         }
-        print("[PushService] PAT token: \(patToken.prefix(20))...")
 
         // Determine environment
         #if DEBUG
@@ -87,13 +87,10 @@ class PushService {
         #else
         let environment = "production"
         #endif
-        print("[PushService] Environment: \(environment)")
 
         // Register with accounts API
         let bundleId = Bundle.main.bundleIdentifier ?? "dev.groo.ios"
         let deviceName = UIDevice.current.name
-        print("[PushService] Bundle ID: \(bundleId)")
-        print("[PushService] Device name: \(deviceName)")
 
         let registration = DeviceRegistration(
             token: tokenString,
@@ -104,7 +101,7 @@ class PushService {
         )
 
         let url = Config.accountsAPIBaseURL.appendingPathComponent("v1/devices")
-        print("[PushService] URL: \(url.absoluteString)")
+        Log.push.debug("Registering device (\(environment, privacy: .public)) at \(url.absoluteString, privacy: .public)")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -112,25 +109,22 @@ class PushService {
         request.setValue("Bearer \(patToken)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(registration)
 
-        print("[PushService] Sending registration request...")
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            print("[PushService] ERROR: Invalid response type")
+            Log.push.error("Device registration failed: invalid response type")
             throw PushError.registrationFailed
         }
 
-        let responseBody = String(data: data, encoding: .utf8) ?? "empty"
-        print("[PushService] Response status: \(httpResponse.statusCode)")
-        print("[PushService] Response body: \(responseBody)")
-
         guard (200...299).contains(httpResponse.statusCode) else {
-            print("[PushService] Registration failed: \(responseBody)")
+            let responseBody = String(data: data, encoding: .utf8) ?? "empty"
+            Log.push.error("Device registration failed with status \(httpResponse.statusCode): \(responseBody, privacy: .public)")
             throw PushError.registrationFailed
         }
 
         isRegistered = true
-        print("[PushService] Device registered successfully")
+        lastRegistrationError = nil
+        Log.push.debug("Device registered successfully")
     }
 
     func unregisterDeviceToken() async throws {
@@ -150,9 +144,15 @@ class PushService {
         request.setValue("Bearer \(patToken)", forHTTPHeaderField: "Authorization")
 
         do {
-            let _ = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200...299).contains(httpResponse.statusCode) {
+                let responseBody = String(data: data, encoding: .utf8) ?? "empty"
+                Log.push.error("Device unregistration returned status \(httpResponse.statusCode): \(responseBody, privacy: .public)")
+            }
         } catch {
-            // Ignore errors during unregistration
+            // Local state is still cleared, but the failure must be visible
+            Log.push.error("Device unregistration request failed: \(String(describing: error), privacy: .public)")
         }
 
         try? keychain.delete(for: KeychainService.Key.deviceToken)
@@ -163,18 +163,19 @@ class PushService {
     // MARK: - Notification Handling
 
     func handleRemoteNotification(_ userInfo: [AnyHashable: Any]) {
-        print("[PushService] Received notification: \(userInfo)")
+        Log.push.debug("Received notification: \(String(describing: userInfo), privacy: .private)")
 
         // Check if this is a sync notification
         // The payload structure is: { "aps": {...}, "action": "sync" }
         if let action = userInfo["action"] as? String, action == "sync" {
-            print("[PushService] Triggering sync")
+            Log.push.debug("Triggering sync")
             onSyncRequested?()
         }
     }
 
     func handleRegistrationFailure(_ error: Error) {
-        print("Push registration failed: \(error)")
+        Log.push.error("Push registration failed: \(String(describing: error), privacy: .public)")
+        lastRegistrationError = error.localizedDescription
         isRegistered = false
     }
 }

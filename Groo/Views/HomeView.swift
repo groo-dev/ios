@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct HomeView: View {
     let padService: PadService
@@ -310,7 +311,22 @@ struct HomeView: View {
         }
 
         if padService.isUnlocked {
-            padItems = (try? padService.getDecryptedItems()) ?? []
+            reloadPadItems()
+        }
+    }
+
+    /// Reload decrypted pad items, keeping the previous items and surfacing
+    /// a toast if loading or decryption fails.
+    private func reloadPadItems() {
+        do {
+            padItems = try padService.getDecryptedItems()
+            if padService.decryptFailureCount > 0 {
+                let count = padService.decryptFailureCount
+                toastState.showError("\(count) item\(count == 1 ? "" : "s") couldn't be decrypted")
+            }
+        } catch {
+            Log.pad.error("Failed to load pad items: \(String(describing: error), privacy: .public)")
+            toastState.showError(error.localizedDescription)
         }
     }
 
@@ -326,7 +342,10 @@ struct HomeView: View {
                 do {
                     let chart = try await yahooService.getChartData(symbol: topHolding.symbol, timeframe: .day)
                     stockSparkline = chart.points.map(\.price)
-                } catch {}
+                } catch {
+                    // Sparkline is decorative — stay silent in UI, but log
+                    Log.stocks.debug("Stock sparkline fetch failed for \(topHolding.symbol, privacy: .public): \(String(describing: error), privacy: .public)")
+                }
             }
         }
 
@@ -337,7 +356,10 @@ struct HomeView: View {
             if let first = points.first, let last = points.last {
                 cryptoTrendPositive = last.price >= first.price
             }
-        } catch {}
+        } catch {
+            // Sparkline is decorative — stay silent in UI, but log
+            Log.wallet.debug("ETH sparkline fetch failed: \(String(describing: error), privacy: .public)")
+        }
 
         if let address = walletManager?.activeAddress, walletManager?.hasWallets == true {
             do {
@@ -357,12 +379,13 @@ struct HomeView: View {
                 cryptoTotal = ethValue + tokenValue
             } catch {
                 // Keep cached value on failure — already loaded in loadCachedData
+                Log.wallet.error("Crypto portfolio refresh failed, keeping cached value: \(String(describing: error), privacy: .public)")
             }
         }
 
         // Refresh pad items
         if padService.isUnlocked {
-            padItems = (try? padService.getDecryptedItems()) ?? []
+            reloadPadItems()
         }
     }
 
@@ -377,9 +400,10 @@ struct HomeView: View {
             }
             await syncService.addItem(item)
             toastState.show("Item added")
-            padItems = (try? padService.getDecryptedItems()) ?? []
+            reloadPadItems()
         } catch {
-            toastState.showError("Failed to create item")
+            Log.pad.error("Failed to create item from clipboard: \(String(describing: error), privacy: .public)")
+            toastState.showError("Failed to create item: \(error.localizedDescription)")
         }
     }
 }

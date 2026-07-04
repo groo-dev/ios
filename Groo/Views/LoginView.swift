@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import os
 
 struct LoginView: View {
     @Environment(AuthService.self) private var authService
@@ -133,8 +134,20 @@ struct LoginView: View {
         Task {
             do {
                 try authService.login(patToken: patToken)
-            } catch {
+            } catch AuthError.invalidToken {
                 errorMessage = "Invalid token. Please check and try again."
+                isTokenFieldFocused = true
+            } catch let error as KeychainError {
+                if case .saveFailed(let status) = error {
+                    Log.store.error("Login: failed to save PAT token, OSStatus \(status, privacy: .public)")
+                } else {
+                    Log.store.error("Login: keychain error: \(String(describing: error), privacy: .public)")
+                }
+                errorMessage = "Couldn't save the token to the keychain."
+                isTokenFieldFocused = true
+            } catch {
+                Log.store.error("Login failed: \(String(describing: error), privacy: .public)")
+                errorMessage = error.localizedDescription
                 isTokenFieldFocused = true
             }
             isLoading = false

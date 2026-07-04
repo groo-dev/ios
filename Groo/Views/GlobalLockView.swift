@@ -8,6 +8,8 @@
 
 import SwiftUI
 import LocalAuthentication
+import Security
+import os
 
 struct GlobalLockView: View {
     let padService: PadService
@@ -163,7 +165,12 @@ struct GlobalLockView: View {
                         anyUnlocked = true
                     }
                 } catch {
-                    // Biometric cancelled or failed for Pad
+                    if isUserCancellation(error) {
+                        // User dismissed the biometric prompt — not an error
+                    } else {
+                        Log.pad.error("Biometric unlock failed for Pad: \(String(describing: error), privacy: .public)")
+                        errorMessage = "Couldn't unlock Pad with \(biometricName). Try again or use your password."
+                    }
                 }
             }
 
@@ -175,7 +182,12 @@ struct GlobalLockView: View {
                         anyUnlocked = true
                     }
                 } catch {
-                    // Biometric cancelled or failed for Pass
+                    if isUserCancellation(error) {
+                        // User dismissed the biometric prompt — not an error
+                    } else {
+                        Log.pass.error("Biometric unlock failed for Pass: \(String(describing: error), privacy: .public)")
+                        errorMessage = "Couldn't unlock Pass with \(biometricName). Try again or use your password."
+                    }
                 }
             }
 
@@ -188,6 +200,22 @@ struct GlobalLockView: View {
             }
             onUnlock()
         }
+    }
+
+    /// Distinguish the user dismissing the biometric prompt from a real failure.
+    private func isUserCancellation(_ error: Error) -> Bool {
+        if let laError = error as? LAError {
+            switch laError.code {
+            case .userCancel, .systemCancel, .appCancel:
+                return true
+            default:
+                return false
+            }
+        }
+        if case KeychainError.loadFailed(let status) = error {
+            return status == errSecUserCanceled
+        }
+        return false
     }
 }
 

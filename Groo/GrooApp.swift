@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import os
 
 @main
 struct GrooApp: App {
@@ -40,10 +41,12 @@ struct GrooApp: App {
             do {
                 let granted = try await pushService.requestAuthorization()
                 if granted {
-                    print("[GrooApp] Push notifications authorized")
+                    Log.push.debug("Push notifications authorized")
+                } else {
+                    Log.push.info("Push notification authorization declined by user")
                 }
             } catch {
-                print("[GrooApp] Push authorization failed: \(error)")
+                Log.push.error("Push authorization failed: \(String(describing: error), privacy: .public)")
             }
         }
     }

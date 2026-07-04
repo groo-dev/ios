@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Types
 
@@ -47,7 +48,15 @@ actor APIClient {
     // MARK: - PAT Token
 
     private func getPatToken() -> String? {
-        try? keychain.loadString(for: KeychainService.Key.patToken)
+        do {
+            return try keychain.loadString(for: KeychainService.Key.patToken)
+        } catch KeychainError.itemNotFound {
+            // Not signed in — expected, no logging
+            return nil
+        } catch {
+            Log.network.error("Failed to load PAT token from keychain: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     // MARK: - Request Building
@@ -86,7 +95,7 @@ actor APIClient {
     func post<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
         let bodyData = try encoder.encode(body)
         let request = try buildRequest(path: path, method: "POST", body: bodyData)
-        print("[API] POST \(request.url?.absoluteString ?? "nil")")
+        Log.network.debug("POST \(request.url?.absoluteString ?? "nil", privacy: .public)")
         return try await perform(request)
     }
 

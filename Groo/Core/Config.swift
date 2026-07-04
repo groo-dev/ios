@@ -7,8 +7,23 @@
 //
 
 import Foundation
+import os
 
 enum Config {
+    /// Resolve a UserDefaults URL override. A present-but-unparseable override
+    /// is a dev configuration error: log it and assert instead of silently
+    /// falling through to the default URL.
+    private static func overrideURL(forKey key: String) -> URL? {
+        guard let override = UserDefaults.standard.string(forKey: key) else {
+            return nil
+        }
+        guard let url = URL(string: override) else {
+            Log.network.error("Invalid \(key, privacy: .public) override \"\(override, privacy: .public)\"; falling back to default")
+            assertionFailure("Invalid \(key) override: \(override)")
+            return nil
+        }
+        return url
+    }
     // MARK: - App Group (for extension communication)
 
     static var appGroupIdentifier: String {
@@ -23,8 +38,7 @@ enum Config {
 
     /// Pad API base URL. Can be overridden via UserDefaults "padAPIBaseURL".
     static var padAPIBaseURL: URL {
-        if let override = UserDefaults.standard.string(forKey: "padAPIBaseURL"),
-           let url = URL(string: override) {
+        if let url = overrideURL(forKey: "padAPIBaseURL") {
             return url
         }
         #if DEBUG
@@ -37,8 +51,7 @@ enum Config {
 
     /// Accounts API base URL. Can be overridden via UserDefaults "accountsAPIBaseURL".
     static var accountsAPIBaseURL: URL {
-        if let override = UserDefaults.standard.string(forKey: "accountsAPIBaseURL"),
-           let url = URL(string: override) {
+        if let url = overrideURL(forKey: "accountsAPIBaseURL") {
             return url
         }
         #if DEBUG
@@ -50,8 +63,7 @@ enum Config {
 
     /// Pass API base URL. Can be overridden via UserDefaults "passAPIBaseURL".
     static var passAPIBaseURL: URL {
-        if let override = UserDefaults.standard.string(forKey: "passAPIBaseURL"),
-           let url = URL(string: override) {
+        if let url = overrideURL(forKey: "passAPIBaseURL") {
             return url
         }
         #if DEBUG
@@ -100,8 +112,7 @@ enum Config {
 
     /// Public Ethereum JSON-RPC endpoint. Override via UserDefaults "ethereumRPCURL".
     static var ethereumRPCURL: URL {
-        if let override = UserDefaults.standard.string(forKey: "ethereumRPCURL"),
-           let url = URL(string: override) {
+        if let url = overrideURL(forKey: "ethereumRPCURL") {
             return url
         }
         return URL(string: "https://eth.llamarpc.com")!
@@ -109,8 +120,7 @@ enum Config {
 
     /// Blockscout API for token discovery. Override via UserDefaults "blockscoutBaseURL".
     static var blockscoutBaseURL: URL {
-        if let override = UserDefaults.standard.string(forKey: "blockscoutBaseURL"),
-           let url = URL(string: override) {
+        if let url = overrideURL(forKey: "blockscoutBaseURL") {
             return url
         }
         return URL(string: "https://eth.blockscout.com/api")!

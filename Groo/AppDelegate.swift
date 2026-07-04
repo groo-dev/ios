@@ -8,6 +8,7 @@
 
 import UIKit
 import UserNotifications
+import os
 
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     var pushService: PushService?
@@ -29,7 +30,11 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
         Task {
-            try? await pushService?.registerDeviceToken(deviceToken)
+            do {
+                try await pushService?.registerDeviceToken(deviceToken)
+            } catch {
+                Log.push.fault("Failed to register device token: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 

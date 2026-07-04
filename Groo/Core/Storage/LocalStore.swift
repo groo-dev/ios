@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftData
+import os
 
 @MainActor
 final class LocalStore {
@@ -35,13 +36,27 @@ final class LocalStore {
         do {
             container = try ModelContainer(for: schema, configurations: [config])
         } catch {
-            // Schema migration failed — delete the store and retry
-            print("[LocalStore] Migration failed, recreating store: \(error)")
+            // Container creation failed (e.g. schema migration). Move the store
+            // aside so its data stays recoverable, then recreate a fresh one.
+            Log.store.fault("ModelContainer creation failed, moving store aside and recreating: \(String(describing: error), privacy: .public)")
+
             let url = config.url
+            let suffix = "corrupt-\(Int(Date().timeIntervalSince1970))"
             let files = [url, url.appendingPathExtension("wal"), url.appendingPathExtension("shm")]
             for file in files {
-                try? FileManager.default.removeItem(at: file)
+                guard FileManager.default.fileExists(atPath: file.path) else { continue }
+                let backup = file.appendingPathExtension(suffix)
+                do {
+                    try FileManager.default.moveItem(at: file, to: backup)
+                } catch {
+                    Log.store.fault("Failed to move store file aside (\(file.lastPathComponent, privacy: .public)): \(String(describing: error), privacy: .public); deleting instead")
+                    try? FileManager.default.removeItem(at: file)
+                }
             }
+
+            // Flag for UI to surface that local-only data was reset
+            UserDefaults.standard.set(true, forKey: "localStoreWasReset")
+
             do {
                 container = try ModelContainer(for: schema, configurations: [config])
             } catch {
@@ -54,31 +69,72 @@ final class LocalStore {
         container.mainContext
     }
 
+    // MARK: - Save/Fetch Helpers
+
+    /// Save the context, logging (but swallowing) any error.
+    private func saveContext(_ operation: String) {
+        do {
+            try context.save()
+        } catch {
+            Log.store.error("\(operation, privacy: .public) save failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Save the context, logging and rethrowing any error.
+    private func saveContextOrThrow(_ operation: String) throws {
+        do {
+            try context.save()
+        } catch {
+            Log.store.error("\(operation, privacy: .public) save failed: \(String(describing: error), privacy: .public)")
+            throw error
+        }
+    }
+
+    /// Fetch, logging any error before returning an empty result.
+    private func fetchOrEmpty<T: PersistentModel>(_ descriptor: FetchDescriptor<T>, _ operation: String) -> [T] {
+        do {
+            return try context.fetch(descriptor)
+        } catch {
+            Log.store.error("\(operation, privacy: .public) fetch failed: \(String(describing: error), privacy: .public)")
+            return []
+        }
+    }
+
+    /// Fetch the first match, logging any error before returning nil.
+    private func fetchFirst<T: PersistentModel>(_ descriptor: FetchDescriptor<T>, _ operation: String) -> T? {
+        do {
+            return try context.fetch(descriptor).first
+        } catch {
+            Log.store.error("\(operation, privacy: .public) fetch failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
     // MARK: - Pad Items
 
     func getAllPadItems() -> [LocalPadItem] {
         let descriptor = FetchDescriptor<LocalPadItem>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        return (try? context.fetch(descriptor)) ?? []
+        return fetchOrEmpty(descriptor, "getAllPadItems")
     }
 
     func getPadItem(id: String) -> LocalPadItem? {
         let descriptor = FetchDescriptor<LocalPadItem>(
             predicate: #Predicate { $0.id == id }
         )
-        return try? context.fetch(descriptor).first
+        return fetchFirst(descriptor, "getPadItem")
     }
 
     func savePadItem(_ item: LocalPadItem) {
         context.insert(item)
-        try? context.save()
+        saveContext("savePadItem")
     }
 
     func deletePadItem(id: String) {
         if let item = getPadItem(id: id) {
             context.delete(item)
-            try? context.save()
+            saveContext("deletePadItem")
         }
     }
 
@@ -92,16 +148,19 @@ final class LocalStore {
 
         // Insert new items (stored encrypted)
         for item in items {
-            context.insert(LocalPadItem(from: item))
+            if let local = LocalPadItem(from: item) {
+                context.insert(local)
+            }
         }
 
-        try? context.save()
+        saveContext("upsertPadItems")
     }
 
     /// Save a single encrypted item
     func savePadItem(from apiItem: PadListItem) {
-        context.insert(LocalPadItem(from: apiItem))
-        try? context.save()
+        guard let local = LocalPadItem(from: apiItem) else { return }
+        context.insert(local)
+        saveContext("savePadItem(from:)")
     }
 
     func clearAllPadItems() {
@@ -109,7 +168,7 @@ final class LocalStore {
         for item in items {
             context.delete(item)
         }
-        try? context.save()
+        saveContext("clearAllPadItems")
     }
 
     // MARK: - Scratchpads
@@ -118,25 +177,25 @@ final class LocalStore {
         let descriptor = FetchDescriptor<LocalScratchpad>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        return (try? context.fetch(descriptor)) ?? []
+        return fetchOrEmpty(descriptor, "getAllScratchpads")
     }
 
     func getScratchpad(id: String) -> LocalScratchpad? {
         let descriptor = FetchDescriptor<LocalScratchpad>(
             predicate: #Predicate { $0.id == id }
         )
-        return try? context.fetch(descriptor).first
+        return fetchFirst(descriptor, "getScratchpad")
     }
 
     func saveScratchpad(_ scratchpad: LocalScratchpad) {
         context.insert(scratchpad)
-        try? context.save()
+        saveContext("saveScratchpad")
     }
 
     func deleteScratchpad(id: String) {
         if let scratchpad = getScratchpad(id: id) {
             context.delete(scratchpad)
-            try? context.save()
+            saveContext("deleteScratchpad")
         }
     }
 
@@ -150,15 +209,17 @@ final class LocalStore {
 
         // Insert new scratchpads (stored encrypted)
         for (_, scratchpad) in scratchpads {
-            context.insert(LocalScratchpad(from: scratchpad))
+            if let local = LocalScratchpad(from: scratchpad) {
+                context.insert(local)
+            }
         }
 
-        try? context.save()
+        saveContext("upsertScratchpads")
     }
 
     /// Update a single scratchpad
     func updateScratchpad(_ scratchpad: LocalScratchpad) {
-        try? context.save()
+        saveContext("updateScratchpad")
     }
 
     func clearAllScratchpads() {
@@ -166,7 +227,7 @@ final class LocalStore {
         for scratchpad in scratchpads {
             context.delete(scratchpad)
         }
-        try? context.save()
+        saveContext("clearAllScratchpads")
     }
 
     // MARK: - Pending Operations
@@ -175,17 +236,17 @@ final class LocalStore {
         let descriptor = FetchDescriptor<PendingOperation>(
             sortBy: [SortDescriptor(\.createdAt, order: .forward)]
         )
-        return (try? context.fetch(descriptor)) ?? []
+        return fetchOrEmpty(descriptor, "getAllPendingOperations")
     }
 
-    func addPendingOperation(_ operation: PendingOperation) {
+    func addPendingOperation(_ operation: PendingOperation) throws {
         context.insert(operation)
-        try? context.save()
+        try saveContextOrThrow("addPendingOperation")
     }
 
-    func removePendingOperation(_ operation: PendingOperation) {
+    func removePendingOperation(_ operation: PendingOperation) throws {
         context.delete(operation)
-        try? context.save()
+        try saveContextOrThrow("removePendingOperation")
     }
 
     func clearPendingOperations() {
@@ -193,7 +254,7 @@ final class LocalStore {
         for op in operations {
             context.delete(op)
         }
-        try? context.save()
+        saveContext("clearPendingOperations")
     }
 
     // MARK: - Cached Portfolio
@@ -204,7 +265,7 @@ final class LocalStore {
             predicate: #Predicate { $0.walletAddress == lowered },
             sortBy: [SortDescriptor(\CachedTokenPrice.priceUSD, order: .reverse)]
         )
-        return (try? context.fetch(descriptor)) ?? []
+        return fetchOrEmpty(descriptor, "getCachedPortfolio")
     }
 
     func upsertCachedPortfolio(_ assets: [CryptoAsset], wallet: String) {
@@ -233,7 +294,7 @@ final class LocalStore {
             ))
         }
 
-        try? context.save()
+        saveContext("upsertCachedPortfolio")
     }
 
     func clearCachedPortfolio(wallet: String) {
@@ -241,47 +302,47 @@ final class LocalStore {
         for item in items {
             context.delete(item)
         }
-        try? context.save()
+        saveContext("clearCachedPortfolio")
     }
 
     // MARK: - Stock Holdings
 
     func getAllStockHoldings() -> [LocalStockHolding] {
         let descriptor = FetchDescriptor<LocalStockHolding>()
-        return (try? context.fetch(descriptor)) ?? []
+        return fetchOrEmpty(descriptor, "getAllStockHoldings")
     }
 
     func getStockHolding(symbol: String) -> LocalStockHolding? {
         let descriptor = FetchDescriptor<LocalStockHolding>(
             predicate: #Predicate { $0.symbol == symbol }
         )
-        return try? context.fetch(descriptor).first
+        return fetchFirst(descriptor, "getStockHolding")
     }
 
     func getStockTransaction(id: String) -> LocalStockTransaction? {
         let descriptor = FetchDescriptor<LocalStockTransaction>(
             predicate: #Predicate { $0.id == id }
         )
-        return try? context.fetch(descriptor).first
+        return fetchFirst(descriptor, "getStockTransaction")
     }
 
     func saveStockHolding(_ holding: LocalStockHolding) {
         context.insert(holding)
-        try? context.save()
+        saveContext("saveStockHolding")
     }
 
     func deleteStockHolding(_ holding: LocalStockHolding) {
         context.delete(holding)
-        try? context.save()
+        saveContext("deleteStockHolding")
     }
 
     func deleteStockTransaction(_ transaction: LocalStockTransaction) {
         context.delete(transaction)
-        try? context.save()
+        saveContext("deleteStockTransaction")
     }
 
     func saveStockChanges() {
-        try? context.save()
+        saveContext("saveStockChanges")
     }
 
     // MARK: - Azan Preferences
@@ -291,7 +352,7 @@ final class LocalStore {
         let descriptor = FetchDescriptor<LocalAzanPreferences>(
             predicate: #Predicate { $0.id == id }
         )
-        return try? context.fetch(descriptor).first
+        return fetchFirst(descriptor, "getAzanPreferences")
     }
 
     func saveAzanPreferences(_ prefs: LocalAzanPreferences) {
@@ -300,11 +361,11 @@ final class LocalStore {
             context.delete(existing)
         }
         context.insert(prefs)
-        try? context.save()
+        saveContext("saveAzanPreferences")
     }
 
     func saveAzanChanges() {
-        try? context.save()
+        saveContext("saveAzanChanges")
     }
 
     // MARK: - Prayer Logs
@@ -313,14 +374,14 @@ final class LocalStore {
         let descriptor = FetchDescriptor<PrayerLog>(
             predicate: #Predicate { $0.dateString == dateString }
         )
-        return (try? context.fetch(descriptor)) ?? []
+        return fetchOrEmpty(descriptor, "getPrayerLogs(forDateString:)")
     }
 
     func getPrayerLogs(from startDate: String, to endDate: String) -> [PrayerLog] {
         let descriptor = FetchDescriptor<PrayerLog>(
             predicate: #Predicate { $0.dateString >= startDate && $0.dateString <= endDate }
         )
-        return (try? context.fetch(descriptor)) ?? []
+        return fetchOrEmpty(descriptor, "getPrayerLogs(from:to:)")
     }
 
     func savePrayerLog(_ log: PrayerLog) {
@@ -329,11 +390,11 @@ final class LocalStore {
         let descriptor = FetchDescriptor<PrayerLog>(
             predicate: #Predicate { $0.id == logId }
         )
-        if let existing = try? context.fetch(descriptor).first {
+        if let existing = fetchFirst(descriptor, "savePrayerLog") {
             context.delete(existing)
         }
         context.insert(log)
-        try? context.save()
+        saveContext("savePrayerLog")
     }
 
     func deletePrayerLog(dateString: String, prayer: Prayer) {
@@ -341,9 +402,9 @@ final class LocalStore {
         let descriptor = FetchDescriptor<PrayerLog>(
             predicate: #Predicate { $0.id == logId }
         )
-        if let existing = try? context.fetch(descriptor).first {
+        if let existing = fetchFirst(descriptor, "deletePrayerLog") {
             context.delete(existing)
-            try? context.save()
+            saveContext("deletePrayerLog")
         }
     }
 }

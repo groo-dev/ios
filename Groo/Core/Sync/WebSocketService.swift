@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - WebSocket Message Types
 
@@ -62,15 +63,27 @@ class WebSocketService: NSObject {
     // MARK: - Connection Management
 
     func connect() {
+        // Fresh connect: reset the reconnect backoff
+        reconnectAttempts = 0
+        stopReconnectTimer()
+        openConnection()
+    }
+
+    private func openConnection() {
         guard !isConnected, webSocket == nil else { return }
         guard let url = webSocketURL else {
-            print("[WebSocket] Invalid URL")
+            Log.sync.error("WebSocket connect failed: invalid URL")
+            isConnected = false
             return
         }
 
         // Get auth token
-        guard let token = try? keychain.loadString(for: KeychainService.Key.patToken) else {
-            print("[WebSocket] No auth token")
+        let token: String
+        do {
+            token = try keychain.loadString(for: KeychainService.Key.patToken)
+        } catch {
+            Log.sync.error("WebSocket connect failed: couldn't load auth token: \(String(describing: error), privacy: .public)")
+            isConnected = false
             return
         }
 
@@ -84,7 +97,7 @@ class WebSocketService: NSObject {
         receiveMessage()
         startPingTimer()
 
-        print("[WebSocket] Connecting to \(url.absoluteString)")
+        Log.sync.debug("WebSocket connecting to \(url.absoluteString, privacy: .public)")
     }
 
     func disconnect() {
@@ -95,7 +108,7 @@ class WebSocketService: NSObject {
         session = nil
         isConnected = false
         reconnectAttempts = 0
-        print("[WebSocket] Disconnected")
+        Log.sync.debug("WebSocket disconnected")
     }
 
     // MARK: - Message Handling
@@ -108,7 +121,7 @@ class WebSocketService: NSObject {
                     self?.handleMessage(message)
                     self?.receiveMessage() // Continue listening
                 case .failure(let error):
-                    print("[WebSocket] Receive error: \(error.localizedDescription)")
+                    Log.sync.error("WebSocket receive error: \(String(describing: error), privacy: .public)")
                     self?.handleDisconnect(error: error)
                 }
             }
@@ -129,13 +142,19 @@ class WebSocketService: NSObject {
     }
 
     private func parseMessage(_ text: String) {
-        guard let data = text.data(using: .utf8),
-              let message = try? JSONDecoder().decode(WebSocketMessage.self, from: data) else {
-            print("[WebSocket] Failed to parse message: \(text)")
+        guard let data = text.data(using: .utf8) else {
+            Log.sync.error("WebSocket message is not valid UTF-8")
+            return
+        }
+        let message: WebSocketMessage
+        do {
+            message = try JSONDecoder().decode(WebSocketMessage.self, from: data)
+        } catch {
+            Log.sync.error("Failed to parse WebSocket message: \(String(describing: error), privacy: .public)")
             return
         }
 
-        print("[WebSocket] Received: \(message.type.rawValue)")
+        Log.sync.debug("WebSocket received: \(message.type.rawValue, privacy: .public)")
 
         switch message.type {
         case .scratchpadUpdated:
@@ -189,7 +208,7 @@ class WebSocketService: NSObject {
 
         webSocket?.send(.string(text)) { error in
             if let error = error {
-                print("[WebSocket] Send error: \(error.localizedDescription)")
+                Log.sync.error("WebSocket send error: \(String(describing: error), privacy: .public)")
             }
         }
     }
@@ -207,7 +226,7 @@ class WebSocketService: NSObject {
         if reconnectAttempts < maxReconnectAttempts {
             scheduleReconnect()
         } else {
-            print("[WebSocket] Max reconnect attempts reached")
+            Log.sync.error("WebSocket gave up after \(self.maxReconnectAttempts) reconnect attempts")
         }
     }
 
@@ -215,11 +234,11 @@ class WebSocketService: NSObject {
         reconnectAttempts += 1
         let delay = min(pow(2.0, Double(reconnectAttempts)), 30) // Exponential backoff, max 30s
 
-        print("[WebSocket] Reconnecting in \(delay)s (attempt \(reconnectAttempts)/\(maxReconnectAttempts))")
+        Log.sync.debug("WebSocket reconnecting in \(delay)s (attempt \(self.reconnectAttempts)/\(self.maxReconnectAttempts))")
 
         reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             Task { @MainActor in
-                self?.connect()
+                self?.openConnection()
             }
         }
     }
@@ -237,7 +256,7 @@ extension WebSocketService: URLSessionWebSocketDelegate {
         Task { @MainActor in
             isConnected = true
             reconnectAttempts = 0
-            print("[WebSocket] Connected")
+            Log.sync.debug("WebSocket connected")
             onConnected?()
         }
     }
@@ -245,7 +264,7 @@ extension WebSocketService: URLSessionWebSocketDelegate {
     nonisolated func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
         Task { @MainActor in
             let reasonString = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "unknown"
-            print("[WebSocket] Closed: \(closeCode.rawValue) - \(reasonString)")
+            Log.sync.debug("WebSocket closed: \(closeCode.rawValue) - \(reasonString, privacy: .public)")
             handleDisconnect(error: nil)
         }
     }

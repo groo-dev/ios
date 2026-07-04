@@ -8,6 +8,7 @@
 import Foundation
 import Security
 import LocalAuthentication
+import os
 
 enum KeychainError: Error {
     case encodingFailed
@@ -99,7 +100,16 @@ struct KeychainService {
         do {
             _ = try load(for: key)
             return true
+        } catch KeychainError.itemNotFound {
+            return false
         } catch {
+            // A keychain fault is not "absent" — log it, but callers still
+            // treat the item as missing.
+            if case KeychainError.loadFailed(let status) = error {
+                Log.store.error("Keychain exists(for: \(key, privacy: .public)) failed with OSStatus \(status, privacy: .public)")
+            } else {
+                Log.store.error("Keychain exists(for: \(key, privacy: .public)) failed: \(String(describing: error), privacy: .public)")
+            }
             return false
         }
     }

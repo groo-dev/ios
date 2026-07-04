@@ -43,8 +43,12 @@ struct CryptoService {
     /// Generate a random 32-byte salt for key derivation
     func generateSalt() -> Data {
         var salt = Data(count: saltLength)
-        salt.withUnsafeMutableBytes { buffer in
-            _ = SecRandomCopyBytes(kSecRandomDefault, saltLength, buffer.baseAddress!)
+        let status = salt.withUnsafeMutableBytes { buffer in
+            SecRandomCopyBytes(kSecRandomDefault, saltLength, buffer.baseAddress!)
+        }
+        guard status == errSecSuccess else {
+            // An RNG failure must never silently produce a zero salt
+            fatalError("SecRandomCopyBytes failed: \(status)")
         }
         return salt
     }
