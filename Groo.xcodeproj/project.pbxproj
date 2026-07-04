@@ -25,6 +25,8 @@
 		1B283A122F1B9700008D348D /* SharedTotp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B283A102F1B9700008D348D /* SharedTotp.swift */; };
 		1B283A142F1B9700008D348D /* SharedPendingItemsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B283A132F1B9700008D348D /* SharedPendingItemsStore.swift */; };
 		1B283A152F1B9700008D348D /* SharedPendingItemsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B283A132F1B9700008D348D /* SharedPendingItemsStore.swift */; };
+		1B283A172F1B9800008D348D /* SharedLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B283A162F1B9800008D348D /* SharedLog.swift */; };
+		1B283A182F1B9800008D348D /* SharedLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B283A162F1B9800008D348D /* SharedLog.swift */; };
 		1B2850C42F14012D0046247D /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850BA2F14012D0046247D /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B2850D12F1401620046247D /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1B2850D02F1401620046247D /* WidgetKit.framework */; };
 		1B2850D32F1401620046247D /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1B2850D22F1401620046247D /* SwiftUI.framework */; };
@@ -94,6 +96,7 @@
 		1B2839F72F1B9597008D348D /* SharedPasskeyCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPasskeyCrypto.swift; sourceTree = "<group>"; };
 		1B283A102F1B9700008D348D /* SharedTotp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedTotp.swift; sourceTree = "<group>"; };
 		1B283A132F1B9700008D348D /* SharedPendingItemsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPendingItemsStore.swift; sourceTree = "<group>"; };
+		1B283A162F1B9800008D348D /* SharedLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLog.swift; sourceTree = "<group>"; };
 		1B2850A72F13FF540046247D /* Groo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Groo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B2850BA2F14012D0046247D /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B2850CE2F1401620046247D /* WidgetExtensionExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WidgetExtensionExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -236,6 +239,7 @@
 				1B2839E82F1B83BC008D348D /* SharedCrypto.swift */,
 				1B2839E92F1B83BC008D348D /* SharedKeychain.swift */,
 				1B2839EA2F1B83BC008D348D /* SharedPassModels.swift */,
+				1B283A162F1B9800008D348D /* SharedLog.swift */,
 				1B283A132F1B9700008D348D /* SharedPendingItemsStore.swift */,
 				1B283A102F1B9700008D348D /* SharedTotp.swift */,
 				1B2839EB2F1B83BC008D348D /* SharedVaultStore.swift */,
@@ -501,6 +505,7 @@
 				1B2839F32F1B83BC008D348D /* SharedConfig.swift in Sources */,
 				1B2839F42F1B83BC008D348D /* SharedKeychain.swift in Sources */,
 				1B2839F92F1B9597008D348D /* SharedPasskeyCrypto.swift in Sources */,
+				1B283A182F1B9800008D348D /* SharedLog.swift in Sources */,
 				1B283A122F1B9700008D348D /* SharedTotp.swift in Sources */,
 				1B283A152F1B9700008D348D /* SharedPendingItemsStore.swift in Sources */,
 				1B2839F52F1B83BC008D348D /* SharedCrypto.swift in Sources */,
@@ -513,6 +518,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1B2839F82F1B9597008D348D /* SharedPasskeyCrypto.swift in Sources */,
+				1B283A172F1B9800008D348D /* SharedLog.swift in Sources */,
 				1B283A112F1B9700008D348D /* SharedTotp.swift in Sources */,
 				1B283A142F1B9700008D348D /* SharedPendingItemsStore.swift in Sources */,
 				1B2839ED2F1B83BC008D348D /* SharedPassModels.swift in Sources */,
