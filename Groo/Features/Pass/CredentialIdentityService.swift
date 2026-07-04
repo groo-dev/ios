@@ -57,13 +57,16 @@ class CredentialIdentityService {
         return passwordItems.flatMap { item -> [ASPasswordCredentialIdentity] in
             // Create an identity for each URL
             return item.urls.compactMap { urlString -> ASPasswordCredentialIdentity? in
-                guard let url = URL(string: urlString),
+                // Saved URLs may be bare domains like "example.com" — URL(string:)
+                // has no host for those, so ensure a scheme before parsing
+                let normalized = urlString.hasPrefix("http") ? urlString : "https://\(urlString)"
+                guard let url = URL(string: normalized),
                       let host = url.host else {
                     return nil
                 }
 
                 let serviceIdentifier = ASCredentialServiceIdentifier(
-                    identifier: host,
+                    identifier: host.lowercased(),
                     type: .domain
                 )
 

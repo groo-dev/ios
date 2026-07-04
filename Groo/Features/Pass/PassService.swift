@@ -164,6 +164,9 @@ class PassService {
         )
         try? await vaultStore.saveVault(encryptedData: encryptedData, metadata: metadata)
 
+        // Register AutoFill QuickType suggestions
+        await credentialService.updateCredentialIdentities(from: decryptedVault.items)
+
         return true
     }
 
@@ -201,6 +204,9 @@ class PassService {
                     vault = decryptedVault
                     serverVersion = cached.metadata.version
                     hasVaultSetup = true
+
+                    // Register AutoFill QuickType suggestions even if background sync fails
+                    await credentialService.updateCredentialIdentities(from: decryptedVault.items)
 
                     // Sync in background
                     Task {
@@ -242,6 +248,9 @@ class PassService {
             lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
         )
         try? await vaultStore.saveVault(encryptedData: encryptedData, metadata: metadata)
+
+        // Register AutoFill QuickType suggestions
+        await credentialService.updateCredentialIdentities(from: decryptedVault.items)
 
         return true
     }
