@@ -154,12 +154,16 @@ class AutoFillService: ObservableObject {
 
             return searchDomains.contains { searchDomain in
                 credentialDomains.contains { credDomain in
-                    // Match if either contains the other (handles subdomains)
-                    credDomain.contains(searchDomain) ||
-                    searchDomain.contains(credDomain)
+                    Self.domainsMatch(credDomain, searchDomain)
                 }
             }
         }
+    }
+
+    /// Exact host or subdomain match: "accounts.google.com" matches a saved
+    /// "google.com" (and vice versa), but "app.com" never matches "myapp.com"
+    static func domainsMatch(_ a: String, _ b: String) -> Bool {
+        a == b || a.hasSuffix(".\(b)") || b.hasSuffix(".\(a)")
     }
 
     /// Search credentials by query string
@@ -186,10 +190,14 @@ class AutoFillService: ObservableObject {
         return passkeys.first { $0.credentialId == credentialIdBase64URL }
     }
 
-    /// Filter passkeys by relying party ID
-    func filteredPasskeys(for rpId: String?) -> [SharedPassPasskeyItem] {
-        guard let rpId = rpId else { return passkeys }
-        return passkeys.filter { $0.rpId == rpId }
+    /// Filter passkeys by relying party ID and the request's allowed credential list
+    func filteredPasskeys(for rpId: String?, allowedCredentialIds: [Data] = []) -> [SharedPassPasskeyItem] {
+        guard let rpId = rpId else { return [] }
+
+        let allowed = Set(allowedCredentialIds.map { $0.base64URLEncodedString })
+        return passkeys.filter { passkey in
+            passkey.rpId == rpId && (allowed.isEmpty || allowed.contains(passkey.credentialId))
+        }
     }
 
     /// Search passkeys by query string

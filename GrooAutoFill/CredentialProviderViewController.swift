@@ -62,11 +62,20 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
         return nil
     }
 
+    private var currentAllowedCredentialIds: [Data] {
+        if #available(iOS 17.0, *),
+           let params = passkeyRequestParameters as? ASPasskeyCredentialRequestParameters {
+            return params.allowedCredentials
+        }
+        return []
+    }
+
     private func makeCredentialListView(serviceIdentifiers: [ASCredentialServiceIdentifier]) -> AutoFillCredentialListView {
         AutoFillCredentialListView(
             service: service,
             serviceIdentifiers: serviceIdentifiers,
             rpId: currentRpId,
+            allowedCredentialIds: currentAllowedCredentialIds,
             onSelect: { [weak self] credential in
                 self?.selectCredential(credential)
             },
@@ -191,8 +200,8 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
                 try await service.unlock()
 
                 // Find the passkey by credential ID
-                let passkeyIdentity = request.credentialIdentity as! ASPasskeyCredentialIdentity
-                guard let passkey = service.findPasskey(credentialId: passkeyIdentity.credentialID) else {
+                guard let passkeyIdentity = request.credentialIdentity as? ASPasskeyCredentialIdentity,
+                      let passkey = service.findPasskey(credentialId: passkeyIdentity.credentialID) else {
                     extensionContext.cancelRequest(
                         withError: NSError(
                             domain: ASExtensionErrorDomain,
@@ -202,10 +211,11 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
                     return
                 }
 
-                // Build authenticator data with incremented sign count
+                // Synced credentials must report a constant sign count of 0 —
+                // an unpersisted increment trips relying parties' clone detection
                 let authenticatorData = SharedPasskeyCrypto.buildAuthenticatorData(
                     rpId: passkey.rpId,
-                    signCount: passkey.signCount + 1
+                    signCount: 0
                 )
 
                 // Sign the assertion
@@ -268,10 +278,11 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
 
         Task {
             do {
-                // Build authenticator data with incremented sign count
+                // Synced credentials must report a constant sign count of 0 —
+                // an unpersisted increment trips relying parties' clone detection
                 let authenticatorData = SharedPasskeyCrypto.buildAuthenticatorData(
                     rpId: passkey.rpId,
-                    signCount: passkey.signCount + 1
+                    signCount: 0
                 )
 
                 // Sign the assertion

@@ -12,29 +12,62 @@ struct AutoFillCredentialListView: View {
     @ObservedObject var service: AutoFillService
     let serviceIdentifiers: [ASCredentialServiceIdentifier]
     let rpId: String?
+    var allowedCredentialIds: [Data] = []
     let onSelect: (SharedPassPasswordItem) -> Void
-    let onSelectPasskey: ((SharedPassPasskeyItem) -> Void)?
+    var onSelectPasskey: ((SharedPassPasskeyItem) -> Void)? = nil
     let onCancel: () -> Void
 
-    @State private var searchText: String
+    @State private var searchText = ""
 
-    init(
-        service: AutoFillService,
-        serviceIdentifiers: [ASCredentialServiceIdentifier],
-        rpId: String? = nil,
-        onSelect: @escaping (SharedPassPasswordItem) -> Void,
-        onSelectPasskey: ((SharedPassPasskeyItem) -> Void)? = nil,
-        onCancel: @escaping () -> Void
-    ) {
-        self.service = service
-        self.serviceIdentifiers = serviceIdentifiers
-        self.rpId = rpId
-        self.onSelect = onSelect
-        self.onSelectPasskey = onSelectPasskey
-        self.onCancel = onCancel
+    // MARK: - Derived Data
 
-        // Pre-fill search bar with domain (like LastPass)
-        let domain = serviceIdentifiers.first.flatMap { identifier -> String? in
+    /// Passkeys can only be returned for passkey requests
+    private var isPasskeyRequest: Bool { rpId != nil }
+
+    private var trimmedQuery: String {
+        searchText.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var isSearching: Bool { !trimmedQuery.isEmpty }
+
+    /// Passkeys usable for the current request (rpId + allowedCredentials match)
+    private var matchingPasskeys: [SharedPassPasskeyItem] {
+        service.filteredPasskeys(for: rpId, allowedCredentialIds: allowedCredentialIds)
+    }
+
+    /// Passwords matching the current site's domain
+    private var suggestedCredentials: [SharedPassPasswordItem] {
+        service.filteredCredentials(for: serviceIdentifiers)
+    }
+
+    private var hasSuggestions: Bool {
+        !matchingPasskeys.isEmpty || !suggestedCredentials.isEmpty
+    }
+
+    /// Everything not already shown in Suggested
+    private var otherCredentials: [SharedPassPasswordItem] {
+        let suggestedIds = Set(suggestedCredentials.map(\.id))
+        return service.credentials.filter { !suggestedIds.contains($0.id) }
+    }
+
+    private var searchResultCredentials: [SharedPassPasswordItem] {
+        service.searchCredentials(query: trimmedQuery)
+    }
+
+    private var searchResultPasskeys: [SharedPassPasskeyItem] {
+        guard isPasskeyRequest else { return [] }
+        let query = trimmedQuery.lowercased()
+        return matchingPasskeys.filter { passkey in
+            passkey.name.lowercased().contains(query) ||
+            passkey.userName.lowercased().contains(query) ||
+            passkey.rpId.lowercased().contains(query)
+        }
+    }
+
+    /// Host of the site being logged into, for the Suggested section header
+    private var siteName: String? {
+        if let rpId { return rpId }
+        return serviceIdentifiers.first.flatMap { identifier in
             switch identifier.type {
             case .domain:
                 return identifier.identifier
@@ -44,27 +77,10 @@ struct AutoFillCredentialListView: View {
                 return nil
             }
         }
-        _searchText = State(initialValue: domain ?? "")
     }
 
-    private var displayedCredentials: [SharedPassPasswordItem] {
-        if searchText.isEmpty {
-            return service.filteredCredentials(for: serviceIdentifiers)
-        } else {
-            return service.searchCredentials(query: searchText)
-        }
-    }
-
-    private var displayedPasskeys: [SharedPassPasskeyItem] {
-        if searchText.isEmpty {
-            return service.filteredPasskeys(for: rpId)
-        } else {
-            return service.searchPasskeys(query: searchText)
-        }
-    }
-
-    private var hasAnyCredentials: Bool {
-        !displayedCredentials.isEmpty || !displayedPasskeys.isEmpty
+    private var vaultIsEmpty: Bool {
+        service.credentials.isEmpty && matchingPasskeys.isEmpty
     }
 
     var body: some View {
@@ -74,8 +90,6 @@ struct AutoFillCredentialListView: View {
                     loadingView
                 } else if !service.isUnlocked {
                     unlockView
-                } else if !hasAnyCredentials {
-                    emptyView
                 } else {
                     credentialsList
                 }
@@ -111,11 +125,11 @@ struct AutoFillCredentialListView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
 
-            Text("Vault Locked")
+            Text("Groo Pass Is Locked")
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Authenticate to access your passwords")
+            Text("Unlock to fill your passwords and passkeys")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
@@ -123,19 +137,23 @@ struct AutoFillCredentialListView: View {
                 Text(error)
                     .foregroundStyle(.red)
                     .font(.footnote)
+                    .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
 
             Button {
+                service.error = nil
                 Task {
                     do {
                         try await service.unlock()
+                    } catch AutoFillError.vaultNotSetup {
+                        service.error = AutoFillError.vaultNotSetup.localizedDescription
                     } catch {
-                        service.error = error.localizedDescription
+                        service.error = "Couldn't unlock. Try again."
                     }
                 }
             } label: {
-                Label("Unlock with Face ID", systemImage: "faceid")
+                Label("Unlock", systemImage: "faceid")
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.accentColor)
@@ -147,61 +165,121 @@ struct AutoFillCredentialListView: View {
         .padding()
     }
 
-    // MARK: - Empty View
-
-    private var emptyView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "key.slash")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-
-            Text("No Credentials Found")
-                .font(.title3)
-                .fontWeight(.medium)
-
-            if !serviceIdentifiers.isEmpty {
-                Text("No saved passwords or passkeys for this website")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .padding()
-    }
-
     // MARK: - Credentials List
 
     private var credentialsList: some View {
         List {
-            // Passkeys section
-            if !displayedPasskeys.isEmpty {
-                Section("Passkeys") {
-                    ForEach(displayedPasskeys) { passkey in
-                        Button {
-                            onSelectPasskey?(passkey)
-                        } label: {
-                            PasskeyRow(passkey: passkey)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+            if isSearching {
+                searchResultSections
+            } else {
+                suggestedSection
+                allItemsSection
             }
+        }
+        .listStyle(.insetGrouped)
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search all items"
+        )
+        .overlay {
+            if vaultIsEmpty {
+                ContentUnavailableView(
+                    "No Items",
+                    systemImage: "key.slash",
+                    description: Text("Add passwords in the Groo app to fill them here")
+                )
+            } else if isSearching && searchResultCredentials.isEmpty && searchResultPasskeys.isEmpty {
+                ContentUnavailableView.search(text: trimmedQuery)
+            }
+        }
+    }
 
-            // Passwords section
-            if !displayedCredentials.isEmpty {
-                Section(displayedPasskeys.isEmpty ? "" : "Passwords") {
-                    ForEach(displayedCredentials) { credential in
-                        Button {
-                            onSelect(credential)
-                        } label: {
-                            CredentialRow(credential: credential)
-                        }
-                        .buttonStyle(.plain)
-                    }
+    @ViewBuilder
+    private var searchResultSections: some View {
+        if !searchResultPasskeys.isEmpty {
+            Section("Passkeys") {
+                passkeyRows(searchResultPasskeys)
+            }
+        }
+        if !searchResultCredentials.isEmpty {
+            Section("Passwords") {
+                credentialRows(searchResultCredentials)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var suggestedSection: some View {
+        if hasSuggestions {
+            Section {
+                passkeyRows(matchingPasskeys)
+                credentialRows(suggestedCredentials)
+            } header: {
+                if let siteName {
+                    Text("Suggested for \(siteName)")
+                } else {
+                    Text("Suggested")
                 }
             }
         }
-        .listStyle(.plain)
-        .searchable(text: $searchText, prompt: "Search credentials")
+    }
+
+    @ViewBuilder
+    private var allItemsSection: some View {
+        if !otherCredentials.isEmpty {
+            Section(hasSuggestions ? "All Items" : "Passwords") {
+                credentialRows(otherCredentials)
+            }
+        }
+    }
+
+    private func credentialRows(_ credentials: [SharedPassPasswordItem]) -> some View {
+        ForEach(credentials) { credential in
+            Button {
+                onSelect(credential)
+            } label: {
+                CredentialRow(credential: credential)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func passkeyRows(_ passkeys: [SharedPassPasskeyItem]) -> some View {
+        ForEach(passkeys) { passkey in
+            Button {
+                onSelectPasskey?(passkey)
+            } label: {
+                PasskeyRow(passkey: passkey)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+// MARK: - Monogram Icon
+
+struct MonogramIcon: View {
+    let name: String
+
+    private static let palette: [Color] = [
+        .blue, .indigo, .purple, .pink, .red, .orange, .teal, .green,
+    ]
+
+    private var color: Color {
+        let hash = name.unicodeScalars.reduce(5381) { ($0 << 5) &+ $0 &+ Int($1.value) }
+        return Self.palette[abs(hash) % Self.palette.count]
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(color.opacity(0.2))
+            Text(name.first.map(String.init)?.uppercased() ?? "•")
+                .font(.headline)
+                .foregroundStyle(color)
+        }
+        .frame(width: 36, height: 36)
     }
 }
 
@@ -212,30 +290,24 @@ struct CredentialRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Icon
-            Image(systemName: "key.fill")
-                .font(.title3)
-                .foregroundStyle(.blue)
-                .frame(width: 32)
+            MonogramIcon(name: credential.name)
 
-            // Info
             VStack(alignment: .leading, spacing: 2) {
                 Text(credential.name)
                     .font(.body)
                     .fontWeight(.medium)
+                    .lineLimit(1)
 
                 Text(credential.username)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
 
@@ -246,29 +318,28 @@ struct PasskeyRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Icon
-            Image(systemName: "person.badge.key.fill")
-                .font(.title3)
-                .foregroundStyle(.purple)
-                .frame(width: 32)
+            MonogramIcon(name: passkey.name)
 
-            // Info
             VStack(alignment: .leading, spacing: 2) {
                 Text(passkey.name)
                     .font(.body)
                     .fontWeight(.medium)
+                    .lineLimit(1)
 
                 Text(passkey.userName)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer()
 
-            Image(systemName: "chevron.right")
+            Label("Passkey", systemImage: "person.badge.key.fill")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.purple)
+                .labelStyle(.titleAndIcon)
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
