@@ -10,6 +10,7 @@ import AuthenticationServices
 import CryptoKit
 import SwiftUI
 import UniformTypeIdentifiers
+import os
 
 class CredentialProviderViewController: ASCredentialProviderViewController {
 
@@ -126,7 +127,8 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
                 do {
                     try await service.unlock()
                 } catch {
-                    // User will need to tap unlock button
+                    // User can still tap the unlock button; keep the cause visible
+                    Log.autofill.error("Auto-unlock failed: \(String(describing: error), privacy: .public)")
                 }
             }
         }
@@ -147,7 +149,8 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
                 do {
                     try await service.unlock()
                 } catch {
-                    // User will need to tap unlock button
+                    // User can still tap the unlock button; keep the cause visible
+                    Log.autofill.error("Auto-unlock failed: \(String(describing: error), privacy: .public)")
                 }
             }
         }
@@ -189,11 +192,14 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
                 if let credential = service.credentials.first(where: { $0.id == credentialIdentity.recordIdentifier }) {
                     selectCredential(credential)
                 } else {
-                    // Credential not found, show the list
+                    Log.autofill.error("Credential \(credentialIdentity.recordIdentifier ?? "?", privacy: .public) not found in vault; showing list")
                     updateServiceIdentifiers([credentialIdentity.serviceIdentifier])
                 }
             } catch {
-                // Show unlock UI
+                // Leave the user on the unlock screen with the actual cause
+                Log.autofill.error("Unlock for QuickType request failed: \(String(describing: error), privacy: .public)")
+                service.error = error.localizedDescription
+                updateServiceIdentifiers([credentialIdentity.serviceIdentifier])
             }
         }
     }
@@ -299,7 +305,15 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
     private func completePasskeyRegistration() {
         guard let request = pendingRegistrationRequest as? ASPasskeyCredentialRequest,
               let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity else {
-            cancel()
+            // Internal state bug — report as failure, not as the user backing out
+            Log.autofill.error("Registration confirmed but pending request is missing/mistyped")
+            extensionContext.cancelRequest(
+                withError: NSError(
+                    domain: ASExtensionErrorDomain,
+                    code: ASExtensionError.failed.rawValue,
+                    userInfo: [NSLocalizedDescriptionKey: "Registration request lost"]
+                )
+            )
             return
         }
 
@@ -410,6 +424,16 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
     private func selectPasskey(_ passkey: SharedPassPasskeyItem) {
         guard #available(iOS 17.0, *),
               let params = passkeyRequestParameters as? ASPasskeyCredentialRequestParameters else {
+            // Passkey rows are only shown for passkey requests; if this is ever
+            // hit, fail loudly instead of a dead tap
+            Log.autofill.error("Passkey selected without passkey request parameters")
+            extensionContext.cancelRequest(
+                withError: NSError(
+                    domain: ASExtensionErrorDomain,
+                    code: ASExtensionError.failed.rawValue,
+                    userInfo: [NSLocalizedDescriptionKey: "No passkey request in progress"]
+                )
+            )
             return
         }
 

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct PadListView: View {
     let padService: PadService
@@ -109,7 +110,21 @@ struct PadListView: View {
     }
 
     func loadItems(animated: Bool = false) {
-        let newItems = (try? padService.getDecryptedItems()) ?? []
+        let newItems: [DecryptedListItem]
+        do {
+            newItems = try padService.getDecryptedItems()
+        } catch {
+            // Keep existing items so a load failure isn't mistaken for an empty pad
+            Log.pad.error("Failed to load items: \(String(describing: error))")
+            toastState.showError("Couldn't load items. Please try again.")
+            return
+        }
+
+        if padService.decryptFailureCount > 0 {
+            let count = padService.decryptFailureCount
+            toastState.showError("\(count) item\(count == 1 ? "" : "s") couldn't be decrypted")
+        }
+
         if animated {
             withAnimation(.easeInOut(duration: 0.25)) {
                 items = newItems

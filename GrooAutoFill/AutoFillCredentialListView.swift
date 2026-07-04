@@ -146,10 +146,10 @@ struct AutoFillCredentialListView: View {
                 Task {
                     do {
                         try await service.unlock()
-                    } catch AutoFillError.vaultNotSetup {
-                        service.error = AutoFillError.vaultNotSetup.localizedDescription
                     } catch {
-                        service.error = "Couldn't unlock. Try again."
+                        // Show the real cause — a generic message makes keychain,
+                        // decryption, and cancelled-Face-ID failures identical
+                        service.error = error.localizedDescription
                     }
                 }
             } label: {

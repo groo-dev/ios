@@ -5,6 +5,8 @@
 //  Manage wallets: view all, switch active, rename, delete.
 //
 
+import os
+import Security
 import SwiftUI
 
 struct WalletListView: View {
@@ -33,7 +35,16 @@ struct WalletListView: View {
                             .foregroundStyle(.secondary)
                         Spacer()
                         Button("Unlock") {
-                            Task { try? await passService.unlockWithBiometric() }
+                            Task {
+                                do {
+                                    _ = try await passService.unlockWithBiometric()
+                                } catch KeychainError.loadFailed(errSecUserCanceled) {
+                                    // User cancelled the biometric prompt — nothing to surface
+                                } catch {
+                                    Log.wallet.error("Biometric unlock failed: \(String(describing: error))")
+                                    self.error = error.localizedDescription
+                                }
+                            }
                         }
                         .buttonStyle(.bordered)
                     }
@@ -127,8 +138,13 @@ struct WalletListView: View {
             Button("Save") {
                 if let wallet = editingWallet, !editName.isEmpty {
                     Task {
-                        try? await walletManager.renameWallet(address: wallet.address, newName: editName)
-                        loadWallets()
+                        do {
+                            try await walletManager.renameWallet(address: wallet.address, newName: editName)
+                            loadWallets()
+                        } catch {
+                            Log.wallet.error("Rename wallet failed for \(wallet.address, privacy: .public): \(String(describing: error))")
+                            self.error = error.localizedDescription
+                        }
                     }
                 }
                 editingWallet = nil

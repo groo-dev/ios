@@ -11,6 +11,7 @@ import CryptoKit
 import Foundation
 import LocalAuthentication
 import UniformTypeIdentifiers
+import os
 
 // MARK: - Errors
 
@@ -36,6 +37,9 @@ class PadService {
     // Encryption key (derived from password, in-memory only)
     private var encryptionKey: SymmetricKey?
     private(set) var hasEncryptionSetup = false
+
+    // Number of items that failed to decrypt during the last getDecryptedItems() call
+    private(set) var decryptFailureCount = 0
 
     init(
         api: APIClient,
@@ -113,13 +117,22 @@ class PadService {
     /// Lock and clear stored key (full sign out)
     func lockAndClearKey() {
         encryptionKey = nil
-        try? keychain.deleteBiometricProtected(for: KeychainService.Key.padEncryptionKey)
+        do {
+            try keychain.deleteBiometricProtected(for: KeychainService.Key.padEncryptionKey)
+        } catch {
+            Log.pad.fault("Failed to delete biometric-protected key on lock: \(String(describing: error))")
+        }
     }
 
     /// Store encryption key in Keychain with biometric protection
     private func storeKeyInKeychain(_ key: SymmetricKey) {
         let keyData = key.withUnsafeBytes { Data($0) }
-        try? keychain.saveBiometricProtected(keyData, for: KeychainService.Key.padEncryptionKey)
+        do {
+            try keychain.saveBiometricProtected(keyData, for: KeychainService.Key.padEncryptionKey)
+        } catch {
+            // Biometric unlock will be unavailable until the next password unlock
+            Log.pad.error("Failed to store encryption key in Keychain: \(String(describing: error))")
+        }
     }
 
     var isUnlocked: Bool {
@@ -136,13 +149,18 @@ class PadService {
 
         let encryptedItems = store.getAllPadItems()
         var decrypted: [DecryptedListItem] = []
+        var failedCount = 0
 
         for item in encryptedItems {
-            if let decryptedItem = try? decryptItem(item, using: key) {
-                decrypted.append(decryptedItem)
+            do {
+                decrypted.append(try decryptItem(item, using: key))
+            } catch {
+                failedCount += 1
+                Log.pad.error("Failed to decrypt item \(item.id): \(String(describing: error))")
             }
         }
 
+        decryptFailureCount = failedCount
         return decrypted
     }
 
@@ -283,19 +301,28 @@ class PadService {
         // Handle file URLs (from Files app)
         if let urls = pasteboard.urls {
             for url in urls {
-                guard url.startAccessingSecurityScopedResource() else { continue }
+                guard url.startAccessingSecurityScopedResource() else {
+                    Log.pad.error("Skipped pasted file (security-scoped access denied): \(url.lastPathComponent)")
+                    continue
+                }
                 defer { url.stopAccessingSecurityScopedResource() }
 
-                if let data = try? Data(contentsOf: url) {
-                    let fileName = url.lastPathComponent
-                    let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-                    let attachment = try await uploadFile(
-                        name: fileName,
-                        type: mimeType,
-                        data: data
-                    )
-                    files.append(attachment)
+                let data: Data
+                do {
+                    data = try Data(contentsOf: url)
+                } catch {
+                    Log.pad.error("Failed to read pasted file \(url.lastPathComponent): \(String(describing: error))")
+                    continue
                 }
+
+                let fileName = url.lastPathComponent
+                let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+                let attachment = try await uploadFile(
+                    name: fileName,
+                    type: mimeType,
+                    data: data
+                )
+                files.append(attachment)
             }
         }
 

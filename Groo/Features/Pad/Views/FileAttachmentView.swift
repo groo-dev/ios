@@ -7,6 +7,7 @@
 
 import SwiftUI
 import WebKit
+import os
 
 // MARK: - File Icon Helper
 
@@ -100,6 +101,17 @@ struct FileAttachmentChip: View {
                 )
             }
         }
+        .alert(
+            "Download Failed",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     private func downloadAndPreview() {
@@ -114,6 +126,7 @@ struct FileAttachmentChip: View {
                 previewData = data
                 showPreview = true
             } catch {
+                Log.pad.error("Failed to download file \(file.name): \(String(describing: error))")
                 errorMessage = error.localizedDescription
             }
             isDownloading = false

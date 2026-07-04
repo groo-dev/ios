@@ -9,6 +9,7 @@ import AuthenticationServices
 import Combine
 import CryptoKit
 import Foundation
+import os
 
 enum AutoFillError: Error, LocalizedError {
     case vaultNotSetup
@@ -21,9 +22,9 @@ enum AutoFillError: Error, LocalizedError {
         case .vaultNotSetup:
             return "Please set up Groo Pass in the main app first"
         case .vaultLocked:
-            return "Vault is locked. Please unlock in the main app"
+            return "Authentication failed. Try again."
         case .decryptionFailed:
-            return "Failed to decrypt vault"
+            return "Couldn't decrypt the vault. Open the Groo app to re-sync."
         case .noCredentialsFound:
             return "No matching credentials found"
         }
@@ -63,7 +64,12 @@ class AutoFillService: ObservableObject {
         // Load encryption key with biometric auth
         do {
             encryptionKey = try SharedKeychain.loadEncryptionKey(prompt: "Authenticate to access passwords")
+        } catch SharedKeychainError.itemNotFound {
+            // Key was never shared to the app group — setup issue, not a locked vault
+            Log.autofill.error("Encryption key not found in shared keychain")
+            throw AutoFillError.vaultNotSetup
         } catch {
+            Log.autofill.error("Failed to load encryption key: \(String(describing: error), privacy: .public)")
             throw AutoFillError.vaultLocked
         }
 
@@ -92,15 +98,25 @@ class AutoFillService: ObservableObject {
                 key: key
             )
         } catch {
+            // Key mismatch vs corrupt data are different bugs — keep the cause
+            Log.autofill.error("Vault decryption failed: \(String(describing: error), privacy: .public)")
             throw AutoFillError.decryptionFailed
         }
 
         // Parse vault
         guard let vaultData = vaultJson.data(using: .utf8) else {
+            Log.autofill.error("Decrypted vault is not valid UTF-8")
             throw AutoFillError.decryptionFailed
         }
 
-        let vault = try JSONDecoder().decode(SharedPassVault.self, from: vaultData)
+        let vault: SharedPassVault
+        do {
+            vault = try JSONDecoder().decode(SharedPassVault.self, from: vaultData)
+        } catch {
+            // Schema mismatch, not a crypto failure
+            Log.autofill.error("Vault JSON decode failed: \(String(describing: error), privacy: .public)")
+            throw error
+        }
 
         // Extract password items (non-deleted only)
         credentials = vault.items.compactMap { item -> SharedPassPasswordItem? in
@@ -119,9 +135,14 @@ class AutoFillService: ObservableObject {
         }
 
         // Merge passkeys created here but not yet synced into the vault by the main app
-        let knownCredentialIds = Set(passkeys.map(\.credentialId))
-        let pending = SharedPendingItemsStore.load(key: key)
-        passkeys.append(contentsOf: pending.filter { !knownCredentialIds.contains($0.credentialId) })
+        do {
+            let knownCredentialIds = Set(passkeys.map(\.credentialId))
+            let pending = try SharedPendingItemsStore.load(key: key)
+            passkeys.append(contentsOf: pending.filter { !knownCredentialIds.contains($0.credentialId) })
+        } catch {
+            // Don't fail the whole unlock over the queue; already logged by the store
+            Log.autofill.error("Skipping pending passkeys: \(String(describing: error), privacy: .public)")
+        }
     }
 
     // MARK: - Passkey Registration

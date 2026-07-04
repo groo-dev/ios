@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 import SwiftUI
 
 @MainActor
@@ -25,8 +26,12 @@ class StockPortfolioManager {
         set { UserDefaults.standard.set(newValue, forKey: "displayCurrency") }
     }
 
-    func converted(_ value: Double, from currency: String) -> Double {
-        value * (exchangeRates[currency.uppercased()] ?? 1.0)
+    /// Rate to convert `currency` into the display currency, or nil when unavailable.
+    /// Callers must not fall back to 1:1 — an unavailable rate is surfaced via `staleReason`.
+    func exchangeRate(for currency: String) -> Double? {
+        let upper = currency.uppercased()
+        if upper == displayCurrency.uppercased() { return 1.0 }
+        return exchangeRates[upper]
     }
 
     var hasHoldings: Bool {
@@ -37,12 +42,20 @@ class StockPortfolioManager {
         holdings.filter { $0.hasTransactions }
     }
 
+    // Totals exclude holdings whose exchange rate is unavailable rather than
+    // converting at a silent 1:1 — the gap is surfaced via `staleReason`.
     var totalValue: Double {
-        holdingsWithTransactions.reduce(0) { $0 + converted($1.currentValue, from: $1.currency) }
+        holdingsWithTransactions.reduce(0) { total, holding in
+            guard let rate = exchangeRate(for: holding.currency) else { return total }
+            return total + holding.currentValue * rate
+        }
     }
 
     var totalCostBasis: Double {
-        holdingsWithTransactions.reduce(0) { $0 + converted($1.totalInvested, from: $1.currency) }
+        holdingsWithTransactions.reduce(0) { total, holding in
+            guard let rate = exchangeRate(for: holding.currency) else { return total }
+            return total + holding.totalInvested * rate
+        }
     }
 
     var totalGainLoss: Double {
@@ -55,7 +68,10 @@ class StockPortfolioManager {
     }
 
     var totalDayGainLoss: Double {
-        holdingsWithTransactions.reduce(0) { $0 + converted($1.dayGainLoss ?? 0, from: $1.currency) }
+        holdingsWithTransactions.reduce(0) { total, holding in
+            guard let rate = exchangeRate(for: holding.currency) else { return total }
+            return total + (holding.dayGainLoss ?? 0) * rate
+        }
     }
 
     var hasAnyTransactions: Bool {
@@ -75,10 +91,14 @@ class StockPortfolioManager {
                 currentPrice: local.cachedPrice,
                 changePercent: local.cachedChangePercent,
                 previousClose: local.cachedPreviousClose,
-                transactions: local.transactions.map { tx in
-                    StockTransaction(
+                transactions: local.transactions.compactMap { tx in
+                    guard let type = TransactionType(rawValue: tx.type) else {
+                        Log.stocks.error("Skipping transaction \(tx.id, privacy: .public) for \(local.symbol, privacy: .public): unknown type '\(tx.type, privacy: .public)'")
+                        return nil
+                    }
+                    return StockTransaction(
                         id: tx.id,
-                        type: TransactionType(rawValue: tx.type) ?? .buy,
+                        type: type,
                         shares: tx.shares,
                         totalCost: tx.totalCost,
                         date: tx.date
@@ -121,7 +141,8 @@ class StockPortfolioManager {
                 isOffline = true
                 staleReason = nil
             } else {
-                error = "Failed to load prices"
+                Log.stocks.error("Price refresh failed for all symbols: \(symbols.joined(separator: ", "), privacy: .public)")
+                error = "Failed to load prices for \(symbols.joined(separator: ", ")) — check your connection and try again"
             }
             return
         }
@@ -177,11 +198,27 @@ class StockPortfolioManager {
         } else {
             exchangeRates = [displayCurrency: 1.0]
         }
+        noteMissingExchangeRates(for: uniqueCurrencies)
     }
 
     func refreshExchangeRates(using service: YahooFinanceService) async {
         let uniqueCurrencies = Set(holdings.map(\.currency))
         exchangeRates = await service.getExchangeRates(from: uniqueCurrencies, to: displayCurrency)
+        noteMissingExchangeRates(for: uniqueCurrencies)
+    }
+
+    /// Surface currencies whose exchange rate could not be fetched — their holdings
+    /// are excluded from converted totals rather than converted at a silent 1:1.
+    private func noteMissingExchangeRates(for currencies: Set<String>) {
+        let target = displayCurrency.uppercased()
+        let missing = currencies
+            .map { $0.uppercased() }
+            .filter { $0 != target && exchangeRates[$0] == nil }
+            .sorted()
+        guard !missing.isEmpty else { return }
+        Log.stocks.error("Exchange rates unavailable for \(missing.joined(separator: ", "), privacy: .public) → \(target, privacy: .public)")
+        let message = "\(missing.joined(separator: ", ")) exchange rate unavailable — totals incomplete"
+        staleReason = staleReason.map { "\($0). \(message)" } ?? message
     }
 
     // MARK: - Add Holding (Tier 1 — Quick Add)
@@ -197,7 +234,11 @@ class StockPortfolioManager {
     // MARK: - Transaction CRUD (Tier 2)
 
     func addTransaction(to symbol: String, type: TransactionType, shares: Double, totalCost: Double, date: Date) {
-        guard let local = LocalStore.shared.getStockHolding(symbol: symbol.uppercased()) else { return }
+        guard let local = LocalStore.shared.getStockHolding(symbol: symbol.uppercased()) else {
+            Log.stocks.error("addTransaction failed: no holding found for \(symbol.uppercased(), privacy: .public)")
+            error = "Could not save transaction — \(symbol.uppercased()) not found"
+            return
+        }
         let tx = LocalStockTransaction(type: type.rawValue, shares: shares, totalCost: totalCost, date: date)
         tx.holding = local
         local.transactions.append(tx)
@@ -206,7 +247,11 @@ class StockPortfolioManager {
     }
 
     func updateTransaction(id: String, type: TransactionType, shares: Double, totalCost: Double, date: Date) {
-        guard let tx = LocalStore.shared.getStockTransaction(id: id) else { return }
+        guard let tx = LocalStore.shared.getStockTransaction(id: id) else {
+            Log.stocks.error("updateTransaction failed: no transaction found with id \(id, privacy: .public)")
+            error = "Could not save changes — transaction not found"
+            return
+        }
         tx.type = type.rawValue
         tx.shares = shares
         tx.totalCost = totalCost
@@ -260,7 +305,13 @@ class StockPortfolioManager {
     static func importJSON(_ data: Data) -> Int {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard let backup = try? decoder.decode(StockBackup.self, from: data) else { return 0 }
+        let backup: StockBackup
+        do {
+            backup = try decoder.decode(StockBackup.self, from: data)
+        } catch {
+            Log.stocks.error("Stock backup import failed to decode: \(String(describing: error))")
+            return 0
+        }
 
         var imported = 0
         for holding in backup.holdings {

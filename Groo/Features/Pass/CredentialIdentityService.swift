@@ -8,6 +8,7 @@
 
 import AuthenticationServices
 import Foundation
+import os
 
 class CredentialIdentityService {
     private let store = ASCredentialIdentityStore.shared
@@ -38,7 +39,8 @@ class CredentialIdentityService {
         do {
             try await store.replaceCredentialIdentities(allIdentities)
         } catch {
-            print("Failed to update credential identities: \(error)")
+            // QuickType drifts from the vault when this fails
+            Log.pass.error("Failed to update credential identities: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -83,10 +85,13 @@ class CredentialIdentityService {
     @available(iOS 17.0, *)
     private func buildPasskeyIdentities(from items: [PassVaultItem]) -> [ASPasskeyCredentialIdentity] {
         return items.compactMap { item -> ASPasskeyCredentialIdentity? in
-            guard case .passkey(let passkeyItem) = item,
-                  passkeyItem.deletedAt == nil,
-                  let credentialIdData = Data(base64URLEncoded: passkeyItem.credentialId),
+            guard case .passkey(let passkeyItem) = item, passkeyItem.deletedAt == nil else {
+                return nil
+            }
+            guard let credentialIdData = Data(base64URLEncoded: passkeyItem.credentialId),
                   let userHandleData = Data(base64URLEncoded: passkeyItem.userHandle) else {
+                // Malformed record — this passkey will never appear in QuickType
+                Log.pass.error("Passkey \(passkeyItem.id, privacy: .public) has undecodable credentialId/userHandle; skipping identity")
                 return nil
             }
 
@@ -101,11 +106,16 @@ class CredentialIdentityService {
     }
 
     /// Clear all credential identities (call on sign out or vault lock)
-    func clearCredentialIdentities() async {
+    /// - Returns: false when the wipe failed — credentials stay suggested in QuickType
+    @discardableResult
+    func clearCredentialIdentities() async -> Bool {
         do {
             try await store.removeAllCredentialIdentities()
+            return true
         } catch {
-            print("Failed to clear credential identities: \(error)")
+            // Security cleanup failure: deleted vault's credentials remain in QuickType
+            Log.pass.fault("Failed to clear credential identities on sign-out: \(String(describing: error), privacy: .public)")
+            return false
         }
     }
 }

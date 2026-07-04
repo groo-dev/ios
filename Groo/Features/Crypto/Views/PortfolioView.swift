@@ -5,6 +5,7 @@
 //  Portfolio view showing wallet assets with live prices.
 //
 
+import os
 import SwiftUI
 
 struct PortfolioView: View {
@@ -403,9 +404,14 @@ struct PortfolioView: View {
             ))
 
             // Blockscout returns metadata with each token — no extra calls needed
+            var tokenParseFailures: [String] = []
             for token in tokenBalances {
-                let decimals = Int(token.decimals) ?? 18
-                let rawBalance = Double(token.balance) ?? 0
+                guard let decimals = Int(token.decimals),
+                      let rawBalance = Double(token.balance) else {
+                    Log.wallet.error("Failed to parse token balance for \(token.symbol, privacy: .public): decimals=\(token.decimals, privacy: .public) balance=\(token.balance, privacy: .public)")
+                    tokenParseFailures.append(token.symbol)
+                    continue
+                }
                 let balance = rawBalance / pow(10, Double(decimals))
 
                 guard balance > 0 else { continue }
@@ -497,12 +503,18 @@ struct PortfolioView: View {
 
             if allPricesFresh {
                 LocalStore.shared.upsertCachedPortfolio(sorted, wallet: address)
-                staleReason = nil
                 isOffline = false
+            }
+
+            if allPricesFresh && tokenParseFailures.isEmpty {
+                staleReason = nil
             } else {
                 var reasons: [String] = []
                 if !ethPriceFresh { reasons.append("ETH price unavailable") }
                 if let r = priceResult.failureReason { reasons.append(r) }
+                if !tokenParseFailures.isEmpty {
+                    reasons.append("Some token balances could not be read (\(tokenParseFailures.joined(separator: ", ")))")
+                }
                 staleReason = reasons.isEmpty ? "Some prices failed to load" : reasons.joined(separator: ". ")
             }
         } catch {
@@ -551,6 +563,9 @@ struct PortfolioView: View {
                         contractAddress: asset.contractAddress
                     )
                 }
+            } else if let reason = result.failureReason {
+                Log.wallet.error("Price fetch for newly tracked token \(asset.symbol, privacy: .public) failed: \(reason, privacy: .public)")
+                staleReason = reason
             }
         }
     }

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct PassItemDetailView: View {
     let item: PassVaultItem
@@ -14,6 +15,7 @@ struct PassItemDetailView: View {
 
     @State private var showPassword = false
     @State private var copiedField: String?
+    @State private var actionError: String?
 
     var body: some View {
         ScrollView {
@@ -67,6 +69,14 @@ struct PassItemDetailView: View {
             if copiedField != nil {
                 copiedToast
             }
+        }
+        .alert("Action Failed", isPresented: .init(
+            get: { actionError != nil },
+            set: { if !$0 { actionError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(actionError ?? "")
         }
     }
 
@@ -143,15 +153,26 @@ struct PassItemDetailView: View {
                         .foregroundStyle(.secondary)
 
                     ForEach(item.urls, id: \.self) { url in
-                        Link(destination: URL(string: url) ?? URL(string: "https://example.com")!) {
+                        // Unparseable URLs render as plain text — never link somewhere else
+                        if let destination = URL(string: url.hasPrefix("http") ? url : "https://\(url)") {
+                            Link(destination: destination) {
+                                HStack {
+                                    Image(systemName: "link")
+                                    Text(formatURL(url))
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption)
+                                }
+                                .font(.body)
+                            }
+                        } else {
                             HStack {
                                 Image(systemName: "link")
-                                Text(formatURL(url))
+                                Text(url)
                                 Spacer()
-                                Image(systemName: "arrow.up.right")
-                                    .font(.caption)
                             }
                             .font(.body)
+                            .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -454,8 +475,14 @@ struct PassItemDetailView: View {
             // Delete button
             Button(role: .destructive) {
                 Task {
-                    try? await passService.permanentlyDeleteItem(self.item)
-                    onDismiss()
+                    do {
+                        try await passService.permanentlyDeleteItem(self.item)
+                        // Only close when the deletion actually happened
+                        onDismiss()
+                    } catch {
+                        Log.pass.error("Delete corrupted item failed: \(String(describing: error), privacy: .public)")
+                        actionError = error.localizedDescription
+                    }
                 }
             } label: {
                 Label("Delete Corrupted Item", systemImage: "trash")

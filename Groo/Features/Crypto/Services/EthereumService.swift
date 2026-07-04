@@ -43,7 +43,7 @@ actor EthereumService {
             throw EthereumError.invalidResponse
         }
 
-        return hexToEth(hexBalance)
+        return try hexToEth(hexBalance)
     }
 
     // MARK: - Token Balances (Blockscout)
@@ -173,13 +173,16 @@ actor EthereumService {
         }
     }
 
-    private func hexToEth(_ hex: String) -> Double {
+    private func hexToEth(_ hex: String) throws -> Double {
         let cleanHex = hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
         guard !cleanHex.isEmpty else { return 0 }
         // Parse hex digit by digit into Decimal to avoid UInt64 overflow (>18.4 ETH)
         var wei = Decimal(0)
         for char in cleanHex {
-            guard let digit = UInt8(String(char), radix: 16) else { return 0 }
+            guard let digit = UInt8(String(char), radix: 16) else {
+                Log.wallet.error("eth_getBalance returned invalid hex balance: \(hex, privacy: .public)")
+                throw EthereumError.invalidResponse
+            }
             wei = wei * 16 + Decimal(digit)
         }
         let eth = wei / Decimal(sign: .plus, exponent: 18, significand: 1)

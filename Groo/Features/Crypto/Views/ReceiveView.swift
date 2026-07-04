@@ -7,6 +7,7 @@
 
 import SwiftUI
 import CoreImage.CIFilterBuiltins
+import os
 
 struct ReceiveView: View {
     let address: String
@@ -29,6 +30,19 @@ struct ReceiveView: View {
                     .background(Color.white)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.lg))
                     .shadow(color: .black.opacity(0.1), radius: 8)
+            } else {
+                VStack(spacing: Theme.Spacing.sm) {
+                    Image(systemName: "qrcode")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.secondary)
+                    Text("QR unavailable")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(width: 220, height: 220)
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.lg))
             }
 
             // Address
@@ -107,12 +121,16 @@ struct ReceiveView: View {
         filter.message = Data(string.utf8)
         filter.correctionLevel = "M"
 
-        guard let outputImage = filter.outputImage else { return nil }
+        guard let outputImage = filter.outputImage else {
+            Log.wallet.error("QR code generation failed: CIFilter produced no output for address \(string, privacy: .public)")
+            return nil
+        }
 
         let scale = 256 / outputImage.extent.width
         let scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
 
         guard let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) else {
+            Log.wallet.error("QR code generation failed: could not create CGImage for address \(string, privacy: .public)")
             return nil
         }
 

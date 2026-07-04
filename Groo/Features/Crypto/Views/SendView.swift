@@ -7,6 +7,8 @@
 
 import BigInt
 import CryptoSwift
+import os
+import Security
 import SwiftUI
 import Web3Core
 import web3swift
@@ -39,9 +41,9 @@ struct SendView: View {
     }
 
     private var gasCostEth: Double {
-        guard let gas = gasEstimate, let price = gasPrice else { return 0 }
-        let gasValue = hexToUInt64(gas)
-        let priceValue = hexToUInt64(price)
+        guard let gas = gasEstimate, let price = gasPrice,
+              let gasValue = hexToUInt64(gas),
+              let priceValue = hexToUInt64(price) else { return 0 }
         return Double(gasValue * priceValue) / 1e18
     }
 
@@ -65,7 +67,16 @@ struct SendView: View {
         .alert("Unlock Pass", isPresented: $showUnlockPrompt) {
             Button("Cancel", role: .cancel) {}
             Button("Unlock") {
-                Task { try? await passService.unlockWithBiometric() }
+                Task {
+                    do {
+                        _ = try await passService.unlockWithBiometric()
+                    } catch KeychainError.loadFailed(errSecUserCanceled) {
+                        // User cancelled the biometric prompt — nothing to surface
+                    } catch {
+                        Log.wallet.error("Biometric unlock failed: \(String(describing: error))")
+                        self.error = error.localizedDescription
+                    }
+                }
             }
         } message: {
             Text("Pass vault must be unlocked to sign transactions.")
@@ -252,7 +263,10 @@ struct SendView: View {
         isEstimatingGas = true
         defer { isEstimatingGas = false }
 
-        guard let address = walletManager.activeAddress else { return }
+        guard let address = walletManager.activeAddress else {
+            error = "No active wallet"
+            return
+        }
 
         let weiHex = ethToHex(amountDouble)
 
@@ -277,19 +291,35 @@ struct SendView: View {
         isSending = true
         defer { isSending = false }
 
-        guard let address = walletManager.activeAddress else { return }
+        guard let address = walletManager.activeAddress else {
+            error = "No active wallet"
+            return
+        }
+
+        guard let gasPriceHex = gasPrice else {
+            Log.wallet.error("Send aborted: gas price unavailable")
+            error = "Gas price unavailable"
+            return
+        }
 
         do {
-            let nonce = try await ethereumService.getTransactionCount(address: address)
-            let gasLimitValue = gasEstimate ?? "0x5208" // 21000 default
-            let gasPriceValue = gasPrice ?? "0x0"
+            let nonceHex = try await ethereumService.getTransactionCount(address: address)
+            let gasLimitHex = gasEstimate ?? "0x5208" // 21000 default
+
+            guard let nonce = hexToUInt64(nonceHex),
+                  let gasPriceValue = hexToUInt64(gasPriceHex),
+                  let gasLimitValue = hexToUInt64(gasLimitHex) else {
+                Log.wallet.error("Send aborted: failed to parse transaction parameters — nonce=\(nonceHex, privacy: .public) gasPrice=\(gasPriceHex, privacy: .public) gasLimit=\(gasLimitHex, privacy: .public)")
+                error = "Could not read transaction parameters — send aborted"
+                return
+            }
 
             let signedTx = try walletManager.signTransaction(
                 to: recipientAddress,
                 value: BigUInt(amountDouble * 1e18),
-                nonce: BigUInt(hexToUInt64(nonce)),
-                gasPrice: BigUInt(hexToUInt64(gasPriceValue)),
-                gasLimit: BigUInt(hexToUInt64(gasLimitValue)),
+                nonce: BigUInt(nonce),
+                gasPrice: BigUInt(gasPriceValue),
+                gasLimit: BigUInt(gasLimitValue),
                 fromAddress: address
             )
 
@@ -302,9 +332,9 @@ struct SendView: View {
         }
     }
 
-    private func hexToUInt64(_ hex: String) -> UInt64 {
+    private func hexToUInt64(_ hex: String) -> UInt64? {
         let clean = hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
-        return UInt64(clean, radix: 16) ?? 0
+        return UInt64(clean, radix: 16)
     }
 
     private func ethToHex(_ eth: Double) -> String {

@@ -9,6 +9,9 @@
 import Adhan
 import SwiftUI
 import WidgetKit
+import os
+
+private let logger = Logger(subsystem: "dev.groo.ios", category: "widget")
 
 // MARK: - Widget Entry
 
@@ -107,6 +110,7 @@ struct AzanWidgetProvider: TimelineProvider {
         let todayComponents = cal.dateComponents([.year, .month, .day], from: date)
 
         guard let prayerTimes = PrayerTimes(coordinates: coords, date: todayComponents, calculationParameters: prefs.params) else {
+            logger.error("PrayerTimes calculation failed for lat \(prefs.latitude), lon \(prefs.longitude), date \(String(describing: todayComponents))")
             return AzanWidgetEntry(date: date, prayerTimes: [], nextPrayer: nil, currentDeadline: nil, isConfigured: true)
         }
 

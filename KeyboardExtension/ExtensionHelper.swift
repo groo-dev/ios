@@ -10,6 +10,11 @@ import Foundation
 import CryptoKit
 import Security
 import SwiftData
+import os
+
+// This file is shared byte-identically between the Widget and Keyboard extensions,
+// so the log category is derived from the host extension's bundle identifier.
+private let logger = Logger(subsystem: "dev.groo.ios", category: Bundle.main.bundleIdentifier ?? "extension")
 
 // MARK: - Config
 
@@ -69,6 +74,9 @@ enum ExtensionKeychain {
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
         guard status == errSecSuccess, let data = result as? Data else {
+            if status != errSecSuccess && status != errSecItemNotFound && status != errSecInteractionNotAllowed {
+                logger.error("Failed to load encryption key from Keychain: OSStatus \(status)")
+            }
             return nil
         }
 
@@ -85,21 +93,25 @@ enum ExtensionCrypto {
         let version: Int
     }
 
+    enum DecryptError: Error {
+        case malformedPayload
+        case invalidUTF8
+    }
+
     /// Decrypt text using AES-256-GCM
-    static func decrypt(_ payload: EncryptedPayload, using key: SymmetricKey) -> String? {
+    static func decrypt(_ payload: EncryptedPayload, using key: SymmetricKey) throws -> String {
         guard let ciphertextData = Data(base64Encoded: payload.ciphertext),
               let ivData = Data(base64Encoded: payload.iv) else {
-            return nil
+            throw DecryptError.malformedPayload
         }
 
-        do {
-            let nonce = try AES.GCM.Nonce(data: ivData)
-            let sealedBox = try AES.GCM.SealedBox(nonce: nonce, ciphertext: ciphertextData.dropLast(16), tag: ciphertextData.suffix(16))
-            let decryptedData = try AES.GCM.open(sealedBox, using: key)
-            return String(data: decryptedData, encoding: .utf8)
-        } catch {
-            return nil
+        let nonce = try AES.GCM.Nonce(data: ivData)
+        let sealedBox = try AES.GCM.SealedBox(nonce: nonce, ciphertext: ciphertextData.dropLast(16), tag: ciphertextData.suffix(16))
+        let decryptedData = try AES.GCM.open(sealedBox, using: key)
+        guard let text = String(data: decryptedData, encoding: .utf8) else {
+            throw DecryptError.invalidUTF8
         }
+        return text
     }
 }
 
@@ -125,6 +137,7 @@ enum ExtensionDataProvider {
         guard let containerURL = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: ExtensionConfig.appGroupIdentifier
         ) else {
+            logger.fault("App Group container unavailable (\(ExtensionConfig.appGroupIdentifier)) — check App Group entitlement")
             return []
         }
 
@@ -145,17 +158,30 @@ enum ExtensionDataProvider {
 
             // Decrypt items
             var decrypted: [ExtensionPadItem] = []
+            var failedCount = 0
+            var firstError: Error?
             for item in items {
-                if let encryptedJSON = item.encryptedTextJSON.data(using: .utf8),
-                   let payload = try? JSONDecoder().decode(ExtensionCrypto.EncryptedPayload.self, from: encryptedJSON),
-                   let text = ExtensionCrypto.decrypt(payload, using: key) {
+                do {
+                    guard let encryptedJSON = item.encryptedTextJSON.data(using: .utf8) else {
+                        throw ExtensionCrypto.DecryptError.malformedPayload
+                    }
+                    let payload = try JSONDecoder().decode(ExtensionCrypto.EncryptedPayload.self, from: encryptedJSON)
+                    let text = try ExtensionCrypto.decrypt(payload, using: key)
                     decrypted.append(ExtensionPadItem(id: item.id, text: text))
+                } catch {
+                    failedCount += 1
+                    if firstError == nil { firstError = error }
                 }
+            }
+
+            if failedCount > 0 {
+                let firstErrorDescription = firstError.map { String(describing: $0) } ?? "unknown"
+                logger.error("\(failedCount) of \(items.count) items failed to decrypt; first error: \(firstErrorDescription)")
             }
 
             return decrypted
         } catch {
-            print("ExtensionDataProvider error: \(error)")
+            logger.error("ExtensionDataProvider failed to load items: \(String(describing: error))")
             return []
         }
     }

@@ -8,6 +8,9 @@
 
 import UIKit
 import UniformTypeIdentifiers
+import os
+
+private let logger = Logger(subsystem: "dev.groo.ios", category: "share")
 
 class ShareViewController: UIViewController {
 
@@ -35,6 +38,7 @@ class ShareViewController: UIViewController {
 
         Task {
             var sharedTexts: [String] = []
+            var loadFailureCount = 0
 
             for item in extensionItems {
                 guard let attachments = item.attachments else { continue }
@@ -42,26 +46,43 @@ class ShareViewController: UIViewController {
                 for attachment in attachments {
                     // Handle text
                     if attachment.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
-                        if let text = try? await loadText(from: attachment) {
-                            sharedTexts.append(text)
+                        do {
+                            if let text = try await loadText(from: attachment) {
+                                sharedTexts.append(text)
+                            }
+                        } catch {
+                            loadFailureCount += 1
+                            logger.error("Failed to load shared text: \(String(describing: error))")
                         }
                     }
                     // Handle URLs
                     else if attachment.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
-                        if let url = try? await loadURL(from: attachment) {
-                            sharedTexts.append(url.absoluteString)
+                        do {
+                            if let url = try await loadURL(from: attachment) {
+                                sharedTexts.append(url.absoluteString)
+                            }
+                        } catch {
+                            loadFailureCount += 1
+                            logger.error("Failed to load shared URL: \(String(describing: error))")
                         }
                     }
                 }
             }
 
             // Save to App Group
+            var saved = false
             if !sharedTexts.isEmpty {
-                saveToAppGroup(texts: sharedTexts)
+                saved = saveToAppGroup(texts: sharedTexts)
             }
 
             await MainActor.run {
-                close()
+                if !sharedTexts.isEmpty && !saved {
+                    cancel(reason: "Failed to save shared content")
+                } else if sharedTexts.isEmpty && loadFailureCount > 0 {
+                    cancel(reason: "Failed to load shared content")
+                } else {
+                    close()
+                }
             }
         }
     }
@@ -94,18 +115,33 @@ class ShareViewController: UIViewController {
         }
     }
 
-    private func saveToAppGroup(texts: [String]) {
+    private func saveToAppGroup(texts: [String]) -> Bool {
         guard let containerURL = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: appGroupId
-        ) else { return }
+        ) else {
+            logger.fault("App Group container unavailable (\(self.appGroupId)) — cannot save shared content")
+            return false
+        }
 
         let sharedItemsURL = containerURL.appendingPathComponent("shared_items.json")
 
-        // Load existing items
+        // Load existing items. A missing file is fine (start empty); an unreadable
+        // file is moved aside so previously queued items stay recoverable on disk.
         var items: [SharedItem] = []
-        if let data = try? Data(contentsOf: sharedItemsURL),
-           let existing = try? JSONDecoder().decode([SharedItem].self, from: data) {
-            items = existing
+        if FileManager.default.fileExists(atPath: sharedItemsURL.path) {
+            do {
+                let data = try Data(contentsOf: sharedItemsURL)
+                items = try JSONDecoder().decode([SharedItem].self, from: data)
+            } catch {
+                logger.error("Existing shared items file unreadable, moving aside: \(String(describing: error))")
+                let corruptURL = containerURL.appendingPathComponent("shared_items.json.corrupt")
+                do {
+                    try? FileManager.default.removeItem(at: corruptURL)
+                    try FileManager.default.moveItem(at: sharedItemsURL, to: corruptURL)
+                } catch {
+                    logger.error("Failed to move corrupt shared items file aside: \(String(describing: error))")
+                }
+            }
         }
 
         // Add new items
@@ -118,13 +154,27 @@ class ShareViewController: UIViewController {
         }
 
         // Save back
-        if let data = try? JSONEncoder().encode(items) {
-            try? data.write(to: sharedItemsURL)
+        do {
+            let data = try JSONEncoder().encode(items)
+            try data.write(to: sharedItemsURL)
+            return true
+        } catch {
+            logger.error("Failed to save shared items: \(String(describing: error))")
+            return false
         }
     }
 
     private func close() {
         extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+    }
+
+    private func cancel(reason: String) {
+        let error = NSError(
+            domain: "dev.groo.ios.ShareExtension",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: reason]
+        )
+        extensionContext?.cancelRequest(withError: error)
     }
 }
 

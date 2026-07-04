@@ -31,13 +31,13 @@ actor CoinGeckoService {
                 lastError = CoinGeckoError.rateLimited
                 let delay = pow(2.0, Double(attempt))
                 logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
-                try? await Task.sleep(for: .seconds(delay))
+                try await Task.sleep(for: .seconds(delay))
             } catch let error as APICacheError {
                 if case .httpError(let code, _) = error, code == 429 {
                     lastError = CoinGeckoError.rateLimited
                     let delay = pow(2.0, Double(attempt))
                     logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
-                    try? await Task.sleep(for: .seconds(delay))
+                    try await Task.sleep(for: .seconds(delay))
                 } else if case .httpError(let code, _) = error {
                     throw CoinGeckoError.httpError(code)
                 } else {

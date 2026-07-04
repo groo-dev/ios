@@ -7,6 +7,7 @@
 //
 
 import MapKit
+import os
 import SwiftUI
 
 struct LocationSearchView: View {
@@ -15,9 +16,16 @@ struct LocationSearchView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
     @State private var searchCompleter = LocationSearchCompleter()
+    @State private var selectionError: String?
 
     var body: some View {
         List {
+            if let errorText = selectionError ?? searchCompleter.error {
+                Label(errorText, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Theme.Colors.error)
+            }
+
             if searchCompleter.results.isEmpty && !searchText.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             }
@@ -42,6 +50,7 @@ struct LocationSearchView: View {
         }
         .searchable(text: $searchText, prompt: "Search city or address")
         .onChange(of: searchText) { _, query in
+            selectionError = nil
             searchCompleter.search(query: query)
         }
         .navigationTitle("Search Location")
@@ -54,6 +63,7 @@ struct LocationSearchView: View {
     }
 
     private func selectResult(_ result: LocationResult) {
+        selectionError = nil
         Task {
             let request = MKLocalSearch.Request()
             request.naturalLanguageQuery = [result.title, result.subtitle]
@@ -68,9 +78,12 @@ struct LocationSearchView: View {
                     let name = buildLocationName(from: item.placemark)
                     onSelect(coord.latitude, coord.longitude, name)
                     dismiss()
+                } else {
+                    selectionError = "Location not found — try a different search"
                 }
             } catch {
-                print("[LocationSearch] Search failed: \(error)")
+                Log.azan.error("[LocationSearch] Search failed for '\(result.title, privacy: .public)': \(String(describing: error), privacy: .public)")
+                selectionError = "Search failed — check your connection and try again"
             }
         }
     }
@@ -99,6 +112,7 @@ struct LocationResult: Identifiable {
 @Observable
 class LocationSearchCompleter: NSObject {
     var results: [LocationResult] = []
+    var error: String?
     private let completer = MKLocalSearchCompleter()
 
     override init() {
@@ -108,6 +122,7 @@ class LocationSearchCompleter: NSObject {
     }
 
     func search(query: String) {
+        error = nil
         guard !query.isEmpty else {
             results = []
             return
@@ -123,10 +138,14 @@ extension LocationSearchCompleter: MKLocalSearchCompleterDelegate {
         }
         Task { @MainActor in
             self.results = mapped
+            self.error = nil
         }
     }
 
     nonisolated func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
-        print("[LocationSearch] Completer error: \(error)")
+        Log.azan.error("[LocationSearch] Completer error: \(String(describing: error), privacy: .public)")
+        Task { @MainActor in
+            self.error = "Search unavailable — check your connection"
+        }
     }
 }

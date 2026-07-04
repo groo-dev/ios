@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 import UserNotifications
 
 @MainActor
@@ -14,6 +15,7 @@ import UserNotifications
 class AzanNotificationService {
     private(set) var pendingCount: Int = 0
     private(set) var isAuthorized = false
+    private(set) var authorizationDenied = false
 
     private let center = UNUserNotificationCenter.current()
     private let maxNotifications = 60
@@ -25,9 +27,12 @@ class AzanNotificationService {
         do {
             let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge, .timeSensitive])
             isAuthorized = granted
+            authorizationDenied = !granted
             return granted
         } catch {
-            print("[AzanNotification] Authorization failed: \(error)")
+            // Request errored — distinct from the user explicitly denying
+            authorizationDenied = false
+            Log.azan.error("[AzanNotification] Authorization request failed: \(String(describing: error), privacy: .public)")
             return false
         }
     }
@@ -35,6 +40,7 @@ class AzanNotificationService {
     func checkAuthorization() async {
         let settings = await center.notificationSettings()
         isAuthorized = settings.authorizationStatus == .authorized
+        authorizationDenied = settings.authorizationStatus == .denied
     }
 
     // MARK: - Registration
@@ -55,12 +61,18 @@ class AzanNotificationService {
         prayerService: PrayerTimeService,
         preferences: LocalAzanPreferences
     ) async {
+        // Refresh authorization state (it may have changed in Settings)
+        await checkAuthorization()
         if !isAuthorized {
             let granted = await requestAuthorization()
-            guard granted else { return }
+            guard granted else {
+                Log.azan.error("[AzanNotification] Scheduling skipped: notification authorization not granted")
+                return
+            }
         }
 
-        // Remove existing azan notifications
+        // Remove existing azan notifications (only after authorization is confirmed,
+        // so a denied request never wipes previously scheduled notifications)
         await removeAllAzanNotifications()
 
         let allDays = prayerService.calculatePrayerTimes(forDays: daysAhead)
@@ -82,7 +94,7 @@ class AzanNotificationService {
                     try await center.add(request)
                     scheduled += 1
                 } catch {
-                    print("[AzanNotification] Failed to schedule \(prayer.rawValue): \(error)")
+                    Log.azan.error("[AzanNotification] Failed to schedule \(prayer.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
                 }
             }
         }
@@ -103,8 +115,12 @@ class AzanNotificationService {
                 let trigger = buildTrigger(for: reminderTime)
                 let id = "azan_jumuah_\(Int(reminderTime.timeIntervalSince1970))"
                 let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
-                try? await center.add(request)
-                scheduled += 1
+                do {
+                    try await center.add(request)
+                    scheduled += 1
+                } catch {
+                    Log.azan.error("[AzanNotification] Failed to schedule Jumu'ah reminder: \(String(describing: error), privacy: .public)")
+                }
             }
         }
 
@@ -142,14 +158,18 @@ class AzanNotificationService {
                     let trigger = buildTrigger(for: suhoorTime)
                     let id = "azan_suhoor_\(Int(suhoorTime.timeIntervalSince1970))"
                     let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
-                    try? await center.add(request)
-                    scheduled += 1
+                    do {
+                        try await center.add(request)
+                        scheduled += 1
+                    } catch {
+                        Log.azan.error("[AzanNotification] Failed to schedule Suhoor reminder: \(String(describing: error), privacy: .public)")
+                    }
                 }
             }
         }
 
         pendingCount = scheduled
-        print("[AzanNotification] Scheduled \(scheduled) notifications")
+        Log.azan.info("[AzanNotification] Scheduled \(scheduled) notifications")
     }
 
     func removeAllAzanNotifications() async {

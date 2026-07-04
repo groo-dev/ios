@@ -10,6 +10,7 @@
 import BigInt
 import CryptoSwift
 import Foundation
+import os
 import SwiftUI
 import Web3Core
 import web3swift
@@ -68,9 +69,11 @@ class WalletManager {
                 wallet.name = newName
                 wallet.updatedAt = Int(Date().timeIntervalSince1970 * 1000)
                 try await passService.updateItem(.cryptoWallet(wallet))
-                break
+                return
             }
         }
+        Log.wallet.error("renameWallet: no vault item found for address \(address, privacy: .public)")
+        throw WalletError.walletNotFound
     }
 
     // MARK: - Address Cache
@@ -93,11 +96,27 @@ class WalletManager {
         error = nil
         defer { isLoading = false }
 
-        guard let mnemonics = try? BIP39.generateMnemonics(bitsOfEntropy: 128) else {
+        let generatedMnemonics: String?
+        do {
+            generatedMnemonics = try BIP39.generateMnemonics(bitsOfEntropy: 128)
+        } catch {
+            Log.wallet.error("BIP39 mnemonic generation failed: \(String(describing: error))")
+            throw WalletError.mnemonicGenerationFailed
+        }
+        guard let mnemonics = generatedMnemonics else {
+            Log.wallet.error("BIP39 mnemonic generation returned nil")
             throw WalletError.mnemonicGenerationFailed
         }
 
-        guard let keystore = try? BIP32Keystore(mnemonics: mnemonics, password: "") else {
+        let createdKeystore: BIP32Keystore?
+        do {
+            createdKeystore = try BIP32Keystore(mnemonics: mnemonics, password: "")
+        } catch {
+            Log.wallet.error("BIP32 keystore creation failed: \(String(describing: error))")
+            throw WalletError.keystoreCreationFailed
+        }
+        guard let keystore = createdKeystore else {
+            Log.wallet.error("BIP32 keystore creation returned nil")
             throw WalletError.keystoreCreationFailed
         }
 
@@ -147,7 +166,15 @@ class WalletManager {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
 
-        guard let keystore = try? BIP32Keystore(mnemonics: trimmed, password: "") else {
+        let importedKeystore: BIP32Keystore?
+        do {
+            importedKeystore = try BIP32Keystore(mnemonics: trimmed, password: "")
+        } catch {
+            Log.wallet.error("BIP32 keystore creation from seed phrase failed: \(String(describing: error))")
+            throw WalletError.invalidSeedPhrase
+        }
+        guard let keystore = importedKeystore else {
+            Log.wallet.error("BIP32 keystore creation from seed phrase returned nil")
             throw WalletError.invalidSeedPhrase
         }
 
@@ -193,7 +220,15 @@ class WalletManager {
             throw WalletError.invalidPrivateKey
         }
 
-        guard let keystore = try? EthereumKeystoreV3(privateKey: keyData, password: "") else {
+        let importedKeystore: EthereumKeystoreV3?
+        do {
+            importedKeystore = try EthereumKeystoreV3(privateKey: keyData, password: "")
+        } catch {
+            Log.wallet.error("Keystore creation from private key failed: \(String(describing: error))")
+            throw WalletError.invalidPrivateKey
+        }
+        guard let keystore = importedKeystore else {
+            Log.wallet.error("Keystore creation from private key returned nil")
             throw WalletError.invalidPrivateKey
         }
 
@@ -250,8 +285,13 @@ class WalletManager {
             throw WalletError.privateKeyNotFound
         }
 
+        guard let toAddress = EthereumAddress(to) else {
+            Log.wallet.error("Invalid recipient address: \(to, privacy: .public)")
+            throw WalletError.invalidRecipient
+        }
+
         var transaction = CodableTransaction(
-            to: EthereumAddress(to)!,
+            to: toAddress,
             nonce: nonce,
             chainID: chainId,
             value: value,
@@ -301,8 +341,10 @@ enum WalletError: Error, LocalizedError {
     case addressDerivationFailed
     case invalidSeedPhrase
     case invalidPrivateKey
+    case invalidRecipient
     case privateKeyNotFound
     case transactionSigningFailed
+    case walletNotFound
 
     var errorDescription: String? {
         switch self {
@@ -311,8 +353,10 @@ enum WalletError: Error, LocalizedError {
         case .addressDerivationFailed: "Failed to derive address"
         case .invalidSeedPhrase: "Invalid seed phrase"
         case .invalidPrivateKey: "Invalid private key"
+        case .invalidRecipient: "Invalid recipient address"
         case .privateKeyNotFound: "Private key not found in vault"
         case .transactionSigningFailed: "Failed to sign transaction"
+        case .walletNotFound: "Wallet not found in vault"
         }
     }
 }

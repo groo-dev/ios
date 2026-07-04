@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 import WidgetKit
 
 struct AzanView: View {
@@ -17,17 +18,29 @@ struct AzanView: View {
     @State private var trackingService = PrayerTrackingService()
     @State private var preferences: LocalAzanPreferences?
     @State private var showSettings = false
+    @State private var showLocationSearch = false
     @State private var selectedPrayer: Prayer?
     @State private var showRecitations = false
     @State private var showSurahs = false
     @State private var showDuas = false
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
+                    // Location failure (distinct from "no location configured yet")
+                    if let locationError = locationService.error, !locationService.hasLocation {
+                        locationErrorBanner(locationError)
+                    }
+
+                    // Notification permission denied
+                    if notificationService.authorizationDenied {
+                        notificationDeniedBanner
+                    }
+
                     // Next prayer hero
                     if let countdown = prayerService.nextPrayer {
                         nextPrayerCard(countdown)
@@ -85,6 +98,13 @@ struct AzanView: View {
                     )
                 }
             }
+            .sheet(isPresented: $showLocationSearch) {
+                NavigationStack {
+                    LocationSearchView { lat, lon, name in
+                        setManualLocation(latitude: lat, longitude: lon, name: name)
+                    }
+                }
+            }
             .sheet(item: $selectedPrayer) { prayer in
                 PrayerDetailView(prayer: prayer)
             }
@@ -101,6 +121,7 @@ struct AzanView: View {
         .onAppear {
             loadAndConfigure()
             trackingService.recalculate()
+            Task { await notificationService.checkAuthorization() }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
@@ -109,6 +130,64 @@ struct AzanView: View {
                 Task { await rescheduleNotifications() }
             }
         }
+    }
+
+    // MARK: - Status Banners
+
+    private func locationErrorBanner(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(spacing: Theme.Spacing.xs) {
+                Image(systemName: "location.slash.fill")
+                    .foregroundStyle(Theme.Colors.warning)
+                Text("Location unavailable")
+                    .font(.subheadline.weight(.semibold))
+            }
+
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button("Search for your city") {
+                showLocationSearch = true
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Theme.Brand.primary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.lg)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+    }
+
+    private var notificationDeniedBanner: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(spacing: Theme.Spacing.xs) {
+                Image(systemName: "bell.slash.fill")
+                    .foregroundStyle(Theme.Colors.warning)
+                Text("Notifications disabled")
+                    .font(.subheadline.weight(.semibold))
+            }
+
+            Text("Prayer alerts won't be delivered. Enable notifications in Settings.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    openURL(url)
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Theme.Brand.primary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.lg)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
     }
 
     // MARK: - Next Prayer Hero
@@ -441,6 +520,23 @@ struct AzanView: View {
             )
             Task { await rescheduleNotifications() }
         }
+    }
+
+    private func setManualLocation(latitude: Double, longitude: Double, name: String) {
+        guard let prefs = preferences else { return }
+
+        prefs.useDeviceLocation = false
+        prefs.latitude = latitude
+        prefs.longitude = longitude
+        prefs.locationName = name
+
+        locationService.setManualLocation(latitude: latitude, longitude: longitude, name: name)
+        prayerService.configure(latitude: latitude, longitude: longitude, preferences: prefs)
+
+        LocalStore.shared.saveAzanChanges()
+        prefs.syncToAppGroup()
+        WidgetCenter.shared.reloadTimelines(ofKind: "AzanWidget")
+        Task { await rescheduleNotifications() }
     }
 
     private func toggleNotification(for prayer: Prayer) {

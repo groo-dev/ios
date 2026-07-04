@@ -8,6 +8,7 @@
 
 import CoreLocation
 import Foundation
+import os
 
 @MainActor
 @Observable
@@ -47,7 +48,7 @@ class AzanLocationService: NSObject {
         }
 
         guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
-            error = "Location permission denied"
+            error = "Location access denied — enable in Settings"
             return
         }
 
@@ -57,7 +58,8 @@ class AzanLocationService: NSObject {
             longitude = location.coordinate.longitude
             await reverseGeocode(location)
         } catch {
-            self.error = "Failed to get location"
+            Log.azan.error("[AzanLocation] Location request failed: \(String(describing: error), privacy: .public)")
+            self.error = errorMessage(for: error)
         }
     }
 
@@ -69,6 +71,22 @@ class AzanLocationService: NSObject {
     }
 
     // MARK: - Private
+
+    private func errorMessage(for error: Error) -> String {
+        guard let clError = error as? CLError else {
+            return "Couldn't get location: \(error.localizedDescription)"
+        }
+        switch clError.code {
+        case .denied:
+            return "Location access denied — enable in Settings"
+        case .network:
+            return "Network error while getting location — check your connection"
+        case .locationUnknown:
+            return "Couldn't determine your location — try again"
+        default:
+            return "Couldn't get location: \(clError.localizedDescription)"
+        }
+    }
 
     private func requestOneShot() async throws -> CLLocation {
         try await withCheckedThrowingContinuation { continuation in

@@ -9,6 +9,7 @@ import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
 import UIKit
+import os
 
 struct AddItemSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -163,26 +164,47 @@ struct AddItemSheet: View {
     }
 
     private func loadSelectedPhotos(_ items: [PhotosPickerItem]) async {
+        var failedCount = 0
+
         for item in items {
-            if let data = try? await item.loadTransferable(type: Data.self) {
-                let mimeType: String
-                let fileName: String
+            let data: Data?
+            do {
+                data = try await item.loadTransferable(type: Data.self)
+            } catch {
+                Log.pad.error("Failed to load selected photo: \(String(describing: error))")
+                failedCount += 1
+                continue
+            }
 
-                if let uti = item.supportedContentTypes.first {
-                    mimeType = uti.preferredMIMEType ?? "application/octet-stream"
-                    let ext = uti.preferredFilenameExtension ?? "bin"
-                    fileName = "photo_\(Date().timeIntervalSince1970).\(ext)"
-                } else {
-                    mimeType = "image/jpeg"
-                    fileName = "photo_\(Date().timeIntervalSince1970).jpg"
-                }
+            guard let data else {
+                Log.pad.error("Selected photo returned no data")
+                failedCount += 1
+                continue
+            }
 
-                let pendingFile = PendingFile(name: fileName, type: mimeType, data: data)
-                await MainActor.run {
-                    withAnimation {
-                        pendingFiles.append(pendingFile)
-                    }
+            let mimeType: String
+            let fileName: String
+
+            if let uti = item.supportedContentTypes.first {
+                mimeType = uti.preferredMIMEType ?? "application/octet-stream"
+                let ext = uti.preferredFilenameExtension ?? "bin"
+                fileName = "photo_\(Date().timeIntervalSince1970).\(ext)"
+            } else {
+                mimeType = "image/jpeg"
+                fileName = "photo_\(Date().timeIntervalSince1970).jpg"
+            }
+
+            let pendingFile = PendingFile(name: fileName, type: mimeType, data: data)
+            await MainActor.run {
+                withAnimation {
+                    pendingFiles.append(pendingFile)
                 }
+            }
+        }
+
+        if failedCount > 0 {
+            await MainActor.run {
+                errorMessage = "\(failedCount) photo\(failedCount == 1 ? "" : "s") couldn't be loaded"
             }
         }
     }
@@ -191,10 +213,15 @@ struct AddItemSheet: View {
         switch result {
         case .success(let urls):
             for url in urls {
-                guard url.startAccessingSecurityScopedResource() else { continue }
+                guard url.startAccessingSecurityScopedResource() else {
+                    Log.pad.error("Skipped imported file (security-scoped access denied): \(url.lastPathComponent)")
+                    errorMessage = "Couldn't access \(url.lastPathComponent)"
+                    continue
+                }
                 defer { url.stopAccessingSecurityScopedResource() }
 
-                if let data = try? Data(contentsOf: url) {
+                do {
+                    let data = try Data(contentsOf: url)
                     let fileName = url.lastPathComponent
                     let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
 
@@ -202,15 +229,23 @@ struct AddItemSheet: View {
                     withAnimation {
                         pendingFiles.append(pendingFile)
                     }
+                } catch {
+                    Log.pad.error("Failed to read imported file \(url.lastPathComponent): \(String(describing: error))")
+                    errorMessage = "Couldn't read \(url.lastPathComponent)"
                 }
             }
         case .failure(let error):
+            Log.pad.error("File import failed: \(String(describing: error))")
             errorMessage = error.localizedDescription
         }
     }
 
     private func handleCameraImage(_ image: UIImage) {
-        guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+        guard let data = image.jpegData(compressionQuality: 0.8) else {
+            Log.pad.error("Failed to encode camera image as JPEG")
+            errorMessage = "Couldn't process camera photo"
+            return
+        }
         let fileName = "camera_\(Date().timeIntervalSince1970).jpg"
         let pendingFile = PendingFile(name: fileName, type: "image/jpeg", data: data)
         withAnimation {
@@ -239,6 +274,8 @@ struct AddItemSheet: View {
                     withAnimation {
                         pendingFiles.append(pendingFile)
                     }
+                } else {
+                    Log.pad.error("Failed to encode pasted image \(index) as JPEG")
                 }
             }
         }
@@ -246,16 +283,22 @@ struct AddItemSheet: View {
         // Handle file URLs (from Files app)
         if let urls = pasteboard.urls {
             for url in urls {
-                guard url.startAccessingSecurityScopedResource() else { continue }
+                guard url.startAccessingSecurityScopedResource() else {
+                    Log.pad.error("Skipped pasted file (security-scoped access denied): \(url.lastPathComponent)")
+                    continue
+                }
                 defer { url.stopAccessingSecurityScopedResource() }
 
-                if let data = try? Data(contentsOf: url) {
+                do {
+                    let data = try Data(contentsOf: url)
                     let fileName = url.lastPathComponent
                     let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
                     let pendingFile = PendingFile(name: fileName, type: mimeType, data: data)
                     withAnimation {
                         pendingFiles.append(pendingFile)
                     }
+                } catch {
+                    Log.pad.error("Failed to read pasted file \(url.lastPathComponent): \(String(describing: error))")
                 }
             }
         }

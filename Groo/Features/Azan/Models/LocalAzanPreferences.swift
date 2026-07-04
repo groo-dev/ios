@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 import SwiftData
 
 @Model
@@ -171,17 +172,28 @@ final class LocalAzanPreferences {
     }
 
     var parsedCalculationMethod: AzanCalculationMethod {
-        AzanCalculationMethod(rawValue: calculationMethod) ?? .muslimWorldLeague
+        guard let method = AzanCalculationMethod(rawValue: calculationMethod) else {
+            Log.azan.error("[AzanPreferences] Unknown calculationMethod '\(self.calculationMethod, privacy: .public)' — falling back to Muslim World League")
+            return .muslimWorldLeague
+        }
+        return method
     }
 
     var parsedMadhab: AzanMadhab {
-        AzanMadhab(rawValue: madhab) ?? .hanafi
+        guard let parsed = AzanMadhab(rawValue: madhab) else {
+            Log.azan.error("[AzanPreferences] Unknown madhab '\(self.madhab, privacy: .public)' — falling back to Hanafi")
+            return .hanafi
+        }
+        return parsed
     }
 
     // MARK: - App Group Sync (for Widget)
 
     func syncToAppGroup() {
-        guard let defaults = UserDefaults(suiteName: appGroupIdentifier) else { return }
+        guard let defaults = UserDefaults(suiteName: appGroupIdentifier) else {
+            Log.azan.fault("[AzanPreferences] App group '\(self.appGroupIdentifier, privacy: .public)' unavailable — check entitlements; widget will not receive prayer settings")
+            return
+        }
         defaults.set(latitude, forKey: "azan_latitude")
         defaults.set(longitude, forKey: "azan_longitude")
         defaults.set(calculationMethod, forKey: "azan_calculationMethod")

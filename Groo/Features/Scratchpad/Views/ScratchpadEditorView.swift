@@ -7,6 +7,7 @@
 
 import SwiftUI
 import WebKit
+import os
 
 struct ScratchpadEditorView: View {
     let scratchpad: DecryptedScratchpad
@@ -21,17 +22,21 @@ struct ScratchpadEditorView: View {
             onContentChange: onContentChange,
             onReady: {
                 isReady = true
-                print("[Editor] Ready for pad: \(scratchpad.id)")
+                Log.scratchpad.info("Editor ready for pad: \(scratchpad.id)")
             },
             onError: { errorMessage in
-                print("[Editor] Error: \(errorMessage)")
+                Log.scratchpad.error("Editor error: \(errorMessage)")
             },
             webView: $webView
         )
         .onChange(of: scratchpad.id) { oldId, newId in
             // When switching pads, update the content
             if oldId != newId, isReady {
-                webView?.evaluateJavaScript(EditorCommand.setContent(scratchpad.content).jsCall)
+                webView?.evaluateJavaScript(EditorCommand.setContent(scratchpad.content).jsCall) { _, error in
+                    if let error = error {
+                        Log.scratchpad.error("Failed to set editor content: \(error.localizedDescription)")
+                    }
+                }
             }
         }
     }

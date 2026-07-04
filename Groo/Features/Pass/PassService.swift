@@ -10,6 +10,7 @@ import UIKit
 import CryptoKit
 import Foundation
 import LocalAuthentication
+import os
 
 // MARK: - Errors
 
@@ -103,9 +104,12 @@ class PassService {
             if let salt = Data(base64Encoded: keyInfo.keySalt) {
                 keySalt = salt
             }
-        } catch {
+        } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
             // 404 means no vault setup yet
             hasVaultSetup = false
+        } catch {
+            // Offline or server error — not proof the vault doesn't exist
+            Log.pass.error("checkVaultSetup failed: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -139,8 +143,13 @@ class PassService {
         // Decrypt vault
         let decryptedData = try decryptVaultData(encryptedData, iv: iv, using: key)
 
-        guard let decryptedVault = try? JSONDecoder().decode(PassVault.self, from: decryptedData) else {
-            throw PassError.decryptionFailed
+        // Decryption succeeded, so a decode failure is a schema bug — not a wrong password
+        let decryptedVault: PassVault
+        do {
+            decryptedVault = try JSONDecoder().decode(PassVault.self, from: decryptedData)
+        } catch {
+            Log.pass.error("Vault JSON decode failed after password unlock: \(String(describing: error), privacy: .public)")
+            throw PassError.invalidVaultData
         }
 
         // Success - store key and vault
@@ -153,7 +162,12 @@ class PassService {
         storeKeyInKeychain(key)
 
         // Store salt for biometric unlock
-        try? keychain.save(salt, for: KeychainService.Key.passSalt)
+        do {
+            try keychain.save(salt, for: KeychainService.Key.passSalt)
+        } catch {
+            // Biometric unlock will throw vaultNotSetup later without this salt
+            Log.pass.error("Failed to store pass salt: \(String(describing: error), privacy: .public)")
+        }
 
         // Save encrypted vault locally
         let metadata = PassVaultMetadata(
@@ -162,7 +176,7 @@ class PassService {
             updatedAt: vaultResponse.updatedAt,
             lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
         )
-        try? await vaultStore.saveVault(encryptedData: encryptedData, metadata: metadata)
+        await saveVaultCache(encryptedData: encryptedData, metadata: metadata)
 
         // Register AutoFill QuickType suggestions
         await credentialService.updateCredentialIdentities(from: decryptedVault.items)
@@ -171,6 +185,16 @@ class PassService {
         await mergePendingPasskeys()
 
         return true
+    }
+
+    /// Write the encrypted vault into the App Group cache the AutoFill extension
+    /// reads. A silent failure here means AutoFill serves stale credentials.
+    private func saveVaultCache(encryptedData: Data, metadata: PassVaultMetadata) async {
+        do {
+            try await vaultStore.saveVault(encryptedData: encryptedData, metadata: metadata)
+        } catch {
+            Log.pass.error("Failed to write vault cache for AutoFill: \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// Unlock using biometric authentication
@@ -188,8 +212,15 @@ class PassService {
         let key = SymmetricKey(data: keyData)
 
         // Load salt
-        guard let salt = try? keychain.load(for: KeychainService.Key.passSalt) else {
+        let salt: Data
+        do {
+            salt = try keychain.load(for: KeychainService.Key.passSalt)
+        } catch KeychainError.itemNotFound {
             throw PassError.vaultNotSetup
+        } catch {
+            // A keychain fault is not "never set up" — keep the real cause
+            Log.pass.error("Failed to load pass salt: \(String(describing: error), privacy: .public)")
+            throw error
         }
         keySalt = salt
 
@@ -202,25 +233,31 @@ class PassService {
                     using: key
                 )
 
-                if let decryptedVault = try? JSONDecoder().decode(PassVault.self, from: decryptedData) {
-                    encryptionKey = key
-                    vault = decryptedVault
-                    serverVersion = cached.metadata.version
-                    hasVaultSetup = true
+                // Decode inside the do block so a corrupt cache is also cleared
+                let decryptedVault = try JSONDecoder().decode(PassVault.self, from: decryptedData)
 
-                    // Register AutoFill QuickType suggestions even if background sync fails
-                    await credentialService.updateCredentialIdentities(from: decryptedVault.items)
+                encryptionKey = key
+                vault = decryptedVault
+                serverVersion = cached.metadata.version
+                hasVaultSetup = true
 
-                    // Sync in background, then pick up passkeys created by the AutoFill extension
-                    Task {
-                        try? await sync()
-                        await mergePendingPasskeys()
+                // Register AutoFill QuickType suggestions even if background sync fails
+                await credentialService.updateCredentialIdentities(from: decryptedVault.items)
+
+                // Sync in background, then pick up passkeys created by the AutoFill extension
+                Task {
+                    do {
+                        try await sync()
+                    } catch {
+                        Log.pass.error("Background sync after unlock failed: \(String(describing: error), privacy: .public)")
                     }
-
-                    return true
+                    await mergePendingPasskeys()
                 }
+
+                return true
             } catch {
-                // Local cache decryption failed - clear it and fall through to server
+                // Local cache unusable - clear it and fall through to server
+                Log.pass.error("Vault cache unusable, refetching from server: \(String(describing: error), privacy: .public)")
                 try? await vaultStore.clear()
             }
         }
@@ -235,8 +272,12 @@ class PassService {
 
         let decryptedData = try decryptVaultData(encryptedData, iv: iv, using: key)
 
-        guard let decryptedVault = try? JSONDecoder().decode(PassVault.self, from: decryptedData) else {
-            throw PassError.decryptionFailed
+        let decryptedVault: PassVault
+        do {
+            decryptedVault = try JSONDecoder().decode(PassVault.self, from: decryptedData)
+        } catch {
+            Log.pass.error("Vault JSON decode failed after biometric unlock: \(String(describing: error), privacy: .public)")
+            throw PassError.invalidVaultData
         }
 
         encryptionKey = key
@@ -251,7 +292,7 @@ class PassService {
             updatedAt: vaultResponse.updatedAt,
             lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
         )
-        try? await vaultStore.saveVault(encryptedData: encryptedData, metadata: metadata)
+        await saveVaultCache(encryptedData: encryptedData, metadata: metadata)
 
         // Register AutoFill QuickType suggestions
         await credentialService.updateCredentialIdentities(from: decryptedVault.items)
@@ -272,10 +313,19 @@ class PassService {
     /// Lock and clear stored key (full sign out)
     func lockAndClearKey() {
         lock()
-        try? keychain.deleteBiometricProtected(for: KeychainService.Key.passEncryptionKey)
-        try? keychain.delete(for: KeychainService.Key.passSalt)
+        // Security cleanup — a failed delete must be visible in logs
+        do {
+            try keychain.deleteBiometricProtected(for: KeychainService.Key.passEncryptionKey)
+            try keychain.delete(for: KeychainService.Key.passSalt)
+        } catch {
+            Log.pass.fault("Failed to remove pass key material on sign-out: \(String(describing: error), privacy: .public)")
+        }
         Task {
-            try? await vaultStore.clear()
+            do {
+                try await vaultStore.clear()
+            } catch {
+                Log.pass.fault("Failed to remove vault cache on sign-out: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 
@@ -725,7 +775,14 @@ class PassService {
     func mergePendingPasskeys() async {
         guard let key = encryptionKey, var vault = vault else { return }
 
-        let pending = SharedPendingItemsStore.load(key: key)
+        let pending: [SharedPassPasskeyItem]
+        do {
+            pending = try SharedPendingItemsStore.load(key: key)
+        } catch {
+            // Never clear an unreadable queue; already logged by the store
+            Log.pass.error("Cannot read pending passkey queue: \(String(describing: error), privacy: .public)")
+            return
+        }
         guard !pending.isEmpty else { return }
 
         let existingCredentialIds = Set(vault.items.compactMap { item -> String? in
@@ -760,10 +817,13 @@ class PassService {
                 vault.lastModified = now
                 self.vault = vault
                 try await saveVault()
+                Log.pass.info("Merged \(pending.count) pending passkey(s) from AutoFill")
             }
             SharedPendingItemsStore.clear()
         } catch {
-            // Keep the queue so the merge retries on the next unlock/sync
+            // Keep the queue so the merge retries on the next unlock/sync —
+            // but a persistent failure must be observable
+            Log.pass.error("Failed to sync \(pending.count) pending passkey(s), will retry: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -788,8 +848,12 @@ class PassService {
 
         let decryptedData = try decryptVaultData(encryptedData, iv: iv, using: key)
 
-        guard let serverVault = try? JSONDecoder().decode(PassVault.self, from: decryptedData) else {
-            throw PassError.decryptionFailed
+        let serverVault: PassVault
+        do {
+            serverVault = try JSONDecoder().decode(PassVault.self, from: decryptedData)
+        } catch {
+            Log.pass.error("Vault JSON decode failed during sync: \(String(describing: error), privacy: .public)")
+            throw PassError.invalidVaultData
         }
 
         // Update local state
@@ -813,7 +877,12 @@ class PassService {
 
     private func storeKeyInKeychain(_ key: SymmetricKey) {
         let keyData = key.withUnsafeBytes { Data($0) }
-        try? keychain.saveBiometricProtected(keyData, for: KeychainService.Key.passEncryptionKey)
+        do {
+            try keychain.saveBiometricProtected(keyData, for: KeychainService.Key.passEncryptionKey)
+        } catch {
+            // Without this, "Unlock with Face ID" silently never appears
+            Log.pass.error("Failed to store biometric-protected key: \(String(describing: error), privacy: .public)")
+        }
     }
 
     private func decryptVaultData(_ encryptedData: Data, iv: Data, using key: SymmetricKey) throws -> Data {
@@ -864,7 +933,15 @@ actor PassAPIClient {
     // MARK: - PAT Token
 
     private func getPatToken() -> String? {
-        try? keychain.loadString(for: KeychainService.Key.patToken)
+        do {
+            return try keychain.loadString(for: KeychainService.Key.patToken)
+        } catch KeychainError.itemNotFound {
+            return nil
+        } catch {
+            // Requests will 401 — make the real cause findable
+            Log.pass.error("Failed to read PAT token from keychain: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     // MARK: - Request Building

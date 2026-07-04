@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - API Response Types
 
@@ -120,11 +121,60 @@ enum PassVaultItemType: String, Codable, CaseIterable {
     }
 }
 
+/// Lossless JSON value — used to preserve the original bytes of items that
+/// fail to decode, so they can be re-encoded verbatim instead of destroyed
+indirect enum PassRawJSON: Codable, Equatable {
+    case null
+    case bool(Bool)
+    case int(Int)
+    case double(Double)
+    case string(String)
+    case array([PassRawJSON])
+    case object([String: PassRawJSON])
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Int.self) {
+            self = .int(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .double(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([PassRawJSON].self) {
+            self = .array(value)
+        } else if let value = try? container.decode([String: PassRawJSON].self) {
+            self = .object(value)
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported JSON value")
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .null: try container.encodeNil()
+        case .bool(let value): try container.encode(value)
+        case .int(let value): try container.encode(value)
+        case .double(let value): try container.encode(value)
+        case .string(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        }
+    }
+}
+
 /// Corrupted item data (for items that failed to decode)
 struct PassCorruptedItem: Codable, Equatable {
     let id: String
     let rawJson: String
     let error: String
+    /// Original item JSON, re-encoded verbatim so a decode bug never
+    /// overwrites the real data on the server
+    var raw: PassRawJSON?
 
     // Try to extract id from raw JSON, or generate a unique one
     static func from(json: Data, error: Error) -> PassCorruptedItem {
@@ -140,7 +190,8 @@ struct PassCorruptedItem: Codable, Equatable {
         return PassCorruptedItem(
             id: extractedId,
             rawJson: rawJson,
-            error: error.localizedDescription
+            error: error.localizedDescription,
+            raw: try? JSONDecoder().decode(PassRawJSON.self, from: json)
         )
     }
 }
@@ -314,12 +365,16 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
                 self = .cryptoWallet(try PassCryptoWalletItem(from: decoder))
             }
         } catch {
-            // If decoding fails, create a corrupted item
+            // If decoding fails, create a corrupted item that preserves the
+            // original JSON — never let a decode bug destroy the real data
             let id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString.lowercased()
+            let raw = try? PassRawJSON(from: decoder)
+            Log.pass.error("Vault item \(id, privacy: .public) failed to decode as \(itemType.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
             self = .corrupted(PassCorruptedItem(
                 id: id,
                 rawJson: "Decode failed for type: \(itemType.rawValue)",
-                error: error.localizedDescription
+                error: error.localizedDescription,
+                raw: raw
             ))
         }
     }
@@ -363,7 +418,13 @@ enum PassVaultItem: Codable, Identifiable, Equatable {
         case .bankAccount(let item): try item.encode(to: encoder)
         case .file(let item): try item.encode(to: encoder)
         case .cryptoWallet(let item): try item.encode(to: encoder)
-        case .corrupted(let item): try item.encode(to: encoder)
+        case .corrupted(let item):
+            if let raw = item.raw {
+                // Re-emit the original item verbatim
+                try raw.encode(to: encoder)
+            } else {
+                try item.encode(to: encoder)
+            }
         }
     }
 }

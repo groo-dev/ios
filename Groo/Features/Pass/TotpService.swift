@@ -7,11 +7,13 @@
 
 import Foundation
 import CryptoKit
+import os
 
 enum TotpService {
     /// Generate a TOTP code from the given configuration
     static func generateCode(config: PassTotpConfig, time: Date = Date()) -> String {
         guard let secretData = base32Decode(config.secret) else {
+            Log.pass.error("TOTP secret failed base32 decode; showing placeholder")
             return "------"
         }
 

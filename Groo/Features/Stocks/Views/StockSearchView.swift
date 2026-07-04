@@ -5,6 +5,7 @@
 //  Search sheet for finding stocks to add to watchlist.
 //
 
+import os
 import SwiftUI
 
 struct StockSearchView: View {
@@ -16,6 +17,7 @@ struct StockSearchView: View {
     @State private var searchText = ""
     @State private var results: [StockSearchResult] = []
     @State private var isSearching = false
+    @State private var searchError: String?
     @State private var searchTask: Task<Void, Never>?
 
     private var existingSymbols: Set<String> {
@@ -35,6 +37,16 @@ struct StockSearchView: View {
                         ProgressView()
                         Spacer()
                     }
+                } else if let searchError {
+                    VStack(spacing: Theme.Spacing.sm) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                        Text(searchError)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
                 } else if filteredResults.isEmpty && !searchText.isEmpty {
                     Text("No results found")
                         .foregroundStyle(.secondary)
@@ -104,6 +116,7 @@ struct StockSearchView: View {
                 let query = searchText
                 guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     results = []
+                    searchError = nil
                     return
                 }
                 searchTask = Task {
@@ -116,9 +129,12 @@ struct StockSearchView: View {
                         let searchResults = try await yahooService.search(query: query)
                         guard !Task.isCancelled else { return }
                         results = searchResults
+                        searchError = nil
                     } catch {
                         guard !Task.isCancelled else { return }
+                        Log.stocks.error("Stock search failed for query '\(query, privacy: .public)': \(String(describing: error))")
                         results = []
+                        searchError = "Search failed: \(error.localizedDescription)"
                     }
                 }
             }

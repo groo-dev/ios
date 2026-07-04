@@ -5,6 +5,8 @@
 //  Onboarding flow for creating or importing a wallet.
 //
 
+import os
+import Security
 import SwiftUI
 
 struct WalletOnboardingView: View {
@@ -83,11 +85,26 @@ struct WalletOnboardingView: View {
                 Button("Cancel", role: .cancel) {}
                 Button("Unlock") {
                     Task {
-                        try? await passService.unlockWithBiometric()
+                        do {
+                            _ = try await passService.unlockWithBiometric()
+                        } catch KeychainError.loadFailed(errSecUserCanceled) {
+                            // User cancelled the biometric prompt — nothing to surface
+                        } catch {
+                            Log.wallet.error("Biometric unlock failed: \(String(describing: error))")
+                            self.error = error.localizedDescription
+                        }
                     }
                 }
             } message: {
                 Text("Pass vault must be unlocked to create or import wallets.")
+            }
+            .alert("Error", isPresented: .init(
+                get: { error != nil && !showCreateFlow && !showImportFlow },
+                set: { if !$0 { error = nil } }
+            )) {
+                Button("OK") { error = nil }
+            } message: {
+                Text(error ?? "")
             }
             .sheet(isPresented: $showCreateFlow) {
                 createWalletSheet

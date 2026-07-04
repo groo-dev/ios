@@ -7,7 +7,9 @@
 //
 
 import SwiftUI
+import Security
 import LocalAuthentication
+import os
 
 struct PadUnlockView: View {
     let padService: PadService
@@ -239,10 +241,26 @@ struct PadUnlockView: View {
                     isPasswordFocused = true
                 }
             } catch {
-                // Biometric cancelled or failed, show password field
+                // Fall back to the password field either way
                 withAnimation {
                     showPasswordField = true
                 }
+
+                switch error {
+                case KeychainError.itemNotFound:
+                    // No stored key - password unlock is the expected path
+                    break
+                case KeychainError.loadFailed(let status) where status == errSecUserCanceled:
+                    // User dismissed the biometric prompt - not an error
+                    break
+                case let laError as LAError where laError.code == .userCancel || laError.code == .systemCancel:
+                    // Prompt was cancelled - not an error
+                    break
+                default:
+                    Log.pad.error("Biometric unlock failed: \(String(describing: error))")
+                    errorMessage = "Biometric unlock failed. Try your password."
+                }
+                isPasswordFocused = true
             }
             isLoading = false
         }

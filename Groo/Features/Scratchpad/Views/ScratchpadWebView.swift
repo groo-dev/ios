@@ -8,6 +8,7 @@
 
 import SwiftUI
 import WebKit
+import os
 
 // MARK: - ScratchpadWebView
 
@@ -49,7 +50,10 @@ struct ScratchpadWebView: UIViewRepresentable {
         if let htmlURL = htmlURL {
             webView.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
         } else {
-            print("[ScratchpadWebView] ERROR: Could not find index.html in bundle")
+            Log.scratchpad.fault("Could not find index.html in bundle - editor cannot load")
+            DispatchQueue.main.async {
+                onError("Editor failed to load: missing editor resources")
+            }
         }
 
         // Store reference for external access
@@ -146,6 +150,10 @@ struct ScratchpadWebView: UIViewRepresentable {
 extension ScratchpadWebView {
     /// Execute a command on the editor
     func executeCommand(_ command: EditorCommand) {
-        webView?.evaluateJavaScript(command.jsCall, completionHandler: nil)
+        webView?.evaluateJavaScript(command.jsCall) { _, error in
+            if let error = error {
+                Log.scratchpad.error("Editor command failed: \(error.localizedDescription)")
+            }
+        }
     }
 }

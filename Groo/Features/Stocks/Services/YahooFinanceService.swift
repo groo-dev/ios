@@ -33,13 +33,13 @@ actor YahooFinanceService {
                 lastError = YahooFinanceError.httpError(429)
                 let delay = pow(2.0, Double(attempt))
                 logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
-                try? await Task.sleep(for: .seconds(delay))
+                try await Task.sleep(for: .seconds(delay))
             } catch let error as APICacheError {
                 if case .httpError(let code, _) = error, code == 429 {
                     lastError = YahooFinanceError.httpError(429)
                     let delay = pow(2.0, Double(attempt))
                     logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
-                    try? await Task.sleep(for: .seconds(delay))
+                    try await Task.sleep(for: .seconds(delay))
                 } else if case .httpError(let code, _) = error {
                     throw YahooFinanceError.httpError(code)
                 } else {
@@ -102,8 +102,13 @@ actor YahooFinanceService {
         return await withTaskGroup(of: (String, StockQuote?).self) { group in
             for symbol in symbols {
                 group.addTask {
-                    let quote = try? await self.getQuote(symbol: symbol, forceRefresh: forceRefresh)
-                    return (symbol.uppercased(), quote)
+                    do {
+                        let quote = try await self.getQuote(symbol: symbol, forceRefresh: forceRefresh)
+                        return (symbol.uppercased(), quote)
+                    } catch {
+                        Log.stocks.error("Quote fetch failed for \(symbol.uppercased(), privacy: .public): \(String(describing: error))")
+                        return (symbol.uppercased(), nil)
+                    }
                 }
             }
 
@@ -217,7 +222,9 @@ actor YahooFinanceService {
         return quote.price
     }
 
-    /// Batch: fetch rates for multiple source currencies to a single target
+    /// Batch: fetch rates for multiple source currencies to a single target.
+    /// Currencies whose rate could not be fetched are absent from the result —
+    /// callers can compare the returned keys against the requested set.
     func getExchangeRates(from currencies: Set<String>, to target: String, forceRefresh: Bool = false) async -> [String: Double] {
         var results: [String: Double] = [:]
         let t = target.uppercased()
@@ -229,7 +236,14 @@ actor YahooFinanceService {
         }
         await withTaskGroup(of: (String, Double?).self) { group in
             for c in needed {
-                group.addTask { (c, try? await self.getExchangeRate(from: c, to: t, forceRefresh: forceRefresh)) }
+                group.addTask {
+                    do {
+                        return (c, try await self.getExchangeRate(from: c, to: t, forceRefresh: forceRefresh))
+                    } catch {
+                        Log.stocks.error("Exchange rate fetch failed for \(c, privacy: .public)→\(t, privacy: .public): \(String(describing: error))")
+                        return (c, nil)
+                    }
+                }
             }
             for await (c, rate) in group { if let rate { results[c] = rate } }
         }

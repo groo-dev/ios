@@ -8,6 +8,7 @@
 
 import Adhan
 import Foundation
+import os
 
 @MainActor
 @Observable
@@ -41,6 +42,7 @@ class PrayerTimeService {
         let today = cal.dateComponents([.year, .month, .day], from: Date())
 
         guard let prayerTimes = PrayerTimes(coordinates: coords, date: today, calculationParameters: params) else {
+            Log.azan.error("[PrayerTime] PrayerTimes calculation failed for \(String(describing: coords), privacy: .public), date \(String(describing: today), privacy: .public)")
             return
         }
 
@@ -85,9 +87,15 @@ class PrayerTimeService {
         var results: [(date: Date, prayers: [(Prayer, Date)])] = []
 
         for dayOffset in 0..<days {
-            guard let date = cal.date(byAdding: .day, value: dayOffset, to: Date()) else { continue }
+            guard let date = cal.date(byAdding: .day, value: dayOffset, to: Date()) else {
+                Log.azan.error("[PrayerTime] Failed to compute date for day offset \(dayOffset) — skipping day")
+                continue
+            }
             let components = cal.dateComponents([.year, .month, .day], from: date)
-            guard let prayerTimes = PrayerTimes(coordinates: coords, date: components, calculationParameters: params) else { continue }
+            guard let prayerTimes = PrayerTimes(coordinates: coords, date: components, calculationParameters: params) else {
+                Log.azan.error("[PrayerTime] PrayerTimes calculation failed for \(date, privacy: .public) at \(String(describing: coords), privacy: .public) — skipping day")
+                continue
+            }
 
             let prayers: [(Prayer, Date)] = Prayer.allCases.map { prayer in
                 (prayer, adjustedTime(for: prayer, from: prayerTimes))

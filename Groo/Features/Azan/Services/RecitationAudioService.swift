@@ -7,6 +7,7 @@
 
 import AVFoundation
 import Foundation
+import os
 
 @MainActor
 @Observable
@@ -15,6 +16,7 @@ class RecitationAudioService {
 
     private(set) var isPlaying = false
     private(set) var currentFile: String?
+    private(set) var lastError: String?
 
     private var audioPlayer: AVAudioPlayer?
     private var playbackDelegate: PlaybackDelegate?
@@ -31,9 +33,12 @@ class RecitationAudioService {
         }
 
         stop()
+        lastError = nil
 
         guard let url = Bundle.main.url(forResource: fileName, withExtension: "mp3") else {
-            print("[RecitationAudio] File not found: \(fileName).mp3")
+            // A missing bundled file is a packaging bug, not a runtime condition
+            Log.azan.fault("[RecitationAudio] Bundled audio file missing: \(fileName, privacy: .public).mp3")
+            lastError = "Audio unavailable for this recitation"
             return
         }
 
@@ -52,7 +57,8 @@ class RecitationAudioService {
             isPlaying = true
             currentFile = fileName
         } catch {
-            print("[RecitationAudio] Playback failed: \(error)")
+            Log.azan.error("[RecitationAudio] Playback failed for \(fileName, privacy: .public): \(String(describing: error), privacy: .public)")
+            lastError = "Couldn't play audio"
             isPlaying = false
         }
     }

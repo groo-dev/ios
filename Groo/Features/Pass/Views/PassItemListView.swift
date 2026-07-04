@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct PassItemListView: View {
     let passService: PassService
@@ -17,6 +18,7 @@ struct PassItemListView: View {
     @State private var selectedType: PassVaultItemType?
     @State private var showingTypeFilter = false
     @State private var copiedItemId: String?
+    @State private var actionError: String?
 
     private var items: [PassVaultItem] {
         if !searchText.isEmpty {
@@ -136,6 +138,26 @@ struct PassItemListView: View {
                     }
             }
         }
+        .alert("Action Failed", isPresented: .init(
+            get: { actionError != nil },
+            set: { if !$0 { actionError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(actionError ?? "")
+        }
+    }
+
+    /// Run a vault mutation, surfacing failure instead of silently dropping it
+    private func perform(_ actionName: String, _ action: @escaping () async throws -> Void) {
+        Task {
+            do {
+                try await action()
+            } catch {
+                Log.pass.error("\(actionName, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                actionError = error.localizedDescription
+            }
+        }
     }
 
     private var emptyState: some View {
@@ -200,8 +222,8 @@ struct PassItemListView: View {
     @ViewBuilder
     private func deleteButton(for item: PassVaultItem) -> some View {
         Button(role: .destructive) {
-            Task {
-                try? await passService.deleteItem(item)
+            perform("Delete") {
+                try await passService.deleteItem(item)
             }
         } label: {
             Label("Delete", systemImage: "trash")
@@ -227,8 +249,8 @@ struct PassItemListView: View {
         }
 
         Button {
-            Task {
-                try? await passService.toggleFavorite(item)
+            perform("Toggle favorite") {
+                try await passService.toggleFavorite(item)
             }
         } label: {
             if item.favorite {
@@ -260,8 +282,8 @@ struct PassItemListView: View {
         Divider()
 
         Button(role: .destructive) {
-            Task {
-                try? await passService.deleteItem(item)
+            perform("Move to trash") {
+                try await passService.deleteItem(item)
             }
         } label: {
             Label("Move to Trash", systemImage: "trash")

@@ -8,6 +8,7 @@
 
 import AVFoundation
 import Foundation
+import os
 
 @MainActor
 @Observable
@@ -30,13 +31,19 @@ class AzanAudioService {
             try session.setCategory(.playback, mode: .default, options: [])
             try session.setActive(true)
         } catch {
-            print("[AzanAudio] Failed to configure audio session: \(error)")
+            // Playback may still work with the default session — log and continue
+            Log.azan.error("[AzanAudio] Failed to configure audio session: \(String(describing: error), privacy: .public)")
         }
 
         // Try to load the specified sound file or fallback
         let fileName = soundName ?? (prayer == .fajr ? "azan_fajr" : "azan_full")
-        guard let url = findAudioFile(named: fileName) else {
-            print("[AzanAudio] No audio file found for '\(fileName)'")
+        var audioURL = findAudioFile(named: fileName)
+        if audioURL == nil, fileName != "azan_full" {
+            Log.azan.error("[AzanAudio] Audio file missing for '\(fileName, privacy: .public)' — falling back to 'azan_full'")
+            audioURL = findAudioFile(named: "azan_full")
+        }
+        guard let url = audioURL else {
+            Log.azan.error("[AzanAudio] No audio file found for '\(fileName, privacy: .public)' and no fallback available — cannot play azan")
             return
         }
 
@@ -49,7 +56,7 @@ class AzanAudioService {
             playbackProgress = 0
             startProgressTimer()
         } catch {
-            print("[AzanAudio] Playback failed: \(error)")
+            Log.azan.error("[AzanAudio] Playback failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
             isPlaying = false
         }
     }

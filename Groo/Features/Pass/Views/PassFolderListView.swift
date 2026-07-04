@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct PassFolderListView: View {
     let passService: PassService
@@ -16,6 +17,7 @@ struct PassFolderListView: View {
     @State private var editingFolder: PassFolder?
     @State private var newFolderName = ""
     @State private var editFolderName = ""
+    @State private var actionError: String?
 
     var body: some View {
         NavigationStack {
@@ -57,6 +59,14 @@ struct PassFolderListView: View {
                         Image(systemName: "folder.badge.plus")
                     }
                 }
+            }
+            .alert("Action Failed", isPresented: .init(
+                get: { actionError != nil },
+                set: { if !$0 { actionError = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(actionError ?? "")
             }
             .alert("New Folder", isPresented: $showingNewFolder) {
                 TextField("Folder name", text: $newFolderName)
@@ -146,8 +156,8 @@ struct PassFolderListView: View {
             parentId: nil
         )
 
-        Task {
-            try? await passService.addFolder(folder)
+        perform("Create folder") {
+            try await passService.addFolder(folder)
         }
     }
 
@@ -158,15 +168,28 @@ struct PassFolderListView: View {
 
         folder.name = name
 
-        Task {
-            try? await passService.updateFolder(folder)
+        perform("Rename folder") {
+            try await passService.updateFolder(folder)
+            // Only signal success once the save actually happened
             editingFolder = nil
         }
     }
 
     private func deleteFolder(_ folder: PassFolder) {
+        perform("Delete folder") {
+            try await passService.deleteFolder(folder)
+        }
+    }
+
+    /// Run a folder mutation, surfacing failure instead of silently dropping it
+    private func perform(_ actionName: String, _ action: @escaping () async throws -> Void) {
         Task {
-            try? await passService.deleteFolder(folder)
+            do {
+                try await action()
+            } catch {
+                Log.pass.error("\(actionName, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                actionError = error.localizedDescription
+            }
         }
     }
 }

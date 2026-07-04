@@ -6,12 +6,14 @@
 //
 
 import SwiftUI
+import os
 
 struct PassTrashView: View {
     let passService: PassService
     let onDismiss: () -> Void
 
     @State private var showingEmptyConfirmation = false
+    @State private var actionError: String?
 
     private var deletedItems: [PassVaultItem] {
         passService.getDeletedItems()
@@ -59,13 +61,33 @@ struct PassTrashView: View {
                 titleVisibility: .visible
             ) {
                 Button("Delete All Items", role: .destructive) {
-                    Task {
-                        try? await passService.emptyTrash()
+                    perform("Empty trash") {
+                        try await passService.emptyTrash()
                     }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will permanently delete all \(deletedItems.count) items in trash. This cannot be undone.")
+            }
+            .alert("Action Failed", isPresented: .init(
+                get: { actionError != nil },
+                set: { if !$0 { actionError = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(actionError ?? "")
+            }
+        }
+    }
+
+    /// Run a trash mutation, surfacing failure instead of silently dropping it
+    private func perform(_ actionName: String, _ action: @escaping () async throws -> Void) {
+        Task {
+            do {
+                try await action()
+            } catch {
+                Log.pass.error("\(actionName, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                actionError = error.localizedDescription
             }
         }
     }
@@ -115,8 +137,8 @@ struct PassTrashView: View {
         }
         .swipeActions(edge: .leading) {
             Button {
-                Task {
-                    try? await passService.restoreItem(item)
+                perform("Restore") {
+                    try await passService.restoreItem(item)
                 }
             } label: {
                 Label("Restore", systemImage: "arrow.uturn.backward")
@@ -125,8 +147,8 @@ struct PassTrashView: View {
         }
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
-                Task {
-                    try? await passService.permanentlyDeleteItem(item)
+                perform("Permanent delete") {
+                    try await passService.permanentlyDeleteItem(item)
                 }
             } label: {
                 Label("Delete", systemImage: "trash.fill")
@@ -134,8 +156,8 @@ struct PassTrashView: View {
         }
         .contextMenu {
             Button {
-                Task {
-                    try? await passService.restoreItem(item)
+                perform("Restore") {
+                    try await passService.restoreItem(item)
                 }
             } label: {
                 Label("Restore", systemImage: "arrow.uturn.backward")
@@ -144,8 +166,8 @@ struct PassTrashView: View {
             Divider()
 
             Button(role: .destructive) {
-                Task {
-                    try? await passService.permanentlyDeleteItem(item)
+                perform("Permanent delete") {
+                    try await passService.permanentlyDeleteItem(item)
                 }
             } label: {
                 Label("Delete Permanently", systemImage: "trash.fill")

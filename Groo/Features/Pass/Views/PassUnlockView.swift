@@ -7,6 +7,7 @@
 
 import SwiftUI
 import LocalAuthentication
+import os
 
 struct PassUnlockView: View {
     let passService: PassService
@@ -237,10 +238,16 @@ struct PassUnlockView: View {
                     isPasswordFocused = true
                 }
             } catch {
-                // Biometric cancelled or failed, show password field
+                // User cancellation is silent; real failures must say what broke
                 withAnimation {
                     showPasswordField = true
                 }
+                let laCode = (error as? LAError)?.code
+                if laCode != .userCancel && laCode != .systemCancel && laCode != .appCancel {
+                    Log.pass.error("Biometric unlock failed: \(String(describing: error), privacy: .public)")
+                    errorMessage = error.localizedDescription
+                }
+                isPasswordFocused = true
             }
             isLoading = false
         }

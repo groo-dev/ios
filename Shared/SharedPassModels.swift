@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Base64URL Helpers
 
@@ -194,7 +195,14 @@ struct SharedPassPasswordItem: Codable, Identifiable {
         username = try container.decode(String.self, forKey: .username)
         password = try container.decode(String.self, forKey: .password)
         urls = try container.decode([String].self, forKey: .urls)
-        totp = try? container.decodeIfPresent(SharedPassTotpConfig.self, forKey: .totp)
+        do {
+            totp = try container.decodeIfPresent(SharedPassTotpConfig.self, forKey: .totp)
+        } catch {
+            // Keep the credential usable; only the TOTP copy is lost — but say so
+            let itemId = id
+            Log.autofill.error("Ignoring malformed TOTP config on item \(itemId, privacy: .public): \(String(describing: error), privacy: .public)")
+            totp = nil
+        }
         deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
     }
 }

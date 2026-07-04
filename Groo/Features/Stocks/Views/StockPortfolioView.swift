@@ -218,17 +218,24 @@ struct StockPortfolioView: View {
             VStack(alignment: .trailing, spacing: 2) {
                 if holding.currentPrice > 0 {
                     if holding.hasTransactions {
-                        let convertedValue = portfolioManager.converted(holding.currentValue, from: holding.currency)
-                        Text(CurrencyFormatter.format(convertedValue, currencyCode: displayCurrency))
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .contentTransition(.numericText())
+                        if let rate = portfolioManager.exchangeRate(for: holding.currency) {
+                            Text(CurrencyFormatter.format(holding.currentValue * rate, currencyCode: displayCurrency))
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .contentTransition(.numericText())
 
-                        // Show native currency value if different from display
-                        if holding.currency.uppercased() != displayCurrency.uppercased() {
+                            // Show native currency value if different from display
+                            if holding.currency.uppercased() != displayCurrency.uppercased() {
+                                Text(CurrencyFormatter.format(holding.currentValue, currencyCode: holding.currency))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            // Exchange rate unavailable — show native currency, never a fake 1:1 conversion
                             Text(CurrencyFormatter.format(holding.currentValue, currencyCode: holding.currency))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .contentTransition(.numericText())
                         }
 
                         if let pct = holding.totalGainLossPercent {

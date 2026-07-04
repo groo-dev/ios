@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct ScratchpadTabView: View {
     let padService: PadService
@@ -105,10 +106,15 @@ private struct ScratchpadUnlockView: View {
 
         Task {
             do {
-                try await padService.unlock(password: password)
+                guard try await padService.unlock(password: password) else {
+                    self.error = "Incorrect password"
+                    isUnlocking = false
+                    return
+                }
                 onUnlock()
             } catch {
-                self.error = "Invalid password"
+                Log.scratchpad.error("Unlock failed: \(String(describing: error))")
+                self.error = error.localizedDescription
             }
             isUnlocking = false
         }
