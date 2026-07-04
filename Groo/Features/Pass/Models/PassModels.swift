@@ -518,6 +518,38 @@ struct PassPasskeyItem: PassBaseItem {
         updatedAt = try container.decode(Int.self, forKey: .updatedAt)
         deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
     }
+
+    init(
+        id: String,
+        name: String,
+        rpId: String,
+        rpName: String,
+        credentialId: String,
+        publicKey: String,
+        privateKey: String,
+        userHandle: String,
+        userName: String,
+        signCount: Int,
+        createdAt: Int,
+        updatedAt: Int
+    ) {
+        self.id = id
+        self.type = .passkey
+        self.name = name
+        self.rpId = rpId
+        self.rpName = rpName
+        self.credentialId = credentialId
+        self.publicKey = publicKey
+        self.privateKey = privateKey
+        self.userHandle = userHandle
+        self.userName = userName
+        self.signCount = signCount
+        self.folderId = nil
+        self.favorite = nil
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = nil
+    }
 }
 
 /// Secure Note item

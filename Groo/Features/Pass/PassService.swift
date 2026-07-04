@@ -167,6 +167,9 @@ class PassService {
         // Register AutoFill QuickType suggestions
         await credentialService.updateCredentialIdentities(from: decryptedVault.items)
 
+        // Pick up passkeys created by the AutoFill extension
+        await mergePendingPasskeys()
+
         return true
     }
 
@@ -208,9 +211,10 @@ class PassService {
                     // Register AutoFill QuickType suggestions even if background sync fails
                     await credentialService.updateCredentialIdentities(from: decryptedVault.items)
 
-                    // Sync in background
+                    // Sync in background, then pick up passkeys created by the AutoFill extension
                     Task {
                         try? await sync()
+                        await mergePendingPasskeys()
                     }
 
                     return true
@@ -251,6 +255,9 @@ class PassService {
 
         // Register AutoFill QuickType suggestions
         await credentialService.updateCredentialIdentities(from: decryptedVault.items)
+
+        // Pick up passkeys created by the AutoFill extension
+        await mergePendingPasskeys()
 
         return true
     }
@@ -709,6 +716,55 @@ class PassService {
 
         // Update AutoFill credential identities
         await credentialService.updateCredentialIdentities(from: vault.items)
+    }
+
+    // MARK: - Pending Passkeys (created by the AutoFill extension)
+
+    /// Merge passkeys the AutoFill extension registered while the app wasn't running,
+    /// push them to the server, then clear the pending queue.
+    func mergePendingPasskeys() async {
+        guard let key = encryptionKey, var vault = vault else { return }
+
+        let pending = SharedPendingItemsStore.load(key: key)
+        guard !pending.isEmpty else { return }
+
+        let existingCredentialIds = Set(vault.items.compactMap { item -> String? in
+            guard case .passkey(let passkey) = item else { return nil }
+            return passkey.credentialId
+        })
+
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        var added = false
+
+        for shared in pending where !existingCredentialIds.contains(shared.credentialId) {
+            let item = PassPasskeyItem(
+                id: shared.id,
+                name: shared.name,
+                rpId: shared.rpId,
+                rpName: shared.rpName,
+                credentialId: shared.credentialId,
+                publicKey: shared.publicKey,
+                privateKey: shared.privateKey,
+                userHandle: shared.userHandle,
+                userName: shared.userName,
+                signCount: shared.signCount,
+                createdAt: now,
+                updatedAt: now
+            )
+            vault.items.append(.passkey(item))
+            added = true
+        }
+
+        do {
+            if added {
+                vault.lastModified = now
+                self.vault = vault
+                try await saveVault()
+            }
+            SharedPendingItemsStore.clear()
+        } catch {
+            // Keep the queue so the merge retries on the next unlock/sync
+        }
     }
 
     // MARK: - Sync

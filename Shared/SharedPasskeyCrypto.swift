@@ -13,12 +13,14 @@ enum PasskeyCryptoError: Error, LocalizedError {
     case invalidPrivateKey
     case invalidBase64
     case signingFailed
+    case keyGenerationFailed
 
     var errorDescription: String? {
         switch self {
         case .invalidPrivateKey: return "Invalid private key format"
         case .invalidBase64: return "Invalid base64 encoding"
         case .signingFailed: return "Failed to sign assertion"
+        case .keyGenerationFailed: return "Failed to generate passkey"
         }
     }
 }
@@ -96,5 +98,95 @@ enum SharedPasskeyCrypto {
         authData.append(Data(bytes: &signCountBE, count: 4))
 
         return authData
+    }
+
+    // MARK: - Registration
+
+    /// Result of creating a new passkey credential
+    struct Registration {
+        let credentialId: Data
+        let privateKeyBase64: String   // PKCS8 DER, base64
+        let publicKeyBase64: String    // SPKI DER, base64
+        let attestationObject: Data
+    }
+
+    /// Create a new P-256 passkey for registration (WebAuthn "none" attestation)
+    static func createRegistration(rpId: String) throws -> Registration {
+        let privateKey = P256.Signing.PrivateKey()
+        let publicKey = privateKey.publicKey
+
+        // Random 16-byte credential ID
+        var credentialId = Data(count: 16)
+        let status = credentialId.withUnsafeMutableBytes {
+            SecRandomCopyBytes(kSecRandomDefault, 16, $0.baseAddress!)
+        }
+        guard status == errSecSuccess else {
+            throw PasskeyCryptoError.keyGenerationFailed
+        }
+
+        // COSE_Key (EC2, ES256): {1: 2, 3: -7, -1: 1, -2: x, -3: y}
+        let xy = publicKey.x963Representation.dropFirst() // strip 0x04 prefix
+        let x = xy.prefix(32)
+        let y = xy.suffix(32)
+        var coseKey = Data([0xa5])                    // map(5)
+        coseKey.append(contentsOf: [0x01, 0x02])      // 1 (kty): 2 (EC2)
+        coseKey.append(contentsOf: [0x03, 0x26])      // 3 (alg): -7 (ES256)
+        coseKey.append(contentsOf: [0x20, 0x01])      // -1 (crv): 1 (P-256)
+        coseKey.append(contentsOf: [0x21, 0x58, 0x20]) // -2 (x): bytes(32)
+        coseKey.append(x)
+        coseKey.append(contentsOf: [0x22, 0x58, 0x20]) // -3 (y): bytes(32)
+        coseKey.append(y)
+
+        // Authenticator data with attested credential data:
+        // rpIdHash(32) + flags(UP|UV|AT) + signCount(4) + aaguid(16) + credIdLen(2) + credId + coseKey
+        var authData = Data(SHA256.hash(data: Data(rpId.utf8)))
+        authData.append(0x45) // UP (0x01) + UV (0x04) + AT (0x40)
+        authData.append(contentsOf: [0x00, 0x00, 0x00, 0x00]) // sign count 0
+        authData.append(Data(count: 16)) // zero AAGUID
+        authData.append(contentsOf: [UInt8(credentialId.count >> 8), UInt8(credentialId.count & 0xff)])
+        authData.append(credentialId)
+        authData.append(coseKey)
+
+        // Attestation object: {"fmt": "none", "attStmt": {}, "authData": authData}
+        var attestation = Data([0xa3])                       // map(3)
+        attestation.append(cborTextString("fmt"))
+        attestation.append(cborTextString("none"))
+        attestation.append(cborTextString("attStmt"))
+        attestation.append(0xa0)                             // empty map
+        attestation.append(cborTextString("authData"))
+        attestation.append(cborByteStringHeader(count: authData.count))
+        attestation.append(authData)
+
+        return Registration(
+            credentialId: credentialId,
+            privateKeyBase64: privateKey.derRepresentation.base64EncodedString(),
+            publicKeyBase64: publicKey.derRepresentation.base64EncodedString(),
+            attestationObject: attestation
+        )
+    }
+
+    // MARK: - Minimal CBOR Helpers
+
+    private static func cborTextString(_ string: String) -> Data {
+        let bytes = Data(string.utf8)
+        var data = cborHeader(major: 3, count: bytes.count)
+        data.append(bytes)
+        return data
+    }
+
+    private static func cborByteStringHeader(count: Int) -> Data {
+        cborHeader(major: 2, count: count)
+    }
+
+    private static func cborHeader(major: UInt8, count: Int) -> Data {
+        let majorBits = major << 5
+        switch count {
+        case 0..<24:
+            return Data([majorBits | UInt8(count)])
+        case 24..<256:
+            return Data([majorBits | 24, UInt8(count)])
+        default:
+            return Data([majorBits | 25, UInt8(count >> 8), UInt8(count & 0xff)])
+        }
     }
 }

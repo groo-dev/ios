@@ -132,6 +132,21 @@ enum SharedPassVaultItem: Codable, Identifiable {
     }
 }
 
+// MARK: - TOTP Config
+
+struct SharedPassTotpConfig: Codable {
+    let secret: String
+    let algorithm: Algorithm
+    let digits: Int  // 6 or 8
+    let period: Int  // usually 30
+
+    enum Algorithm: String, Codable {
+        case sha1 = "SHA1"
+        case sha256 = "SHA256"
+        case sha512 = "SHA512"
+    }
+}
+
 // MARK: - Password Item
 
 struct SharedPassPasswordItem: Codable, Identifiable {
@@ -141,6 +156,7 @@ struct SharedPassPasswordItem: Codable, Identifiable {
     var username: String
     var password: String
     var urls: [String]
+    var totp: SharedPassTotpConfig?
     var deletedAt: Int?
 
     var isDeleted: Bool {
@@ -167,7 +183,7 @@ struct SharedPassPasswordItem: Codable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, type, name, username, password, urls, deletedAt
+        case id, type, name, username, password, urls, totp, deletedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -178,6 +194,7 @@ struct SharedPassPasswordItem: Codable, Identifiable {
         username = try container.decode(String.self, forKey: .username)
         password = try container.decode(String.self, forKey: .password)
         urls = try container.decode([String].self, forKey: .urls)
+        totp = try? container.decodeIfPresent(SharedPassTotpConfig.self, forKey: .totp)
         deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
     }
 }
@@ -220,5 +237,31 @@ struct SharedPassPasskeyItem: Codable, Identifiable {
         userName = try container.decode(String.self, forKey: .userName)
         signCount = try container.decode(Int.self, forKey: .signCount)
         deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
+    }
+
+    init(
+        id: String,
+        name: String,
+        rpId: String,
+        rpName: String,
+        credentialId: String,
+        publicKey: String,
+        privateKey: String,
+        userHandle: String,
+        userName: String,
+        signCount: Int = 0
+    ) {
+        self.id = id
+        self.type = .passkey
+        self.name = name
+        self.rpId = rpId
+        self.rpName = rpName
+        self.credentialId = credentialId
+        self.publicKey = publicKey
+        self.privateKey = privateKey
+        self.userHandle = userHandle
+        self.userName = userName
+        self.signCount = signCount
+        self.deletedAt = nil
     }
 }

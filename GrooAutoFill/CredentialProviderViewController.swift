@@ -9,25 +9,27 @@
 import AuthenticationServices
 import CryptoKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 class CredentialProviderViewController: ASCredentialProviderViewController {
 
     private let service = AutoFillService()
-    private var hostingController: UIHostingController<AutoFillCredentialListView>?
+    private var hostingController: UIHostingController<AnyView>?
     private var currentServiceIdentifiers: [ASCredentialServiceIdentifier] = []
     private var passkeyRequestParameters: Any? // ASPasskeyCredentialRequestParameters (iOS 17+)
+    private var pendingRegistrationRequest: Any? // ASPasskeyCredentialRequest (iOS 17+)
 
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        setupUI()
+        if hostingController == nil {
+            setupUI(rootView: AnyView(makeCredentialListView(serviceIdentifiers: currentServiceIdentifiers)))
+        }
     }
 
-    private func setupUI() {
-        let contentView = makeCredentialListView(serviceIdentifiers: currentServiceIdentifiers)
-
-        let hostingController = UIHostingController(rootView: contentView)
+    private func setupUI(rootView: AnyView) {
+        let hostingController = UIHostingController(rootView: rootView)
         self.hostingController = hostingController
 
         addChild(hostingController)
@@ -44,14 +46,18 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
         hostingController.didMove(toParent: self)
     }
 
+    private func show(rootView: AnyView) {
+        loadViewIfNeeded()
+        if let hostingController {
+            hostingController.rootView = rootView
+        } else {
+            setupUI(rootView: rootView)
+        }
+    }
+
     private func updateServiceIdentifiers(_ identifiers: [ASCredentialServiceIdentifier]) {
         currentServiceIdentifiers = identifiers
-
-        // Update the SwiftUI view with new identifiers
-        if hostingController != nil {
-            let contentView = makeCredentialListView(serviceIdentifiers: identifiers)
-            hostingController?.rootView = contentView
-        }
+        show(rootView: AnyView(makeCredentialListView(serviceIdentifiers: identifiers)))
     }
 
     private var currentRpId: String? {
@@ -256,9 +262,140 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
         }
     }
 
+    // MARK: - Passkey Registration (iOS 17+)
+
+    /// Called when a website or app wants to create a new passkey
+    @available(iOS 17.0, *)
+    override func prepareInterface(forPasskeyRegistration registrationRequest: ASCredentialRequest) {
+        guard let request = registrationRequest as? ASPasskeyCredentialRequest,
+              let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity,
+              request.supportedAlgorithms.contains(ASCOSEAlgorithmIdentifier.ES256) else {
+            extensionContext.cancelRequest(
+                withError: NSError(
+                    domain: ASExtensionErrorDomain,
+                    code: ASExtensionError.failed.rawValue,
+                    userInfo: [NSLocalizedDescriptionKey: "Unsupported passkey registration request"]
+                )
+            )
+            return
+        }
+
+        pendingRegistrationRequest = request
+
+        show(rootView: AnyView(RegisterPasskeyView(
+            service: service,
+            rpId: identity.relyingPartyIdentifier,
+            userName: identity.userName,
+            onConfirm: { [weak self] in
+                self?.completePasskeyRegistration()
+            },
+            onCancel: { [weak self] in
+                self?.cancel()
+            }
+        )))
+    }
+
+    @available(iOS 17.0, *)
+    private func completePasskeyRegistration() {
+        guard let request = pendingRegistrationRequest as? ASPasskeyCredentialRequest,
+              let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity else {
+            cancel()
+            return
+        }
+
+        Task {
+            do {
+                if !service.isUnlocked {
+                    try await service.unlock()
+                }
+
+                let rpId = identity.relyingPartyIdentifier
+
+                // The relying party may exclude credentials it already has (iOS 18+)
+                if #available(iOS 18.0, *) {
+                    let excludedIds = Set((request.excludedCredentials ?? []).map(\.credentialID))
+                    let hasExcluded = service.passkeys.contains { passkey in
+                        passkey.rpId == rpId &&
+                        Data(base64URLEncoded: passkey.credentialId).map { excludedIds.contains($0) } == true
+                    }
+                    if hasExcluded {
+                        extensionContext.cancelRequest(
+                            withError: NSError(
+                                domain: ASExtensionErrorDomain,
+                                code: ASExtensionError.matchedExcludedCredential.rawValue
+                            )
+                        )
+                        return
+                    }
+                }
+
+                let registration = try SharedPasskeyCrypto.createRegistration(rpId: rpId)
+
+                // Persist before completing so we never hand out a credential we didn't save
+                let item = SharedPassPasskeyItem(
+                    id: UUID().uuidString.lowercased(),
+                    name: rpId,
+                    rpId: rpId,
+                    rpName: rpId,
+                    credentialId: registration.credentialId.base64URLEncodedString,
+                    publicKey: registration.publicKeyBase64,
+                    privateKey: registration.privateKeyBase64,
+                    userHandle: identity.userHandle.base64URLEncodedString,
+                    userName: identity.userName,
+                    signCount: 0
+                )
+                try service.savePendingPasskey(item)
+
+                // Make the new passkey show up in QuickType immediately
+                let passkeyIdentity = ASPasskeyCredentialIdentity(
+                    relyingPartyIdentifier: rpId,
+                    userName: identity.userName,
+                    credentialID: registration.credentialId,
+                    userHandle: identity.userHandle,
+                    recordIdentifier: item.id
+                )
+                try? await ASCredentialIdentityStore.shared.saveCredentialIdentities([passkeyIdentity])
+
+                let credential = ASPasskeyRegistrationCredential(
+                    relyingParty: rpId,
+                    clientDataHash: request.clientDataHash,
+                    credentialID: registration.credentialId,
+                    attestationObject: registration.attestationObject
+                )
+
+                await extensionContext.completeRegistrationRequest(using: credential)
+
+            } catch AutoFillError.vaultLocked {
+                // Face ID failed or was cancelled — let the user retry
+                service.error = "Couldn't unlock. Try again."
+            } catch {
+                extensionContext.cancelRequest(
+                    withError: NSError(
+                        domain: ASExtensionErrorDomain,
+                        code: ASExtensionError.failed.rawValue,
+                        userInfo: [NSLocalizedDescriptionKey: error.localizedDescription]
+                    )
+                )
+            }
+        }
+    }
+
     // MARK: - Actions
 
     private func selectCredential(_ credential: SharedPassPasswordItem) {
+        // Copy the current TOTP code so the user can paste it on the next screen
+        // (matches Bitwarden behavior). Local-only, expires after 60 seconds.
+        if let totp = credential.totp,
+           let code = SharedTotp.generateCode(config: totp) {
+            UIPasteboard.general.setItems(
+                [[UTType.utf8PlainText.identifier: code]],
+                options: [
+                    .localOnly: true,
+                    .expirationDate: Date().addingTimeInterval(60),
+                ]
+            )
+        }
+
         let passwordCredential = ASPasswordCredential(
             user: credential.username,
             password: credential.password

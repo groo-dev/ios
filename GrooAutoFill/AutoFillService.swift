@@ -117,6 +117,22 @@ class AutoFillService: ObservableObject {
             }
             return passkeyItem
         }
+
+        // Merge passkeys created here but not yet synced into the vault by the main app
+        let knownCredentialIds = Set(passkeys.map(\.credentialId))
+        let pending = SharedPendingItemsStore.load(key: key)
+        passkeys.append(contentsOf: pending.filter { !knownCredentialIds.contains($0.credentialId) })
+    }
+
+    // MARK: - Passkey Registration
+
+    /// Persist a newly registered passkey to the pending queue for the main app to sync
+    func savePendingPasskey(_ item: SharedPassPasskeyItem) throws {
+        guard let key = encryptionKey else {
+            throw AutoFillError.vaultLocked
+        }
+        try SharedPendingItemsStore.append(item, key: key)
+        passkeys.append(item)
     }
 
     // MARK: - Search
