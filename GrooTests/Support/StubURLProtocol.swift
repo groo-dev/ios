@@ -33,6 +33,12 @@ final class StubURLProtocol: URLProtocol {
         queues[key(method, pathSuffix), default: []].append(.failure(error))
     }
 
+    /// Binary-body variant (e.g. encrypted file downloads).
+    static func enqueue(method: String, pathSuffix: String, status: Int = 200, data: Data) {
+        lock.lock(); defer { lock.unlock() }
+        queues[key(method, pathSuffix), default: []].append(.success(status: status, body: data))
+    }
+
     static func reset() {
         lock.lock(); defer { lock.unlock() }
         queues = [:]

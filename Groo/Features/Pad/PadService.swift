@@ -31,7 +31,7 @@ class PadService {
     // Dependencies
     private let api: APIClient
     private let crypto: CryptoService
-    private let keychain: KeychainService
+    private let keychain: any KeychainServicing
     private let store: LocalStore
 
     // Encryption key (derived from password, in-memory only)
@@ -44,7 +44,7 @@ class PadService {
     init(
         api: APIClient,
         crypto: CryptoService = CryptoService(),
-        keychain: KeychainService = KeychainService(),
+        keychain: any KeychainServicing = KeychainService(),
         store: LocalStore = .shared
     ) {
         self.api = api
@@ -92,6 +92,7 @@ class PadService {
     func unlockWithBiometric(context: LAContext? = nil) throws -> Bool {
         let keyData = try keychain.loadBiometricProtected(
             for: KeychainService.Key.padEncryptionKey,
+            prompt: "Authenticate to access Pad",
             context: context
         )
         encryptionKey = SymmetricKey(data: keyData)
