@@ -125,7 +125,7 @@ struct PassModelsTests {
     }
 
     /// Max-size sweep: a pathological but user-reachable note (a pasted
-    /// document). ~100KB of multi-byte content must roundtrip untruncated.
+    /// document). ~230KB of multi-byte content must roundtrip untruncated.
     @Test func largeMultibyteNoteContentRoundtrips() throws {
         let bigContent = String(repeating: "секрет🗒️", count: 12_000)   // 7 Characters × 12k
         let json = #"{"id":"n-big","type":"note","name":"big","content":"\#(bigContent)","createdAt":1,"updatedAt":1}"#
