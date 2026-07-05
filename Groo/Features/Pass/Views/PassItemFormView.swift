@@ -121,6 +121,7 @@ struct PassItemFormView: View {
                 // Name field (common to all)
                 Section {
                     TextField("Name", text: $name)
+                        .accessibilityIdentifier("pass.form.name")
                 }
 
                 // Type-specific fields
@@ -204,10 +205,12 @@ struct PassItemFormView: View {
                 TextField("Username", text: $username)
                     .textContentType(.username)
                     .autocapitalization(.none)
+                    .accessibilityIdentifier("pass.form.username")
 
                 HStack {
                     SecureField("Password", text: $password)
                         .textContentType(.password)
+                        .accessibilityIdentifier("pass.form.password")
 
                     Button {
                         showPasswordGenerator = true
@@ -215,6 +218,7 @@ struct PassItemFormView: View {
                         Image(systemName: "wand.and.stars")
                             .foregroundStyle(Theme.Brand.primary)
                     }
+                    .accessibilityIdentifier("pass.form.generate")
                 }
             }
 

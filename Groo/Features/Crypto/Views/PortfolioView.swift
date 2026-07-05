@@ -183,6 +183,7 @@ struct PortfolioView: View {
                     }
                 }
             }
+            .accessibilityIdentifier("wallet.portfolio")
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .refreshable {

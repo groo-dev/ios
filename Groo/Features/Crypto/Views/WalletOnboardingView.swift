@@ -60,6 +60,7 @@ struct WalletOnboardingView: View {
                             .foregroundStyle(.white)
                             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                     }
+                    .accessibilityIdentifier("wallet.create")
 
                     Button {
                         if passService.isUnlocked {
@@ -76,6 +77,7 @@ struct WalletOnboardingView: View {
                             .foregroundStyle(Theme.Brand.primary)
                             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                     }
+                    .accessibilityIdentifier("wallet.import")
                 }
                 .padding(.horizontal, Theme.Spacing.xl)
                 .padding(.bottom, Theme.Spacing.xxl)
@@ -160,6 +162,7 @@ struct WalletOnboardingView: View {
                             Text(address)
                                 .font(.caption.monospaced())
                                 .textSelection(.enabled)
+                                .accessibilityIdentifier("wallet.address")
                         }
                     }
                     .padding()
@@ -180,6 +183,7 @@ struct WalletOnboardingView: View {
                             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                     }
                     .padding()
+                    .accessibilityIdentifier("wallet.mnemonic.confirm")
                 } else {
                     Spacer()
                     if isProcessing {

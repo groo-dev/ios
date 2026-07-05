@@ -68,6 +68,7 @@ struct PassView: View {
                             } label: {
                                 Image(systemName: "ellipsis.circle")
                             }
+                            .accessibilityIdentifier("pass.menu")
                         }
                     }
                 } else {

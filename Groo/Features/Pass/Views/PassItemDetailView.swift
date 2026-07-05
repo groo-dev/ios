@@ -63,6 +63,7 @@ struct PassItemDetailView: View {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityIdentifier("pass.detail.close")
             }
         }
         .overlay(alignment: .bottom) {
@@ -142,6 +143,7 @@ struct PassItemDetailView: View {
                         Image(systemName: showPassword ? "eye.slash.fill" : "eye.fill")
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityIdentifier("pass.detail.showPassword")
                 }
             )
 

@@ -48,6 +48,7 @@ struct PasswordGeneratorView: View {
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                 }
+                .accessibilityIdentifier("passgen.use")
             }
             .padding(Theme.Spacing.lg)
             .navigationTitle("Generate Password")
@@ -76,6 +77,7 @@ struct PasswordGeneratorView: View {
                 .frame(maxWidth: .infinity)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+                .accessibilityIdentifier("passgen.value")
 
             HStack(spacing: Theme.Spacing.md) {
                 Button {
@@ -84,6 +86,7 @@ struct PasswordGeneratorView: View {
                     Label("Regenerate", systemImage: "arrow.clockwise")
                         .font(.subheadline)
                 }
+                .accessibilityIdentifier("passgen.regenerate")
 
                 Button {
                     UIPasteboard.general.string = password
@@ -97,6 +100,7 @@ struct PasswordGeneratorView: View {
                     Label(copiedToClipboard ? "Copied!" : "Copy", systemImage: copiedToClipboard ? "checkmark" : "doc.on.doc")
                         .font(.subheadline)
                 }
+                .accessibilityIdentifier("passgen.copy")
             }
 
             // Password strength indicator
@@ -172,12 +176,14 @@ struct PasswordGeneratorView: View {
                         .font(.headline)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .accessibilityIdentifier("passgen.length.value")
                 }
 
                 Slider(value: $length, in: minLength...maxLength, step: 1) { _ in
                     generatePassword()
                 }
                 .tint(Theme.Brand.primary)
+                .accessibilityIdentifier("passgen.length")
             }
 
             Divider()

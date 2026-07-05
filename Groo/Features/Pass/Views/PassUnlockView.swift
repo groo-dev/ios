@@ -154,6 +154,7 @@ struct PassUnlockView: View {
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                     .textContentType(.password)
+                    .accessibilityIdentifier("pass.unlock.password")
                     .focused($isPasswordFocused)
                     .onSubmit {
                         unlockWithPassword()
@@ -165,6 +166,7 @@ struct PassUnlockView: View {
                 HStack(spacing: Theme.Spacing.xs) {
                     Image(systemName: "exclamationmark.circle.fill")
                     Text(error)
+                        .accessibilityIdentifier("pass.unlock.error")
                 }
                 .font(.footnote)
                 .foregroundStyle(.red)
@@ -191,6 +193,7 @@ struct PassUnlockView: View {
             .tint(Theme.Brand.primary)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
             .disabled(password.isEmpty || isLoading)
+            .accessibilityIdentifier("pass.unlock.submit")
         }
     }
 

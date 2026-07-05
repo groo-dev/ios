@@ -122,6 +122,7 @@ struct PassItemListView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .accessibilityIdentifier("pass.add")
             }
         }
         .overlay {
