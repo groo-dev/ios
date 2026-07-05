@@ -53,6 +53,20 @@ class WalletManager {
         !walletAddresses.isEmpty
     }
 
+    /// True from wallet creation until the recovery-phrase reveal sheet is
+    /// dismissed. CryptoView keeps the onboarding view (which presents that
+    /// sheet) on screen while this is set — without it, the walletAddresses
+    /// append inside createWallet() flips hasWallets, CryptoView swaps to
+    /// PortfolioView, and the sheet is torn down before the mnemonic is ever
+    /// shown to the user.
+    private(set) var pendingRecoveryPhraseReveal = false
+
+    /// Called when the recovery-phrase reveal sheet closes (confirm, cancel,
+    /// or swipe-down) — lets CryptoView advance to the portfolio.
+    func completeRecoveryPhraseReveal() {
+        pendingRecoveryPhraseReveal = false
+    }
+
     /// Get wallet info (name + address) for all wallets. Requires Pass vault unlocked.
     func getWalletItems() -> [PassCryptoWalletItem] {
         let items = passService.getItems(type: .cryptoWallet)
@@ -145,6 +159,11 @@ class WalletManager {
         )
 
         try await passService.addItem(.cryptoWallet(walletItem))
+
+        // Hold CryptoView on the onboarding flow until the recovery phrase
+        // has been shown — set before the walletAddresses append flips
+        // hasWallets.
+        pendingRecoveryPhraseReveal = true
 
         // Cache address
         if !walletAddresses.contains(addressString) {

@@ -108,7 +108,11 @@ struct WalletOnboardingView: View {
             } message: {
                 Text(error ?? "")
             }
-            .sheet(isPresented: $showCreateFlow) {
+            .sheet(isPresented: $showCreateFlow, onDismiss: {
+                // Single choke point for confirm, cancel, and swipe-down:
+                // the reveal is over, CryptoView may advance to the portfolio.
+                walletManager.completeRecoveryPhraseReveal()
+            }) {
                 createWalletSheet
             }
             .sheet(isPresented: $showImportFlow) {

@@ -18,7 +18,11 @@ struct CryptoView: View {
     var body: some View {
         Group {
             if let walletManager {
-                if walletManager.hasWallets {
+                // pendingRecoveryPhraseReveal keeps the onboarding view (and
+                // its recovery-phrase sheet) alive after createWallet() flips
+                // hasWallets — swapping to the portfolio here would tear the
+                // sheet down before the mnemonic is shown.
+                if walletManager.hasWallets && !walletManager.pendingRecoveryPhraseReveal {
                     PortfolioView(
                         walletManager: walletManager,
                         ethereumService: ethereumService,
