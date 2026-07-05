@@ -15,17 +15,26 @@ final class LocalStore {
 
     let container: ModelContainer
 
+    /// Full app schema — shared by the App Group store and test containers.
+    static let schema = Schema([
+        LocalPadItem.self,
+        LocalScratchpad.self,
+        PendingOperation.self,
+        CachedTokenPrice.self,
+        LocalStockHolding.self,
+        LocalStockTransaction.self,
+        LocalAzanPreferences.self,
+        PrayerLog.self,
+    ])
+
+    /// Testing seam: wrap an injected container (e.g. in-memory). The
+    /// `shared` App Group store is unaffected.
+    init(container: ModelContainer) {
+        self.container = container
+    }
+
     private init() {
-        let schema = Schema([
-            LocalPadItem.self,
-            LocalScratchpad.self,
-            PendingOperation.self,
-            CachedTokenPrice.self,
-            LocalStockHolding.self,
-            LocalStockTransaction.self,
-            LocalAzanPreferences.self,
-            PrayerLog.self,
-        ])
+        let schema = Self.schema
 
         // Configure for App Group storage
         let config = ModelConfiguration(
