@@ -152,5 +152,68 @@ struct PadServiceTests {
 
         #expect(downloaded == original)
     }
+
+    // MARK: - Scratchpad crypto (Phase 4 fast-follow)
+
+    @Test func scratchpadContentRoundtripsThroughEncryptDecrypt() throws {
+        StubURLProtocol.reset()
+        let env = try Self.makeUnlockedEnv()
+
+        let payload = try env.service.encryptScratchpadContent("secret scratchpad 📝")
+        #expect(payload.ciphertext != "secret scratchpad 📝")
+
+        let payloadJSON = try #require(String(data: JSONEncoder().encode(payload), encoding: .utf8))
+        let scratchpad = LocalScratchpad(
+            id: "sp-1",
+            encryptedContentJSON: payloadJSON,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_060)
+        )
+
+        let decrypted = try env.service.decryptScratchpad(scratchpad)
+
+        #expect(decrypted.id == "sp-1")
+        #expect(decrypted.content == "secret scratchpad 📝")
+        #expect(decrypted.files.isEmpty)
+        #expect(decrypted.createdAt == Date(timeIntervalSince1970: 1_700_000_000))
+        #expect(decrypted.updatedAt == Date(timeIntervalSince1970: 1_700_000_060))
+    }
+
+    @Test func scratchpadWithUnparseablePayloadFailsLoudly() throws {
+        StubURLProtocol.reset()
+        let env = try Self.makeUnlockedEnv()
+        let scratchpad = LocalScratchpad(
+            id: "sp-bad",
+            encryptedContentJSON: "garbage",
+            createdAt: Date(timeIntervalSince1970: 1),
+            updatedAt: Date(timeIntervalSince1970: 1)
+        )
+
+        // do/catch instead of #expect(performing:throws:) — the sync performing
+        // closure is not MainActor-isolated, but decryptScratchpad is
+        do {
+            _ = try env.service.decryptScratchpad(scratchpad)
+            Issue.record("decryptScratchpad must throw for an unparseable payload")
+        } catch PadError.decryptionFailed {
+            // expected: a nil payload is a loud failure, never empty content
+        } catch {
+            Issue.record("expected PadError.decryptionFailed, got \(error)")
+        }
+    }
+
+    @Test func lockedServiceRejectsScratchpadCrypto() throws {
+        StubURLProtocol.reset()
+        let env = try Self.makeUnlockedEnv()
+        env.service.lock()
+
+        do {
+            _ = try env.service.encryptScratchpadContent("x")
+            Issue.record("encryptScratchpadContent must throw when locked")
+        } catch PadError.noEncryptionKey {
+            // expected
+        } catch {
+            Issue.record("expected PadError.noEncryptionKey, got \(error)")
+        }
+    }
 }
 }

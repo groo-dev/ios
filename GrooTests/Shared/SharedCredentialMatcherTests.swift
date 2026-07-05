@@ -135,4 +135,20 @@ struct SharedCredentialMatcherTests {
         let merged = SharedCredentialMatcher.mergingPendingPasskeys(vault: vault, pending: pending)
         #expect(merged.map(\.id) == ["vault-copy", "fresh-pending"])
     }
+
+    @Test func passkeyQuerySearchIsCaseInsensitiveAcrossNameUserNameAndRpId() {
+        let passkeys = [
+            Self.passkey(id: "by-name", name: "GitHub Passkey", rpId: "a.com"),
+            Self.passkey(id: "by-rpid", name: "Work", rpId: "login.github.com"),
+            Self.passkey(id: "no-hit", name: "Example", rpId: "c.com"),
+        ]
+
+        // name and rpId hit, case-insensitively; "no-hit" matches neither
+        #expect(SharedCredentialMatcher.passkeys(passkeys, matchingQuery: "GITHUB").map(\.id) == ["by-name", "by-rpid"])
+        // userName ("user@example.com" on every fixture) is the only field
+        // containing this query — all three must match through it
+        #expect(SharedCredentialMatcher.passkeys(passkeys, matchingQuery: "user@example").map(\.id) == ["by-name", "by-rpid", "no-hit"])
+        // Empty query means "no filter"
+        #expect(SharedCredentialMatcher.passkeys(passkeys, matchingQuery: "").count == 3)
+    }
 }
