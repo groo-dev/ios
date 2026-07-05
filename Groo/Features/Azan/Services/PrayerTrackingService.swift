@@ -49,6 +49,7 @@ class PrayerTrackingService {
     private(set) var totalPrayersLogged: Int = 0
 
     private let store: LocalStore
+    private let now: () -> Date
     private let trackablePrayers: [Prayer] = Prayer.notifiable
 
     private static let dateFormatter: DateFormatter = {
@@ -58,8 +59,11 @@ class PrayerTrackingService {
         return f
     }()
 
-    init(store: LocalStore = .shared) {
+    /// - Parameter now: injected clock (tests pass a fixed date so "today",
+    ///   streak walks, and weekly grids are deterministic).
+    init(store: LocalStore = .shared, now: @escaping () -> Date = Date.init) {
         self.store = store
+        self.now = now
     }
 
     // MARK: - Public API
@@ -76,7 +80,7 @@ class PrayerTrackingService {
     }
 
     func recalculate() {
-        let today = Self.dateFormatter.string(from: Date())
+        let today = Self.dateFormatter.string(from: now())
         loadTodayLogs(today)
         calculateStreaks(from: today)
         calculateWeeklyGrid(from: today)
@@ -85,7 +89,7 @@ class PrayerTrackingService {
     }
 
     func todayDateString() -> String {
-        Self.dateFormatter.string(from: Date())
+        Self.dateFormatter.string(from: now())
     }
 
     func logsForMonth(year: Int, month: Int) -> [String: [Prayer: PrayerStatus]] {
