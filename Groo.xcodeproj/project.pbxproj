@@ -206,15 +206,11 @@
 		};
 		5EE3A5983E9B0DC71FBFC004 /* GrooUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = GrooUITests;
 			sourceTree = "<group>";
 		};
 		7053C3AF65D76D022CD9DA03 /* GrooTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = GrooTests;
 			sourceTree = "<group>";
 		};
