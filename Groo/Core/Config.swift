@@ -12,9 +12,10 @@ import os
 enum Config {
     /// Resolve a UserDefaults URL override. A present-but-unparseable override
     /// is a dev configuration error: log it and assert instead of silently
-    /// falling through to the default URL.
-    private static func overrideURL(forKey key: String) -> URL? {
-        guard let override = UserDefaults.standard.string(forKey: key) else {
+    /// falling through to the default URL. `defaults` is injectable so tests
+    /// drive resolution with a suite-named UserDefaults, never `.standard`.
+    static func overrideURL(forKey key: String, in defaults: UserDefaults = .standard) -> URL? {
+        guard let override = defaults.string(forKey: key) else {
             return nil
         }
         guard let url = URL(string: override) else {

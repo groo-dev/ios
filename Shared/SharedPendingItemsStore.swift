@@ -18,7 +18,9 @@ enum SharedPendingItemsStoreError: Error {
 }
 
 enum SharedPendingItemsStore {
-    private static var fileURL: URL? {
+    /// Production queue location inside the App Group container. Tests pass
+    /// an explicit temp-directory URL instead of touching this file.
+    static var defaultFileURL: URL? {
         FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: SharedConfig.appGroupIdentifier)?
             .appendingPathComponent("pass", isDirectory: true)
@@ -28,7 +30,10 @@ enum SharedPendingItemsStore {
     /// Load pending passkeys. Returns [] only when no queue file exists.
     /// Throws `.unreadable` when the file exists but can't be decrypted/decoded —
     /// callers must NOT treat that as an empty queue.
-    static func load(key: SymmetricKey) throws -> [SharedPassPasskeyItem] {
+    static func load(
+        key: SymmetricKey,
+        fileURL: URL? = SharedPendingItemsStore.defaultFileURL
+    ) throws -> [SharedPassPasskeyItem] {
         guard let url = fileURL else {
             throw SharedPendingItemsStoreError.containerNotAvailable
         }
@@ -48,14 +53,18 @@ enum SharedPendingItemsStore {
     }
 
     /// Append a passkey to the pending queue
-    static func append(_ item: SharedPassPasskeyItem, key: SymmetricKey) throws {
+    static func append(
+        _ item: SharedPassPasskeyItem,
+        key: SymmetricKey,
+        fileURL: URL? = SharedPendingItemsStore.defaultFileURL
+    ) throws {
         guard let url = fileURL else {
             throw SharedPendingItemsStoreError.containerNotAvailable
         }
 
         var items: [SharedPassPasskeyItem]
         do {
-            items = try load(key: key)
+            items = try load(key: key, fileURL: url)
         } catch SharedPendingItemsStoreError.unreadable {
             // Never overwrite an unreadable queue — it may hold unsynced passkey
             // private keys. Move it aside so it stays recoverable on disk.
@@ -81,7 +90,7 @@ enum SharedPendingItemsStore {
     }
 
     /// Remove the pending queue (after the main app has merged it)
-    static func clear() {
+    static func clear(fileURL: URL? = SharedPendingItemsStore.defaultFileURL) {
         guard let url = fileURL, FileManager.default.fileExists(atPath: url.path) else { return }
         do {
             try FileManager.default.removeItem(at: url)
