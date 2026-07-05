@@ -923,7 +923,8 @@ actor PassAPIClient {
 
     init(
         tokenProvider: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
-        forceRefresh: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized }
+        forceRefresh: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
+        sessionConfiguration: URLSessionConfiguration = .default
     ) {
         self.baseURL = Config.passAPIBaseURL
         self.tokenProvider = tokenProvider
@@ -931,7 +932,7 @@ actor PassAPIClient {
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
 
-        let config = URLSessionConfiguration.default
+        let config = sessionConfiguration
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
         self.session = URLSession(configuration: config)
