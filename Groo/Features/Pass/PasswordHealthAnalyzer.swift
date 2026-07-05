@@ -86,7 +86,7 @@ struct PasswordHealthReport {
 struct PasswordHealthAnalyzer {
 
     /// Analyze all password items and generate a health report
-    static func analyze(items: [PassVaultItem]) -> PasswordHealthReport {
+    static func analyze(items: [PassVaultItem], now: Date = Date()) -> PasswordHealthReport {
         // Extract only non-deleted password items
         let passwords = items.compactMap { item -> PassPasswordItem? in
             guard case .password(let pwd) = item, pwd.deletedAt == nil else {
@@ -97,7 +97,7 @@ struct PasswordHealthAnalyzer {
 
         let weakPasswords = findWeakPasswords(passwords)
         let reusedPasswords = findReusedPasswords(passwords)
-        let oldPasswords = findOldPasswords(passwords)
+        let oldPasswords = findOldPasswords(passwords, now: now)
         let withoutTwoFactor = findWithoutTwoFactor(passwords)
 
         return PasswordHealthReport(
@@ -169,8 +169,8 @@ struct PasswordHealthAnalyzer {
         return passwordGroups.filter { $0.value.count > 1 }
     }
 
-    private static func findOldPasswords(_ passwords: [PassPasswordItem]) -> [PassPasswordItem] {
-        let ninetyDaysAgo = Int(Date().timeIntervalSince1970 * 1000) - (90 * 24 * 60 * 60 * 1000)
+    private static func findOldPasswords(_ passwords: [PassPasswordItem], now: Date) -> [PassPasswordItem] {
+        let ninetyDaysAgo = Int(now.timeIntervalSince1970 * 1000) - (90 * 24 * 60 * 60 * 1000)
 
         return passwords.filter { $0.updatedAt < ninetyDaysAgo }
     }
