@@ -34,8 +34,8 @@ actor APICache {
         }
     }
 
-    init() {
-        let config = URLSessionConfiguration.default
+    init(sessionConfiguration: URLSessionConfiguration = .default) {
+        let config = sessionConfiguration
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30
         session = URLSession(configuration: config)
