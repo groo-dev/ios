@@ -112,5 +112,7 @@ Conventions:
 - UI tests launch the app with `--uitest` (seam: `Groo/Core/UITestMode.swift`): OAuth bypassed, UserDefaults wiped per launch, SwiftData in-memory, keychain faked, Pass API served by an in-process stub, all other base URLs dead-ended — flows exercise real crypto (PBKDF2/AES-GCM/BIP39) but never real APIs or real local data. Stub vault master password: `uitest-master-1`.
 - UI-test element hooks are `accessibilityIdentifier`s namespaced by feature (`pass.unlock.password`, `passgen.value`, `wallet.create`, …). Identifiers are API — renaming one breaks GrooUITests.
 - UI tests: no sleeps (`waitForExistence` + one predicate-expectation helper); every test launches a fresh app process; simulator hardware keyboard must be disconnected for `typeText`.
+- Edge-case fixtures: unicode/emoji twins of every vault item type live beside the canonical ones in `GrooTests/Fixtures/VaultItemFixtures.swift` (keep both lists 1:1 with `PassVaultItemType`). Concurrency is tested as TaskGroup races asserting invariants (torn pairs, wrong bodies) — never orderings or timings.
+- `UITestMode.isActive` is compile-time `false` in Release: the `--uitest` seam exists only in Debug binaries.
 
 Design: `docs/superpowers/specs/2026-07-05-ios-test-suite-design.md`.
