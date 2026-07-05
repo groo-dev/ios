@@ -34,13 +34,13 @@ struct PassServiceIntegrationTests {
 
     /// Build a PassService wired entirely to fakes, and stub key-info + vault
     /// GET endpoints so `unlock(password:)` succeeds with `items` inside.
-    static func makeEnv(items: [PassVaultItem], vaultVersion: Int = 3) throws -> Env {
+    static func makeEnv(items: [PassVaultItem], folders: [PassFolder] = [], vaultVersion: Int = 3) throws -> Env {
         StubURLProtocol.reset()
 
         let salt = Data("integration-salt".utf8)
         let key = try crypto.deriveKey(password: password, salt: salt, iterations: iterations)
 
-        let vault = PassVault(version: 1, items: items, folders: [], lastModified: 1_700_000_000_000)
+        let vault = PassVault(version: 1, items: items, folders: folders, lastModified: 1_700_000_000_000)
         let combined = try crypto.encryptData(try JSONEncoder().encode(vault), using: key)
         let iv = combined.prefix(12)
         let ciphertext = combined.dropFirst(12)
@@ -133,7 +133,7 @@ struct PassServiceIntegrationTests {
         #expect(env.service.canUnlockWithBiometric)  // lock() ≠ lockAndClearKey()
     }
 
-    @Test func biometricUnlockUsesLocalCacheWithoutNetwork() async throws {
+    @Test func biometricUnlockSucceedsWithZeroNetwork() async throws {
         let item = PassVaultItem.password(VaultItemFixtures.samplePasswordItem())
         let env = try Self.makeEnv(items: [item])
         defer { try? FileManager.default.removeItem(at: env.tempDir) }
@@ -141,15 +141,16 @@ struct PassServiceIntegrationTests {
         // First unlock populates keychain + vault cache
         _ = try await env.service.unlock(password: Self.password)
         env.service.lock()
-        let requestsAfterUnlock = StubURLProtocol.recordedRequests.count
+
+        // Remove ALL stubs: any network dependency now fails loudly.
+        // (Background sync will fail and log — by design; the unlock itself
+        // must succeed purely from the local cache + keychain.)
+        StubURLProtocol.reset()
 
         let unlocked = try await env.service.unlockWithBiometric(context: nil)
 
         #expect(unlocked)
         #expect(env.service.getItems().map(\.id) == ["pw-1"])
-        // Cache hit: no additional GETs needed before returning
-        // (background sync may add requests afterwards; assert unlock preceded them)
-        #expect(StubURLProtocol.recordedRequests.count >= requestsAfterUnlock)
     }
 
     // MARK: CRUD — every mutation must roundtrip through encryption
@@ -241,6 +242,108 @@ struct PassServiceIntegrationTests {
         defer { try? FileManager.default.removeItem(at: env.tempDir) }
         _ = try await env.service.unlock(password: Self.password)
         #expect(env.credentials.updates.isEmpty == false)
+    }
+
+    // MARK: - Folders
+
+    @Test func folderLifecycleRoundtripsThroughEncryption() async throws {
+        let env = try Self.makeEnv(items: [])
+        defer { try? FileManager.default.removeItem(at: env.tempDir) }
+        _ = try await env.service.unlock(password: Self.password)
+
+        Self.stubVaultPut(version: 4)
+        try await env.service.addFolder(PassFolder(id: "f-1", name: "Work"))
+        #expect(env.service.getFolders().map(\.name) == ["Work"])
+        var uploaded = try Self.decodeUploadedVault(key: env.key)
+        #expect(uploaded.vault.folders.map(\.id) == ["f-1"])
+
+        Self.stubVaultPut(version: 5)
+        try await env.service.updateFolder(PassFolder(id: "f-1", name: "Work Renamed"))
+        uploaded = try Self.decodeUploadedVault(key: env.key)
+        #expect(uploaded.vault.folders.map(\.name) == ["Work Renamed"])
+    }
+
+    @Test func deleteFolderMovesItemsToRoot() async throws {
+        var item = VaultItemFixtures.samplePasswordItem()
+        item.folderId = "f-1"
+        let env = try Self.makeEnv(items: [.password(item)], folders: [PassFolder(id: "f-1", name: "Work")])
+        defer { try? FileManager.default.removeItem(at: env.tempDir) }
+        _ = try await env.service.unlock(password: Self.password)
+        #expect(env.service.getItemsInFolder("f-1").map(\.id) == ["pw-1"])
+
+        Self.stubVaultPut(version: 4)
+        try await env.service.deleteFolder(PassFolder(id: "f-1", name: "Work"))
+
+        #expect(env.service.getFolders().isEmpty)
+        #expect(env.service.getItemsInFolder("f-1").isEmpty)
+        let uploaded = try Self.decodeUploadedVault(key: env.key)
+        #expect(uploaded.vault.folders.isEmpty)
+        guard case .password(let survivor) = uploaded.vault.items.first else {
+            Issue.record("expected surviving password item"); return
+        }
+        #expect(survivor.folderId == nil)   // item moved to root, not deleted
+    }
+
+    // MARK: - Favorites
+
+    @Test func toggleFavoriteRoundtripsThroughEncryption() async throws {
+        let env = try Self.makeEnv(items: [.password(VaultItemFixtures.samplePasswordItem())])
+        defer { try? FileManager.default.removeItem(at: env.tempDir) }
+        _ = try await env.service.unlock(password: Self.password)
+        let item = try #require(env.service.getItem(id: "pw-1"))
+
+        Self.stubVaultPut(version: 4)
+        try await env.service.toggleFavorite(item)
+        #expect(env.service.getFavorites().map(\.id) == ["pw-1"])
+        var uploaded = try Self.decodeUploadedVault(key: env.key)
+        guard case .password(let fav) = uploaded.vault.items.first else {
+            Issue.record("expected password item"); return
+        }
+        #expect(fav.favorite == true)
+
+        Self.stubVaultPut(version: 5)
+        try await env.service.toggleFavorite(try #require(env.service.getItem(id: "pw-1")))
+        #expect(env.service.getFavorites().isEmpty)
+    }
+
+    // MARK: - Per-type lifecycle (guards the multi-file type switches)
+
+    @Test func everyItemTypeSurvivesAddDeleteRestore() async throws {
+        let env = try Self.makeEnv(items: [])
+        defer { try? FileManager.default.removeItem(at: env.tempDir) }
+        _ = try await env.service.unlock(password: Self.password)
+        Self.stubVaultPut(version: 4)
+
+        let decoder = JSONDecoder()
+        let allItems = try VaultItemFixtures.allItemJSONs.map {
+            try decoder.decode(PassVaultItem.self, from: Data($0.utf8))
+        }
+
+        // Add one of each type
+        for item in allItems {
+            try await env.service.addItem(item)
+        }
+        #expect(env.service.getItems().count == allItems.count)
+        var uploaded = try Self.decodeUploadedVault(key: env.key)
+        #expect(Set(uploaded.vault.items.map(\.type)) == Set(PassVaultItemType.allCases))
+
+        // Tombstone every type (exercises the per-type deletedAt switch)
+        for item in env.service.getItems() {
+            try await env.service.deleteItem(item)
+        }
+        #expect(env.service.getItems().isEmpty)
+        #expect(env.service.getTrashItems().count == allItems.count)
+        uploaded = try Self.decodeUploadedVault(key: env.key)
+        #expect(uploaded.vault.items.allSatisfy { $0.deletedAt != nil })
+
+        // Restore every type
+        for item in env.service.getTrashItems() {
+            try await env.service.restoreItem(item)
+        }
+        #expect(env.service.getItems().count == allItems.count)
+        #expect(env.service.getTrashItems().isEmpty)
+        uploaded = try Self.decodeUploadedVault(key: env.key)
+        #expect(uploaded.vault.items.allSatisfy { $0.deletedAt == nil })
     }
 }
 
