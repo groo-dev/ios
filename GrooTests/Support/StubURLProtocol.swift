@@ -57,7 +57,7 @@ final class StubURLProtocol: URLProtocol {
         let method = request.httpMethod ?? "GET"
         let path = request.url?.path ?? ""
         guard let matchKey = queues.keys.first(where: { key in
-            let parts = key.split(separator: " ", maxSplits: 1)
+            let parts = key.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
             return parts[0] == method.uppercased() && path.hasSuffix(parts[1])
         }), var queue = queues[matchKey], !queue.isEmpty else {
             return nil

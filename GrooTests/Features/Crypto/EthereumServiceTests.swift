@@ -26,16 +26,9 @@ struct EthereumServiceTests {
 
     /// Decode the JSON-RPC body of the most recent recorded POST.
     static func lastRPCBody() throws -> [String: Any] {
-        guard let request = StubURLProtocol.recordedRequests.last(where: { $0.httpMethod == "POST" }) else {
-            throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "No POST request found"])
-        }
-        guard let data = request.bodyData else {
-            throw NSError(domain: "test", code: 2, userInfo: [NSLocalizedDescriptionKey: "No request body"])
-        }
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw NSError(domain: "test", code: 3, userInfo: [NSLocalizedDescriptionKey: "Invalid JSON"])
-        }
-        return json
+        let request = try #require(StubURLProtocol.recordedRequests.last { $0.httpMethod == "POST" })
+        let data = try #require(request.bodyData)
+        return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
     // MARK: - getEthBalance / hex parsing
