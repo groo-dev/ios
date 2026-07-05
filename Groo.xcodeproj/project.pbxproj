@@ -34,6 +34,8 @@
 		1B2850F42F14017A0046247D /* KeyboardExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850ED2F14017A0046247D /* KeyboardExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B48208B2F35625A0018D7FA /* web3swift in Frameworks */ = {isa = PBXBuildFile; productRef = 1B48208A2F35625A0018D7FA /* web3swift */; };
 		1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = 1B9FA3702F44944100D792F5 /* Adhan */; };
+		AD4F8D1650FB9A99098DBC77 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1824F78163C97BE82976C04C /* Foundation.framework */; };
+		C28ED402534EC41C9D99BFB1 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1824F78163C97BE82976C04C /* Foundation.framework */; };
 		C32C63A5A95F4C7A29363DA9 /* GrooAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 6CB17EFCC3A613A008ADBD29 /* GrooAuth */; };
 		C469004D4292690B7FEA6654 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = B026D97D28BCC53D8ED6E1D0 /* Adhan */; };
 /* End PBXBuildFile section */
@@ -67,6 +69,20 @@
 			remoteGlobalIDString = 1B2850EC2F14017A0046247D;
 			remoteInfo = KeyboardExtension;
 		};
+		2188EC9AB2CC19D274F5F233 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1B28509F2F13FF540046247D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1B2850A62F13FF540046247D;
+			remoteInfo = Groo;
+		};
+		D34BE06F65D0E6F26686830A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1B28509F2F13FF540046247D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1B2850A62F13FF540046247D;
+			remoteInfo = Groo;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -87,6 +103,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1824F78163C97BE82976C04C /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		1B28391F2F1B7970008D348D /* GrooAutoFill.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GrooAutoFill.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B2839202F1B7970008D348D /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
 		1B2839E72F1B83BC008D348D /* SharedConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedConfig.swift; sourceTree = "<group>"; };
@@ -104,6 +121,8 @@
 		1B2850D02F1401620046247D /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		1B2850D22F1401620046247D /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		1B2850ED2F14017A0046247D /* KeyboardExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KeyboardExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		9926010AD047E44A252977C2 /* GrooTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GrooTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FDB0B53A16A5327609878A8A /* GrooUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GrooUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -185,6 +204,20 @@
 			path = KeyboardExtension;
 			sourceTree = "<group>";
 		};
+		5EE3A5983E9B0DC71FBFC004 /* GrooUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = GrooUITests;
+			sourceTree = "<group>";
+		};
+		7053C3AF65D76D022CD9DA03 /* GrooTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = GrooTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -230,6 +263,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		78720833DB2AEA27776BC5BC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AD4F8D1650FB9A99098DBC77 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DDD6C3360635E56837957B90 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C28ED402534EC41C9D99BFB1 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -260,6 +309,8 @@
 				1B2839222F1B7970008D348D /* GrooAutoFill */,
 				1B2850CF2F1401620046247D /* Frameworks */,
 				1B2850A82F13FF540046247D /* Products */,
+				7053C3AF65D76D022CD9DA03 /* GrooTests */,
+				5EE3A5983E9B0DC71FBFC004 /* GrooUITests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -271,6 +322,8 @@
 				1B2850CE2F1401620046247D /* WidgetExtensionExtension.appex */,
 				1B2850ED2F14017A0046247D /* KeyboardExtension.appex */,
 				1B28391F2F1B7970008D348D /* GrooAutoFill.appex */,
+				9926010AD047E44A252977C2 /* GrooTests.xctest */,
+				FDB0B53A16A5327609878A8A /* GrooUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -281,13 +334,43 @@
 				1B2850D02F1401620046247D /* WidgetKit.framework */,
 				1B2850D22F1401620046247D /* SwiftUI.framework */,
 				1B2839202F1B7970008D348D /* AuthenticationServices.framework */,
+				4517ABB40A17967A1DF47348 /* iOS */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		4517ABB40A17967A1DF47348 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				1824F78163C97BE82976C04C /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		10C8590757FE764D6EC62A68 /* GrooUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2A76E3301D908146147B8109 /* Build configuration list for PBXNativeTarget "GrooUITests" */;
+			buildPhases = (
+				BA641AEB873B3110DED5033F /* Sources */,
+				DDD6C3360635E56837957B90 /* Frameworks */,
+				D2E46A882FBEE6F6FEA6C09A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A7593585C00F2C75467F1CD9 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5EE3A5983E9B0DC71FBFC004 /* GrooUITests */,
+			);
+			name = GrooUITests;
+			productName = GrooUITests;
+			productReference = FDB0B53A16A5327609878A8A /* GrooUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		1B28391E2F1B7970008D348D /* GrooAutoFill */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1B28392E2F1B7970008D348D /* Build configuration list for PBXNativeTarget "GrooAutoFill" */;
@@ -304,8 +387,6 @@
 				1B2839222F1B7970008D348D /* GrooAutoFill */,
 			);
 			name = GrooAutoFill;
-			packageProductDependencies = (
-			);
 			productName = GrooAutoFill;
 			productReference = 1B28391F2F1B7970008D348D /* GrooAutoFill.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -356,8 +437,6 @@
 				1B2850BB2F14012D0046247D /* ShareExtension */,
 			);
 			name = ShareExtension;
-			packageProductDependencies = (
-			);
 			productName = ShareExtension;
 			productReference = 1B2850BA2F14012D0046247D /* ShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -401,11 +480,30 @@
 				1B2850EE2F14017A0046247D /* KeyboardExtension */,
 			);
 			name = KeyboardExtension;
-			packageProductDependencies = (
-			);
 			productName = KeyboardExtension;
 			productReference = 1B2850ED2F14017A0046247D /* KeyboardExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		20144DA48A1997E29F2CE31F /* GrooTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 035E0A796A01804C55FEE22E /* Build configuration list for PBXNativeTarget "GrooTests" */;
+			buildPhases = (
+				CE83B51F59A3798F515E79A6 /* Sources */,
+				78720833DB2AEA27776BC5BC /* Frameworks */,
+				4EA42BE467EA452B2720A636 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8CDF9F5EEB30C6E1D81E76DC /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7053C3AF65D76D022CD9DA03 /* GrooTests */,
+			);
+			name = GrooTests;
+			productName = GrooTests;
+			productReference = 9926010AD047E44A252977C2 /* GrooTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -458,6 +556,8 @@
 				1B2850CD2F1401620046247D /* WidgetExtensionExtension */,
 				1B2850EC2F14017A0046247D /* KeyboardExtension */,
 				1B28391E2F1B7970008D348D /* GrooAutoFill */,
+				20144DA48A1997E29F2CE31F /* GrooTests */,
+				10C8590757FE764D6EC62A68 /* GrooUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -492,6 +592,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1B2850EB2F14017A0046247D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4EA42BE467EA452B2720A636 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D2E46A882FBEE6F6FEA6C09A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -554,6 +668,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BA641AEB873B3110DED5033F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CE83B51F59A3798F515E79A6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -577,6 +705,18 @@
 			target = 1B2850EC2F14017A0046247D /* KeyboardExtension */;
 			targetProxy = 1B2850F22F14017A0046247D /* PBXContainerItemProxy */;
 		};
+		8CDF9F5EEB30C6E1D81E76DC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Groo;
+			target = 1B2850A62F13FF540046247D /* Groo */;
+			targetProxy = D34BE06F65D0E6F26686830A /* PBXContainerItemProxy */;
+		};
+		A7593585C00F2C75467F1CD9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Groo;
+			target = 1B2850A62F13FF540046247D /* Groo */;
+			targetProxy = 2188EC9AB2CC19D274F5F233 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -598,7 +738,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = dev.groo.ios.GrooAutoFill;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.groo.ios.debug.autofill;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -1017,9 +1157,82 @@
 			};
 			name = Release;
 		};
+		2CFB9780A5FE26F8A17BD44B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.groo.ios.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Groo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Groo";
+			};
+			name = Debug;
+		};
+		46904C7F85D64D98E1624FDC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.groo.ios.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Groo;
+			};
+			name = Debug;
+		};
+		DBB5BFDF27259D5A1CFAD18F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.groo.ios.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Groo;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		F62BB1861F5909A164F30925 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.groo.ios.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Groo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Groo";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		035E0A796A01804C55FEE22E /* Build configuration list for PBXNativeTarget "GrooTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F62BB1861F5909A164F30925 /* Release */,
+				2CFB9780A5FE26F8A17BD44B /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		1B28392E2F1B7970008D348D /* Build configuration list for PBXNativeTarget "GrooAutoFill" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1074,17 +1287,18 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		2A76E3301D908146147B8109 /* Build configuration list for PBXNativeTarget "GrooUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DBB5BFDF27259D5A1CFAD18F /* Release */,
+				46904C7F85D64D98E1624FDC /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/groo-dev/auth-swift.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.0.2;
-			};
-		};
 		1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/web3swift-team/web3swift";
@@ -1099,6 +1313,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 1.4.0;
+			};
+		};
+		781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groo-dev/auth-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.0.2;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
