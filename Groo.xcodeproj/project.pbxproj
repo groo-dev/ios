@@ -34,6 +34,7 @@
 		1B2850F42F14017A0046247D /* KeyboardExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850ED2F14017A0046247D /* KeyboardExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B48208B2F35625A0018D7FA /* web3swift in Frameworks */ = {isa = PBXBuildFile; productRef = 1B48208A2F35625A0018D7FA /* web3swift */; };
 		1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = 1B9FA3702F44944100D792F5 /* Adhan */; };
+		C32C63A5A95F4C7A29363DA9 /* GrooAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 6CB17EFCC3A613A008ADBD29 /* GrooAuth */; };
 		C469004D4292690B7FEA6654 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = B026D97D28BCC53D8ED6E1D0 /* Adhan */; };
 /* End PBXBuildFile section */
 
@@ -201,6 +202,7 @@
 			files = (
 				1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */,
 				1B48208B2F35625A0018D7FA /* web3swift in Frameworks */,
+				C32C63A5A95F4C7A29363DA9 /* GrooAuth in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -332,6 +334,7 @@
 			packageProductDependencies = (
 				1B48208A2F35625A0018D7FA /* web3swift */,
 				1B9FA3702F44944100D792F5 /* Adhan */,
+				6CB17EFCC3A613A008ADBD29 /* GrooAuth */,
 			);
 			productName = Groo;
 			productReference = 1B2850A72F13FF540046247D /* Groo.app */;
@@ -443,6 +446,7 @@
 			packageReferences = (
 				1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */,
 				1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */,
+				781332538BFA4F3F31472BD4 /* XCLocalSwiftPackageReference "../auth-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1B2850A82F13FF540046247D /* Products */;
@@ -1072,6 +1076,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		781332538BFA4F3F31472BD4 /* XCLocalSwiftPackageReference "../auth-swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../auth-swift";
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -1101,6 +1112,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */;
 			productName = Adhan;
+		};
+		6CB17EFCC3A613A008ADBD29 /* GrooAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 781332538BFA4F3F31472BD4 /* XCLocalSwiftPackageReference "../auth-swift" */;
+			productName = GrooAuth;
 		};
 		B026D97D28BCC53D8ED6E1D0 /* Adhan */ = {
 			isa = XCSwiftPackageProductDependency;

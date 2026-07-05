@@ -140,12 +140,14 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .confirmationDialog("Sign Out?", isPresented: $showSignOutConfirm) {
             Button("Sign Out", role: .destructive) {
-                try? authService.logout()
-                onSignOut()
+                Task {
+                    await authService.logout()
+                    onSignOut()
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You'll need to enter your PAT token again to sign back in.")
+            Text("You'll need to sign in again.")
         }
         .alert("Error", isPresented: .constant(errorMessage != nil)) {
             Button("OK") {

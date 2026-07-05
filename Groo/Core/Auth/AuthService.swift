@@ -2,102 +2,87 @@
 //  AuthService.swift
 //  Groo
 //
-//  PAT (Personal Access Token) authentication.
-//  User creates PAT in accounts web UI and pastes it here.
+//  OAuth authentication via GrooAuth ("Sign in with Groo").
+//  Wraps a GrooAuthSession actor and republishes its state for SwiftUI.
 //
 
 import UIKit
 import Foundation
 import os
-
-// MARK: - Types
-
-enum AuthError: Error {
-    case invalidToken
-    case notAuthenticated
-}
+import AuthenticationServices
+import GrooAuth
 
 // MARK: - AuthService
 
 @MainActor
 @Observable
-class AuthService {
+final class AuthService {
     private(set) var isAuthenticated = false
-    private(set) var isLoading = false
+    var currentUserEmail: String?
 
-    private let keychain = KeychainService()
+    private let session: GrooAuthSession
+    private let legacyKeychain = KeychainService()
+    private var stateObservationTask: Task<Void, Never>?
 
     init() {
-        checkExistingSession()
-    }
+        let session = GrooAuthFactory.makeSession()
+        self.session = session
 
-    // MARK: - Session Check
-
-    private func checkExistingSession() {
-        isAuthenticated = keychain.exists(for: KeychainService.Key.patToken)
-    }
-
-    // MARK: - Open Settings
-
-    /// Open accounts settings page where user can create a PAT
-    func openAccountSettings() {
-        UIApplication.shared.open(Config.accountsSettingsURL)
-    }
-
-    // MARK: - Login with PAT
-
-    /// Validate and save a PAT token
-    func login(patToken: String) throws {
-        let trimmed = patToken.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Basic validation - PAT tokens start with "groo_pat_"
-        guard !trimmed.isEmpty else {
-            throw AuthError.invalidToken
+        stateObservationTask = Task { [weak self] in
+            guard let self else { return }
+            for await state in await session.stateStream {
+                self.apply(state)
+            }
         }
 
-        // Save to keychain
-        try keychain.save(trimmed, for: KeychainService.Key.patToken)
-        isAuthenticated = true
+        Task { [weak self] in
+            await self?.migrateLegacyPATIfNeeded()
+        }
     }
 
-    // MARK: - Logout
+    private func apply(_ state: GrooAuthState) {
+        switch state {
+        case .signedOut:
+            isAuthenticated = false
+            currentUserEmail = nil
+        case .signedIn(let user):
+            isAuthenticated = true
+            currentUserEmail = user.email
+        }
+    }
 
-    func logout() throws {
-        // A failed credential wipe must be visible, but logout itself proceeds.
-        // Clear PAT token
+    /// One-time migration away from the old pasted-PAT flow: if a legacy
+    /// `pat_token` is still in the Keychain and OAuth hasn't produced a signed-in
+    /// session, the PAT is dead weight — delete it and require a fresh
+    /// "Sign in with Groo".
+    private func migrateLegacyPATIfNeeded() async {
+        guard case .signedOut = await session.currentState() else { return }
+        guard legacyKeychain.exists(for: KeychainService.Key.patToken) else { return }
         do {
-            try keychain.delete(for: KeychainService.Key.patToken)
+            try legacyKeychain.delete(for: KeychainService.Key.patToken)
         } catch {
-            Log.store.fault("Logout: failed to delete PAT token: \(String(describing: error), privacy: .public)")
+            Log.store.fault("Legacy PAT migration: failed to delete pat_token: \(String(describing: error), privacy: .public)")
         }
-
-        // Clear encryption data
-        do {
-            try keychain.delete(for: KeychainService.Key.encryptionKey)
-        } catch {
-            Log.store.fault("Logout: failed to delete encryption key: \(String(describing: error), privacy: .public)")
-        }
-        do {
-            try keychain.delete(for: KeychainService.Key.encryptionSalt)
-        } catch {
-            Log.store.fault("Logout: failed to delete encryption salt: \(String(describing: error), privacy: .public)")
-        }
-
-        isAuthenticated = false
     }
 
-    // MARK: - Get Token
+    // MARK: - Sign in / out
 
-    /// Get the stored PAT token
-    func getPatToken() throws -> String {
-        do {
-            return try keychain.loadString(for: KeychainService.Key.patToken)
-        } catch KeychainError.itemNotFound {
-            throw AuthError.notAuthenticated
-        } catch {
-            // A keychain fault is not "not signed in" — log and keep the real cause
-            Log.store.error("Failed to load PAT token: \(String(describing: error), privacy: .public)")
-            throw error
-        }
+    /// Presents the OAuth web sign-in flow anchored to `anchor`. On success,
+    /// `isAuthenticated`/`currentUserEmail` update via `stateStream`.
+    func startSignIn(anchor: ASPresentationAnchor) async throws {
+        _ = try await session.signIn(presentationAnchor: anchor)
+    }
+
+    /// Signs out locally and attempts server-side revocation. Never throws —
+    /// the app is always signed out locally afterward regardless of whether
+    /// revocation succeeded.
+    func logout() async {
+        _ = await session.signOut()
+    }
+
+    // MARK: - Access token (for authenticated API calls; wired up in a later task)
+
+    func accessToken() async throws -> String {
+        try await session.accessToken()
     }
 }

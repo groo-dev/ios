@@ -94,7 +94,7 @@ struct UnlockView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You'll need to enter your PAT token again to sign back in.")
+                Text("You'll need to sign in again.")
             }
         }
     }
@@ -119,8 +119,10 @@ struct UnlockView: View {
     }
 
     private func signOut() {
-        try? authService.logout()
-        onSignOut()
+        Task {
+            await authService.logout()
+            onSignOut()
+        }
     }
 }
 

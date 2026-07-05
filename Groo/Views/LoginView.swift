@@ -2,20 +2,21 @@
 //  LoginView.swift
 //  Groo
 //
-//  PAT token entry for authentication.
+//  "Sign in with Groo" — OAuth login via GrooAuth (browser + PKCE).
 //  Follows Apple Human Interface Guidelines for authentication screens.
 //
 
 import SwiftUI
+import UIKit
+import AuthenticationServices
+import GrooAuth
 import os
 
 struct LoginView: View {
     @Environment(AuthService.self) private var authService
 
-    @State private var patToken = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @FocusState private var isTokenFieldFocused: Bool
 
     var body: some View {
         GeometryReader { geometry in
@@ -40,29 +41,8 @@ struct LoginView: View {
                     }
                     .padding(.bottom, Theme.Spacing.xxl)
 
-                    // Sign in form
+                    // Sign in
                     VStack(spacing: Theme.Spacing.lg) {
-                        // Token input
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                            Text("Personal Access Token")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundStyle(.secondary)
-
-                            SecureField("groo_pat_...", text: $patToken)
-                                .font(.body)
-                                .padding()
-                                .background(Color(.secondarySystemBackground))
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
-                                .textContentType(.password)
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
-                                .focused($isTokenFieldFocused)
-                                .onSubmit {
-                                    signIn()
-                                }
-                        }
-
                         // Error message
                         if let error = errorMessage {
                             HStack(spacing: Theme.Spacing.xs) {
@@ -74,7 +54,6 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
-                        // Sign in button
                         Button {
                             signIn()
                         } label: {
@@ -83,7 +62,7 @@ struct LoginView: View {
                                     ProgressView()
                                         .tint(.white)
                                 } else {
-                                    Text("Sign In")
+                                    Text("Sign in with Groo")
                                         .fontWeight(.semibold)
                                 }
                             }
@@ -93,64 +72,68 @@ struct LoginView: View {
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.Brand.primary)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
-                        .disabled(patToken.isEmpty || isLoading)
+                        .disabled(isLoading)
                     }
                     .padding(.horizontal, Theme.Spacing.xl)
 
                     Spacer(minLength: Theme.Spacing.xxl)
-
-                    // Footer
-                    VStack(spacing: Theme.Spacing.sm) {
-                        Text("Don't have a token?")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-
-                        Button {
-                            authService.openAccountSettings()
-                        } label: {
-                            Text("Get one from Groo Accounts")
-                                .font(.footnote)
-                                .fontWeight(.medium)
-                        }
-                    }
-                    .padding(.bottom, Theme.Spacing.xl)
                 }
                 .frame(minHeight: geometry.size.height)
             }
-            .scrollDismissesKeyboard(.interactively)
-        }
-        .onAppear {
-            isTokenFieldFocused = true
         }
     }
 
     private func signIn() {
-        guard !patToken.isEmpty else { return }
-
         isLoading = true
         errorMessage = nil
-        isTokenFieldFocused = false
 
         Task {
             do {
-                try authService.login(patToken: patToken)
-            } catch AuthError.invalidToken {
-                errorMessage = "Invalid token. Please check and try again."
-                isTokenFieldFocused = true
-            } catch let error as KeychainError {
-                if case .saveFailed(let status) = error {
-                    Log.store.error("Login: failed to save PAT token, OSStatus \(status, privacy: .public)")
-                } else {
-                    Log.store.error("Login: keychain error: \(String(describing: error), privacy: .public)")
-                }
-                errorMessage = "Couldn't save the token to the keychain."
-                isTokenFieldFocused = true
+                let anchor = resolvePresentationAnchor()
+                try await authService.startSignIn(anchor: anchor)
+            } catch GrooAuthError.userCancelled {
+                // User dismissed the sign-in sheet — just return to the button.
             } catch {
-                Log.store.error("Login failed: \(String(describing: error), privacy: .public)")
-                errorMessage = error.localizedDescription
-                isTokenFieldFocused = true
+                Log.store.error("Sign in failed: \(String(describing: error), privacy: .public)")
+                errorMessage = Self.message(for: error)
             }
             isLoading = false
+        }
+    }
+
+    /// Resolves the foreground key window to anchor the OAuth web session.
+    private func resolvePresentationAnchor() -> ASPresentationAnchor {
+        let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = windowScenes.first(where: { $0.activationState == .foregroundActive }) ?? windowScenes.first
+        if let keyWindow = scene?.windows.first(where: { $0.isKeyWindow }) ?? scene?.windows.first {
+            return keyWindow
+        }
+        // Should be unreachable while the app is on-screen presenting this view,
+        // but ASPresentationAnchor is non-optional, so fall back to a fresh window
+        // rather than force-unwrapping.
+        return UIWindow()
+    }
+
+    /// Renders a `GrooAuthError` verbatim (it names the specific failure); falls
+    /// back to `String(describing:)` for anything else.
+    private static func message(for error: Error) -> String {
+        switch error {
+        case GrooAuthError.transport(let reason):
+            return reason
+        case GrooAuthError.protocolError(let protocolError):
+            return protocolError.errorDescription ?? protocolError.error
+        case GrooAuthError.invalidResponse(let reason):
+            return reason
+        case GrooAuthError.stateMismatch:
+            return "Sign-in response didn't match the request. Please try again."
+        case GrooAuthError.idTokenInvalid(let reason):
+            return reason
+        case GrooAuthError.signedOut:
+            return "You've been signed out. Please sign in again."
+        case GrooAuthError.userCancelled:
+            return ""
+        default:
+            return String(describing: error)
         }
     }
 }

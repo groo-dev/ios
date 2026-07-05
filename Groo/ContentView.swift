@@ -88,10 +88,12 @@ struct ContentView: View {
         padService?.lockAndClearKey()
         passService?.lockAndClearKey()
         syncService?.clearLocalStorage()
-        try? authService.logout()
         isLoggedIn = false
         isGloballyUnlocked = false
         needsGlobalUnlock = false
+        Task {
+            await authService.logout()
+        }
     }
 }
 
