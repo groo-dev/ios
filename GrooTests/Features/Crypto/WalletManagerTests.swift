@@ -316,5 +316,48 @@ struct WalletManagerTests {
         #expect(walletEnv.manager.activeAddress?.lowercased() == second.lowercased())
         #expect(walletEnv.manager.getWalletItems().count == 1)
     }
+
+    // MARK: - Cancellation (Phase 6 production fix)
+
+    /// P5 ledger bug: dismissing the create sheet cancels its .task (our
+    /// caller), but onDismiss has already fired completeRecoveryPhraseReveal —
+    /// so a createWallet that keeps running and then sets
+    /// pendingRecoveryPhraseReveal = true strands the flag true forever:
+    /// CryptoView never advances past onboarding, and tapping Create again
+    /// mints a second wallet.
+    @Test func cancelledCreateWalletThrowsAndStrandsNoState() async throws {
+        let walletEnv = try await Self.makeWalletEnv()
+        defer { Self.tearDown(walletEnv) }
+
+        // Enqueue the child on the MainActor, then cancel before it can
+        // start: this test is MainActor-isolated and does not suspend before
+        // cancel(), so the child's first instruction observes isCancelled.
+        let create = Task { @MainActor in
+            try await walletEnv.manager.createWallet()
+        }
+        create.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            _ = try await create.value
+        }
+        #expect(walletEnv.manager.pendingRecoveryPhraseReveal == false)
+        #expect(walletEnv.manager.hasWallets == false)
+        #expect(walletEnv.manager.getWalletItems().isEmpty)   // nothing persisted
+        #expect(walletEnv.manager.isLoading == false)          // defer reset ran
+    }
+
+    @Test func completedCreateSetsRevealFlagUntilCompleted() async throws {
+        let walletEnv = try await Self.makeWalletEnv()
+        defer { Self.tearDown(walletEnv) }
+
+        _ = try await walletEnv.manager.createWallet()
+
+        // The flag is what holds CryptoView on the onboarding flow until the
+        // recovery phrase has been shown (P5 fix badc2e4); the sheet's
+        // onDismiss clears it via completeRecoveryPhraseReveal.
+        #expect(walletEnv.manager.pendingRecoveryPhraseReveal)
+        walletEnv.manager.completeRecoveryPhraseReveal()
+        #expect(walletEnv.manager.pendingRecoveryPhraseReveal == false)
+    }
 }
 }

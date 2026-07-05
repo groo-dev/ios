@@ -158,12 +158,23 @@ class WalletManager {
             publicKey: address.address
         )
 
+        // The create sheet's .task is our caller — dismissing the sheet
+        // cancels it. Past this point we mutate shared state (vault, reveal
+        // flag, address cache); if the user already cancelled, stop cleanly
+        // instead of persisting a wallet they never saw.
+        try Task.checkCancellation()
+
         try await passService.addItem(.cryptoWallet(walletItem))
 
         // Hold CryptoView on the onboarding flow until the recovery phrase
         // has been shown — set before the walletAddresses append flips
-        // hasWallets.
-        pendingRecoveryPhraseReveal = true
+        // hasWallets. Skipped when the sheet was dismissed while the vault
+        // PUT was in flight: its onDismiss (completeRecoveryPhraseReveal)
+        // has already fired, so setting the flag now would strand it true
+        // with nothing left to clear it.
+        if !Task.isCancelled {
+            pendingRecoveryPhraseReveal = true
+        }
 
         // Cache address
         if !walletAddresses.contains(addressString) {
