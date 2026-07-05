@@ -2,12 +2,16 @@
 //  PassAPIClientTests.swift
 //  GrooTests
 //
-//  Serialized: StubURLProtocol uses static state.
+//  Serialized: StubURLProtocol uses static state. Nested under
+//  NetworkStubbedSuites so it also serializes relative to
+//  PassServiceIntegrationTests, which shares the same static stub state.
 //
 
 import Foundation
 import Testing
 @testable import Groo
+
+extension NetworkStubbedSuites {
 
 @Suite(.serialized)
 struct PassAPIClientTests {
@@ -141,4 +145,6 @@ struct PassAPIClientTests {
             let _: PassVaultResponse = try await Self.makeClient().get(PassAPIClient.Endpoint.vault)
         }
     }
+}
+
 }

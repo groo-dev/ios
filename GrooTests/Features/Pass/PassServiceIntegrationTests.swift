@@ -3,13 +3,17 @@
 //  GrooTests
 //
 //  Full vault lifecycle against stubbed network, fake keychain, temp-dir
-//  storage. Serialized: StubURLProtocol uses static state.
+//  storage. Serialized: StubURLProtocol uses static state. Nested under
+//  NetworkStubbedSuites so it also serializes relative to
+//  PassAPIClientTests, which shares the same static stub state.
 //
 
 import CryptoKit
 import Foundation
 import Testing
 @testable import Groo
+
+extension NetworkStubbedSuites {
 
 @MainActor
 @Suite(.serialized)
@@ -190,12 +194,20 @@ struct PassServiceIntegrationTests {
         try await env.service.deleteItem(item)
         #expect(env.service.getItems().isEmpty)
         #expect(env.service.getTrashItems().map(\.id) == ["pw-1"])
+        // The uploaded vault must tombstone the item, not remove it.
+        let afterDelete = try Self.decodeUploadedVault(key: env.key)
+        let deletedUploaded = try #require(afterDelete.vault.items.first { $0.id == "pw-1" })
+        #expect(deletedUploaded.deletedAt != nil)
 
         Self.stubVaultPut(version: 5)
         let trashed = try #require(env.service.getTrashItems().first)
         try await env.service.restoreItem(trashed)
         #expect(env.service.getItems().map(\.id) == ["pw-1"])
         #expect(env.service.getTrashItems().isEmpty)
+        // The restored upload must clear the tombstone.
+        let afterRestore = try Self.decodeUploadedVault(key: env.key)
+        let restoredUploaded = try #require(afterRestore.vault.items.first { $0.id == "pw-1" })
+        #expect(restoredUploaded.deletedAt == nil)
     }
 
     @Test func versionConflictOnSaveSurfacesError() async throws {
@@ -230,4 +242,6 @@ struct PassServiceIntegrationTests {
         _ = try await env.service.unlock(password: Self.password)
         #expect(env.credentials.updates.isEmpty == false)
     }
+}
+
 }

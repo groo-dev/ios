@@ -5,13 +5,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 MODE="${1:---unit}"
-# GrooTests suites share static test-infra state (e.g. StubURLProtocol's
-# request queues) across suites, not just within one -- Swift Testing's
-# default cross-suite parallelism races on that shared state, so tests are
-# forced to run serially here.
+# PassAPIClientTests and PassServiceIntegrationTests share static test-infra
+# state (StubURLProtocol's request queues) and are nested under the shared
+# NetworkStubbedSuites(.serialized) umbrella so they serialize relative to
+# each other; no global parallelism override is needed here.
 ARGS=(test -project Groo.xcodeproj -scheme Groo
-      -destination "platform=iOS Simulator,name=iPhone 17 Pro"
-      -parallel-testing-enabled NO)
+      -destination "platform=iOS Simulator,name=iPhone 17 Pro")
 
 case "$MODE" in
   --unit) ARGS+=(-only-testing:GrooTests) ;;
