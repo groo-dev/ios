@@ -51,7 +51,7 @@ class PassService {
     // Dependencies
     private let api: PassAPIClient
     private let crypto: CryptoService
-    private let keychain: KeychainService
+    private let keychain: any KeychainServicing
     private let vaultStore: PassVaultStore
     private let credentialService: CredentialIdentityService
 
@@ -72,7 +72,7 @@ class PassService {
     init(
         api: PassAPIClient? = nil,
         crypto: CryptoService = CryptoService(),
-        keychain: KeychainService = KeychainService(),
+        keychain: any KeychainServicing = KeychainService(),
         vaultStore: PassVaultStore = PassVaultStore(),
         credentialService: CredentialIdentityService = CredentialIdentityService(),
         tokenProvider: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },

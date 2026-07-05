@@ -20,7 +20,7 @@ enum KeychainError: Error {
     case accessControlCreationFailed
 }
 
-struct KeychainService {
+struct KeychainService: KeychainServicing {
     private let service = Config.keychainService
 
     // MARK: - String Storage
