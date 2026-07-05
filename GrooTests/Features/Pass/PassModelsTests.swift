@@ -100,4 +100,39 @@ struct PassModelsTests {
         #expect(item.totp == nil)
         #expect(item.deletedAt == nil)
     }
+
+    // MARK: Unicode / size sweep (Phase 6)
+
+    @Test(arguments: VaultItemFixtures.unicodeItemJSONs)
+    func unicodeItemRoundtripsLosslessly(_ json: String) throws {
+        let item = try decoder.decode(PassVaultItem.self, from: Data(json.utf8))
+        if case .corrupted = item { Issue.record("unicode fixture decoded as corrupted: \(json)") }
+        let redecoded = try decoder.decode(PassVaultItem.self, from: try encoder.encode(item))
+        #expect(redecoded == item)
+    }
+
+    @Test func unicodeFieldsSurviveWithExactScalars() throws {
+        // Fixture parity: the unicode twins must track the type list
+        #expect(VaultItemFixtures.unicodeItemJSONs.count == PassVaultItemType.allCases.count)
+
+        let item = try decoder.decode(PassVaultItem.self, from: Data(VaultItemFixtures.unicodePasswordItemJSON.utf8))
+        guard case .password(let pwd) = item else { Issue.record("expected .password, got \(item)"); return }
+        #expect(pwd.name == "🔐 パスワード مثال")
+        #expect(pwd.password == "påsswörd🧨👨‍👩‍👧‍👦")   // ZWJ family survives as one grapheme run
+        #expect(pwd.username == "ユーザー@例え.jp")
+        #expect(pwd.urls == ["https://例え.jp/ログイン"])
+        #expect(pwd.folderId == "📁-1")
+    }
+
+    /// Max-size sweep: a pathological but user-reachable note (a pasted
+    /// document). ~100KB of multi-byte content must roundtrip untruncated.
+    @Test func largeMultibyteNoteContentRoundtrips() throws {
+        let bigContent = String(repeating: "секрет🗒️", count: 12_000)   // 7 Characters × 12k
+        let json = #"{"id":"n-big","type":"note","name":"big","content":"\#(bigContent)","createdAt":1,"updatedAt":1}"#
+        let item = try decoder.decode(PassVaultItem.self, from: Data(json.utf8))
+        guard case .note(let note) = item else { Issue.record("expected .note, got \(item)"); return }
+        #expect(note.content == bigContent)
+        let redecoded = try decoder.decode(PassVaultItem.self, from: try encoder.encode(item))
+        #expect(redecoded == item)
+    }
 }

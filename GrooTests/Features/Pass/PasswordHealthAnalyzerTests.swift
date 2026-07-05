@@ -92,4 +92,38 @@ struct PasswordHealthAnalyzerTests {
         #expect((0...100).contains(report.overallScore))
         #expect(report.scoreLabel == "Needs Attention")
     }
+
+    // MARK: Unicode / boundary sweep (Phase 6)
+
+    /// Swift Strings count Characters, not bytes: 8 family-ZWJ emoji are
+    /// ~200 UTF-8 bytes but 8 Characters — byte-based length scoring would
+    /// wrongly rate this a 16+-length password.
+    @Test func strengthCountsGraphemesNotBytes() {
+        let familyEmoji = String(repeating: "👨‍👩‍👧‍👦", count: 8)
+        #expect(familyEmoji.count == 8)
+        #expect(PasswordHealthAnalyzer.calculateStrength(familyEmoji) == .weak)
+
+        // 16 varied unicode Characters (case + digit + symbol variety,
+        // no sequential/repeat runs) still rate strong
+        let unicodeStrong = "Påsswörd-Ω997🧨ab"
+        #expect(unicodeStrong.count == 16)
+        #expect(PasswordHealthAnalyzer.calculateStrength(unicodeStrong) == .strong)
+    }
+
+    /// Swift String equality is canonical: "é" precomposed equals
+    /// "e" + combining acute. Two items whose passwords differ only in
+    /// normalization ARE the same secret — the analyzer must group them as
+    /// reused (dictionary keys hash canonically, so this pins that the
+    /// grouping key stays a String and never becomes raw bytes).
+    @Test func canonicallyEquivalentPasswordsCountAsReused() {
+        let precomposed = VaultItemFixtures.samplePasswordItem(id: "a", password: "caf\u{00E9}-secret-991")
+        let decomposed = VaultItemFixtures.samplePasswordItem(id: "b", password: "cafe\u{0301}-secret-991")
+
+        let report = PasswordHealthAnalyzer.analyze(
+            items: [.password(precomposed), .password(decomposed)],
+            now: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+
+        #expect(report.reusedCount == 2)
+    }
 }

@@ -87,6 +87,20 @@ struct TotpServiceTests {
         let lower = PassTotpConfig(secret: Self.sha1Secret.lowercased(), algorithm: .sha1, digits: 8, period: 30)
         #expect(TotpService.generateCode(config: lower, time: Date(timeIntervalSince1970: 59)) == "94287082")
     }
+
+    // MARK: Epoch boundary (Phase 6)
+
+    /// t = 0 → counter 0 → HMAC over eight 0x00 bytes. RFC 4226 Appendix D:
+    /// HOTP(0) for the 20-byte SHA1 test secret is 755224. A
+    /// counter-encoding bug (skipping leading zero bytes, wrong endianness
+    /// at zero) breaks exactly here and nowhere in the RFC 6238 vectors.
+    @Test func epochCounterZeroMatchesRfc4226AndRotatesAt30() {
+        let config = PassTotpConfig(secret: Self.sha1Secret, algorithm: .sha1, digits: 6, period: 30)
+        let atEpoch = TotpService.generateCode(config: config, time: Date(timeIntervalSince1970: 0))
+        #expect(atEpoch == "755224")
+        #expect(TotpService.generateCode(config: config, time: Date(timeIntervalSince1970: 29)) == "755224")
+        #expect(TotpService.generateCode(config: config, time: Date(timeIntervalSince1970: 30)) != "755224")
+    }
 }
 
 // MARK: - otpauth:// URI parsing

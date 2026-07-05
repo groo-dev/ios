@@ -43,6 +43,46 @@ enum VaultItemFixtures {
          bankAccountItemJSON, fileItemJSON, cryptoWalletItemJSON]
     }
 
+    // MARK: - Unicode/emoji twins (Phase 6 edge sweep)
+
+    /// Every user-controlled string field carries multi-byte content — CJK,
+    /// RTL Arabic, combining marks (the ́ below is a JSON escape for a
+    /// combining acute), and multi-scalar ZWJ emoji. Structural fields
+    /// (base64 keys, card numbers, hex addresses, mime types) stay valid:
+    /// production never receives emoji there. Keep 1:1 with allItemJSONs.
+    static let unicodePasswordItemJSON = """
+    {"id":"pw-u","type":"password","name":"🔐 パスワード مثال","username":"ユーザー@例え.jp","password":"påsswörd🧨👨‍👩‍👧‍👦","urls":["https://例え.jp/ログイン"],"notes":"ملاحظة 📝 caf\\u00e9 vs cafe\\u0301","totp":{"secret":"JBSWY3DPEHPK3PXP","algorithm":"SHA1","digits":6,"period":30},"folderId":"📁-1","favorite":true,"createdAt":1700000000000,"updatedAt":1700000000000}
+    """
+
+    static let unicodePasskeyItemJSON = """
+    {"id":"pk-u","type":"passkey","name":"🗝️ 通行キー","rpId":"example.com","rpName":"مثال — Beispiel","credentialId":"Y3JlZC1pZA","publicKey":"cHVi","privateKey":"cHJpdg==","userHandle":"dXNlcg","userName":"ユーザー🙂","signCount":0,"createdAt":1700000000000,"updatedAt":1700000000000}
+    """
+
+    static let unicodeNoteItemJSON = """
+    {"id":"n-u","type":"note","name":"📝 ملاحظات سرية","content":"秘密 🤫 mixed مع النص Ω≈ç√ — e\\u0301 combining","createdAt":1700000000000,"updatedAt":1700000000000}
+    """
+
+    static let unicodeCardItemJSON = """
+    {"id":"c-u","type":"card","name":"💳 бизнес карта","cardholderName":"JOSÉ GARCÍA-ÑOÑO","number":"4111111111111111","expMonth":"12","expYear":"2030","cvv":"123","brand":"visa","createdAt":1700000000000,"updatedAt":1700000000000}
+    """
+
+    static let unicodeBankAccountItemJSON = """
+    {"id":"b-u","type":"bank_account","name":"🏦 حساب جاري","bankName":"بنك الإمارات دبي الوطني","accountType":"checking","accountNumber":"12345678","routingNumber":"021000021","createdAt":1700000000000,"updatedAt":1700000000000}
+    """
+
+    static let unicodeFileItemJSON = """
+    {"id":"fl-u","type":"file","name":"📄 書類","fileName":"税務書類 2025 📎.pdf","fileSize":1024,"mimeType":"application/pdf","r2Key":"files/例え","encryptionIv":"aXY=","createdAt":1700000000000,"updatedAt":1700000000000}
+    """
+
+    static let unicodeCryptoWalletItemJSON = """
+    {"id":"w-u","type":"crypto_wallet","name":"🪙 المحفظة الرئيسية","address":"0xabc","seedPhrase":"legal winner thank year wave sausage worth useful legal winner thank yellow","derivationPath":"m/44'/60'/0'/0/0","createdAt":1700000000000,"updatedAt":1700000000000}
+    """
+
+    static var unicodeItemJSONs: [String] {
+        [unicodePasswordItemJSON, unicodePasskeyItemJSON, unicodeNoteItemJSON, unicodeCardItemJSON,
+         unicodeBankAccountItemJSON, unicodeFileItemJSON, unicodeCryptoWalletItemJSON]
+    }
+
     /// Programmatic password item for tests needing controlled timestamps.
     static func samplePasswordItem(
         id: String = "pw-1", name: String = "Example", password: String = "hunter2!",

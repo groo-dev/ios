@@ -83,4 +83,20 @@ struct SharedPassModelsTests {
         let item = try decoder.decode(SharedPassPasswordItem.self, from: Data(json.utf8))
         #expect(item.primaryDomain == nil)
     }
+
+    // MARK: Unicode sweep (Phase 6)
+
+    /// AutoFill fills what the app stored: multi-byte credentials must cross
+    /// the extension-side decode with exact scalar fidelity, and unicode
+    /// URLs must never crash domain extraction (the exact host rendering —
+    /// punycode or bail — is Foundation's business, so it is not pinned).
+    @Test func unicodeCredentialSurvivesSharedDecode() throws {
+        let item = try decoder.decode(SharedPassPasswordItem.self,
+                                      from: Data(VaultItemFixtures.unicodePasswordItemJSON.utf8))
+        #expect(item.password == "påsswörd🧨👨‍👩‍👧‍👦")
+        #expect(item.username == "ユーザー@例え.jp")
+        #expect(item.name == "🔐 パスワード مثال")
+        _ = item.primaryDomain   // crash-freedom pin on the unicode URL
+        _ = item.domains
+    }
 }
