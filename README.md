@@ -105,5 +105,7 @@ Conventions:
 - Keychain via `InMemoryKeychain` (`KeychainServicing` seam); vault storage via `PassVaultStore(directoryURL:)`.
 - Never use production KDF iteration counts (600k) in tests.
 - Wallet tests use real BIP39 derivation vectors (constants in `WalletManagerTests`) — a vector failure is a derivation regression, never a fixture to update.
+- SwiftData suites use in-memory containers via `InMemoryLocalStore.make()` — never `LocalStore.shared`.
+- WebSocket tests script a `FakeWebSocketConnection` (`GrooTests/Support/WebSocketFakes.swift`); reconnect/ping timers are recorded and fired manually, never waited on.
 
 Design: `docs/superpowers/specs/2026-07-05-ios-test-suite-design.md`.
