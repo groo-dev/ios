@@ -93,9 +93,10 @@ API endpoints:
 Unit + integration tests live in `GrooTests` (Swift Testing), UI tests in `GrooUITests` (XCUITest).
 
 ```bash
-scripts/test.sh          # unit + integration
-scripts/test.sh --ui     # UI tests (slow — boots the app)
-scripts/test.sh --all    # everything
+scripts/test.sh              # unit + integration
+scripts/test.sh --ui         # UI tests (slow — boots the app)
+scripts/test.sh --all        # everything
+scripts/test.sh --coverage   # any mode + coverage report (bundle in build/coverage/)
 ```
 
 Conventions:
