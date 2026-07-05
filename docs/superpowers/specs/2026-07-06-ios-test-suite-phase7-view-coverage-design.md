@@ -1,7 +1,7 @@
 # iOS Test Suite — Phase 7: View Rendering Coverage (80% Overall)
 
 **Date:** 2026-07-06
-**Status:** Draft — awaiting approval
+**Status:** Approved
 **Parent spec:** `2026-07-05-ios-test-suite-design.md` (Phases 1–6, complete)
 **Goal:** Raise Groo.app line coverage from 36.7% to ≥80% by making the SwiftUI view layer testable via render/snapshot tests, and seaming the remaining system-coupled services. Gain visual-regression protection as a first-class side benefit.
 
