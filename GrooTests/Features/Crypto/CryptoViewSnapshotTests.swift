@@ -59,7 +59,7 @@ struct CryptoViewSnapshotTests {
         let suiteName = "CryptoSnapshotTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        defaults.set(addresses, forKey: "walletAddresses")
+        defaults.set(addresses.joined(separator: ","), forKey: "walletAddresses")
         if let first = addresses.first { defaults.set(first, forKey: "activeWalletAddress") }
         return WalletSetup(manager: WalletManager(passService: env.service, defaults: defaults),
                            env: env, defaults: defaults, suiteName: suiteName)
