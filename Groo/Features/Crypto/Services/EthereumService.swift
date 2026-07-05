@@ -18,8 +18,8 @@ actor EthereumService {
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
-    init() {
-        let config = URLSessionConfiguration.default
+    init(sessionConfiguration: URLSessionConfiguration = .default) {
+        let config = sessionConfiguration
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30
         self.session = URLSession(configuration: config)
