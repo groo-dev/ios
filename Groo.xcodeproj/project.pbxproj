@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0146C019A2F5CB2D85C0DD2E /* SnapshotTesting in Frameworks */ = {isa = PBXBuildFile; productRef = D35E677947624A1C7FE472ED /* SnapshotTesting */; };
 		1B2839212F1B7970008D348D /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1B2839202F1B7970008D348D /* AuthenticationServices.framework */; };
 		1B28392C2F1B7970008D348D /* GrooAutoFill.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B28391F2F1B7970008D348D /* GrooAutoFill.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B2839ED2F1B83BC008D348D /* SharedPassModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2839EA2F1B83BC008D348D /* SharedPassModels.swift */; };
@@ -271,6 +272,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AD4F8D1650FB9A99098DBC77 /* Foundation.framework in Frameworks */,
+				0146C019A2F5CB2D85C0DD2E /* SnapshotTesting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -506,6 +508,9 @@
 				7053C3AF65D76D022CD9DA03 /* GrooTests */,
 			);
 			name = GrooTests;
+			packageProductDependencies = (
+				D35E677947624A1C7FE472ED /* SnapshotTesting */,
+			);
 			productName = GrooTests;
 			productReference = 9926010AD047E44A252977C2 /* GrooTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -550,6 +555,7 @@
 				1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */,
 				1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */,
 				781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */,
+				8B834A862708F3215293BAC8 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1B2850A82F13FF540046247D /* Products */;
@@ -1333,6 +1339,14 @@
 				minimumVersion = 0.0.2;
 			};
 		};
+		8B834A862708F3215293BAC8 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-snapshot-testing";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.17.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1355,6 +1369,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */;
 			productName = Adhan;
+		};
+		D35E677947624A1C7FE472ED /* SnapshotTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8B834A862708F3215293BAC8 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */;
+			productName = SnapshotTesting;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
