@@ -74,9 +74,11 @@ class PassService {
         crypto: CryptoService = CryptoService(),
         keychain: KeychainService = KeychainService(),
         vaultStore: PassVaultStore = PassVaultStore(),
-        credentialService: CredentialIdentityService = CredentialIdentityService()
+        credentialService: CredentialIdentityService = CredentialIdentityService(),
+        tokenProvider: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
+        forceRefresh: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized }
     ) {
-        self.api = api ?? PassAPIClient(keychain: keychain)
+        self.api = api ?? PassAPIClient(tokenProvider: tokenProvider, forceRefresh: forceRefresh)
         self.crypto = crypto
         self.keychain = keychain
         self.vaultStore = vaultStore
@@ -914,13 +916,18 @@ class PassService {
 actor PassAPIClient {
     private let baseURL: URL
     private let session: URLSession
-    private let keychain: KeychainService
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    private let tokenProvider: @Sendable () async throws -> String
+    private let forceRefresh: @Sendable () async throws -> String
 
-    init(keychain: KeychainService = KeychainService()) {
+    init(
+        tokenProvider: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
+        forceRefresh: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized }
+    ) {
         self.baseURL = Config.passAPIBaseURL
-        self.keychain = keychain
+        self.tokenProvider = tokenProvider
+        self.forceRefresh = forceRefresh
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
 
@@ -930,27 +937,13 @@ actor PassAPIClient {
         self.session = URLSession(configuration: config)
     }
 
-    // MARK: - PAT Token
-
-    private func getPatToken() -> String? {
-        do {
-            return try keychain.loadString(for: KeychainService.Key.patToken)
-        } catch KeychainError.itemNotFound {
-            return nil
-        } catch {
-            // Requests will 401 — make the real cause findable
-            Log.pass.error("Failed to read PAT token from keychain: \(String(describing: error), privacy: .public)")
-            return nil
-        }
-    }
-
     // MARK: - Request Building
 
     private func buildRequest(
         path: String,
         method: String,
         body: Data? = nil
-    ) throws -> URLRequest {
+    ) async throws -> URLRequest {
         guard let url = URL(string: path, relativeTo: baseURL) else {
             throw APIError.invalidURL
         }
@@ -960,31 +953,48 @@ actor PassAPIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        if let token = getPatToken() {
-            request.setValue("session=\(token)", forHTTPHeaderField: "Cookie")
-        }
+        let token = try await tokenProvider()
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         request.httpBody = body
         return request
     }
 
+    /// Runs `operation` once; on `APIError.unauthorized` forces exactly one token
+    /// refresh and retries `operation` once more. A second `401` (or any other
+    /// error from the retry) propagates as-is — no further retries.
+    private func withUnauthorizedRetry<T>(_ operation: () async throws -> T) async throws -> T {
+        do {
+            return try await operation()
+        } catch APIError.unauthorized {
+            _ = try await forceRefresh()
+            return try await operation()
+        }
+    }
+
     // MARK: - HTTP Methods
 
     func get<T: Decodable>(_ path: String) async throws -> T {
-        let request = try buildRequest(path: path, method: "GET")
-        return try await perform(request)
+        try await withUnauthorizedRetry {
+            let request = try await buildRequest(path: path, method: "GET")
+            return try await perform(request)
+        }
     }
 
     func post<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
-        let bodyData = try encoder.encode(body)
-        let request = try buildRequest(path: path, method: "POST", body: bodyData)
-        return try await perform(request)
+        try await withUnauthorizedRetry {
+            let bodyData = try encoder.encode(body)
+            let request = try await buildRequest(path: path, method: "POST", body: bodyData)
+            return try await perform(request)
+        }
     }
 
     func put<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
-        let bodyData = try encoder.encode(body)
-        let request = try buildRequest(path: path, method: "PUT", body: bodyData)
-        return try await perform(request)
+        try await withUnauthorizedRetry {
+            let bodyData = try encoder.encode(body)
+            let request = try await buildRequest(path: path, method: "PUT", body: bodyData)
+            return try await perform(request)
+        }
     }
 
     // MARK: - Request Execution

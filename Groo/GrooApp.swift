@@ -28,6 +28,8 @@ struct GrooApp: App {
                     // Connect AppDelegate to PushService
                     appDelegate.pushService = pushService
                     appDelegate.azanAudioService = azanAudioService
+                    // PushService needs the OAuth access token for device registration
+                    pushService.authService = authService
                     // Request push notification permission
                     setupPushNotifications()
                     // Register Azan notification category

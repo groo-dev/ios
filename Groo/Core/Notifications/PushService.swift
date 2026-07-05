@@ -39,6 +39,10 @@ class PushService {
 
     private let keychain = KeychainService()
 
+    /// Wired up by `GrooApp` after both services are constructed. Used to obtain
+    /// the OAuth access token for device registration requests.
+    weak var authService: AuthService?
+
     // Callback for when a sync notification is received
     var onSyncRequested: (() -> Void)?
 
@@ -75,9 +79,8 @@ class PushService {
         try keychain.save(tokenString, for: KeychainService.Key.deviceToken)
         deviceToken = tokenString
 
-        // Get PAT for auth
-        guard let patToken = try? keychain.loadString(for: KeychainService.Key.patToken) else {
-            Log.push.error("No PAT token in keychain, can't register device")
+        guard let authService else {
+            Log.push.error("No AuthService wired, can't register device")
             throw PushError.noAuthToken
         }
 
@@ -103,17 +106,30 @@ class PushService {
         let url = Config.accountsAPIBaseURL.appendingPathComponent("v1/devices")
         Log.push.debug("Registering device (\(environment, privacy: .public)) at \(url.absoluteString, privacy: .public)")
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(patToken)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONEncoder().encode(registration)
+        let body = try JSONEncoder().encode(registration)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        func send(_ accessToken: String) async throws -> (Data, HTTPURLResponse) {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.httpBody = body
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            Log.push.error("Device registration failed: invalid response type")
-            throw PushError.registrationFailed
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                Log.push.error("Device registration failed: invalid response type")
+                throw PushError.registrationFailed
+            }
+            return (data, httpResponse)
+        }
+
+        var (data, httpResponse) = try await send(authService.accessToken())
+
+        if httpResponse.statusCode == 401 {
+            // Token looked valid but the server rejected it — force one refresh
+            // and retry exactly once; a second 401 falls through and fails below.
+            let refreshedToken = try await authService.forceRefresh()
+            (data, httpResponse) = try await send(refreshedToken)
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
@@ -130,7 +146,7 @@ class PushService {
     func unregisterDeviceToken() async throws {
         guard let token = deviceToken else { return }
 
-        guard let patToken = try? keychain.loadString(for: KeychainService.Key.patToken) else {
+        guard let authService else {
             // Just clear local state if no auth
             try? keychain.delete(for: KeychainService.Key.deviceToken)
             deviceToken = nil
@@ -139,14 +155,25 @@ class PushService {
         }
 
         let url = Config.accountsAPIBaseURL.appendingPathComponent("v1/devices/\(token)")
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        request.setValue("Bearer \(patToken)", forHTTPHeaderField: "Authorization")
+
+        func send(_ accessToken: String) async throws -> (Data, HTTPURLResponse?) {
+            var request = URLRequest(url: url)
+            request.httpMethod = "DELETE"
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            return (data, response as? HTTPURLResponse)
+        }
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse,
-               !(200...299).contains(httpResponse.statusCode) {
+            let accessToken = try await authService.accessToken()
+            var (data, httpResponse) = try await send(accessToken)
+
+            if httpResponse?.statusCode == 401 {
+                let refreshedToken = try await authService.forceRefresh()
+                (data, httpResponse) = try await send(refreshedToken)
+            }
+
+            if let httpResponse, !(200...299).contains(httpResponse.statusCode) {
                 let responseBody = String(data: data, encoding: .utf8) ?? "empty"
                 Log.push.error("Device unregistration returned status \(httpResponse.statusCode): \(responseBody, privacy: .public)")
             }

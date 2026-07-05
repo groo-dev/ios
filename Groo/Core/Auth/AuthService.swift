@@ -80,9 +80,21 @@ final class AuthService {
         _ = await session.signOut()
     }
 
-    // MARK: - Access token (for authenticated API calls; wired up in a later task)
+    // MARK: - Access token (for authenticated API calls)
 
+    /// Returns a valid access token, refreshing transparently if it's within
+    /// 60s of expiry. Throws `GrooAuthError.signedOut` if there's no session.
     func accessToken() async throws -> String {
         try await session.accessToken()
+    }
+
+    /// Forces a token refresh (bypassing the expiry check `accessToken()`
+    /// uses) and returns the new access token. Callers use this exactly once
+    /// after an API call comes back `401` despite holding a token
+    /// `accessToken()` considered valid, then retry the request. If the
+    /// refresh itself is rejected (e.g. revoked), this throws and
+    /// `isAuthenticated` flips to `false` via `stateStream`.
+    func forceRefresh() async throws -> String {
+        try await session.forceRefreshAccessToken()
     }
 }

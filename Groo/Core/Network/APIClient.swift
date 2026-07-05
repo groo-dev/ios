@@ -29,13 +29,25 @@ struct APIResponse<T: Decodable>: Decodable {
 actor APIClient {
     private let baseURL: URL
     private let session: URLSession
-    private let keychain: KeychainService
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    private let tokenProvider: @Sendable () async throws -> String
+    private let forceRefresh: @Sendable () async throws -> String
 
-    init(baseURL: URL, keychain: KeychainService = KeychainService()) {
+    /// - Parameters:
+    ///   - tokenProvider: Returns a valid OAuth access token, refreshing transparently
+    ///     when needed. In production this is `authService.accessToken`.
+    ///   - forceRefresh: Forces exactly one token refresh (bypassing any expiry check)
+    ///     and returns the new token. Used once on a `401` before retrying. In
+    ///     production this is `authService.forceRefresh`.
+    init(
+        baseURL: URL,
+        tokenProvider: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
+        forceRefresh: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized }
+    ) {
         self.baseURL = baseURL
-        self.keychain = keychain
+        self.tokenProvider = tokenProvider
+        self.forceRefresh = forceRefresh
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
 
@@ -45,20 +57,6 @@ actor APIClient {
         self.session = URLSession(configuration: config)
     }
 
-    // MARK: - PAT Token
-
-    private func getPatToken() -> String? {
-        do {
-            return try keychain.loadString(for: KeychainService.Key.patToken)
-        } catch KeychainError.itemNotFound {
-            // Not signed in — expected, no logging
-            return nil
-        } catch {
-            Log.network.error("Failed to load PAT token from keychain: \(String(describing: error), privacy: .public)")
-            return nil
-        }
-    }
-
     // MARK: - Request Building
 
     private func buildRequest(
@@ -66,7 +64,7 @@ actor APIClient {
         method: String,
         body: Data? = nil,
         contentType: String = "application/json"
-    ) throws -> URLRequest {
+    ) async throws -> URLRequest {
         guard let url = URL(string: path, relativeTo: baseURL) else {
             throw APIError.invalidURL
         }
@@ -76,90 +74,113 @@ actor APIClient {
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        // Add PAT token as cookie (pad API expects session cookie)
-        if let token = getPatToken() {
-            request.setValue("session=\(token)", forHTTPHeaderField: "Cookie")
-        }
+        let token = try await tokenProvider()
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         request.httpBody = body
         return request
     }
 
+    /// Runs `operation` once; on `APIError.unauthorized` forces exactly one token
+    /// refresh and retries `operation` once more. A second `401` (or any other
+    /// error from the retry) propagates as-is — no further retries.
+    private func withUnauthorizedRetry<T>(_ operation: () async throws -> T) async throws -> T {
+        do {
+            return try await operation()
+        } catch APIError.unauthorized {
+            _ = try await forceRefresh()
+            return try await operation()
+        }
+    }
+
     // MARK: - HTTP Methods
 
     func get<T: Decodable>(_ path: String) async throws -> T {
-        let request = try buildRequest(path: path, method: "GET")
-        return try await perform(request)
+        try await withUnauthorizedRetry {
+            let request = try await buildRequest(path: path, method: "GET")
+            return try await perform(request)
+        }
     }
 
     func post<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
-        let bodyData = try encoder.encode(body)
-        let request = try buildRequest(path: path, method: "POST", body: bodyData)
-        Log.network.debug("POST \(request.url?.absoluteString ?? "nil", privacy: .public)")
-        return try await perform(request)
+        try await withUnauthorizedRetry {
+            let bodyData = try encoder.encode(body)
+            let request = try await buildRequest(path: path, method: "POST", body: bodyData)
+            Log.network.debug("POST \(request.url?.absoluteString ?? "nil", privacy: .public)")
+            return try await perform(request)
+        }
     }
 
     func post(_ path: String) async throws {
-        let request = try buildRequest(path: path, method: "POST")
-        try await performVoid(request)
+        try await withUnauthorizedRetry {
+            let request = try await buildRequest(path: path, method: "POST")
+            try await performVoid(request)
+        }
     }
 
     func put<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
-        let bodyData = try encoder.encode(body)
-        let request = try buildRequest(path: path, method: "PUT", body: bodyData)
-        return try await perform(request)
+        try await withUnauthorizedRetry {
+            let bodyData = try encoder.encode(body)
+            let request = try await buildRequest(path: path, method: "PUT", body: bodyData)
+            return try await perform(request)
+        }
     }
 
     func delete(_ path: String) async throws {
-        let request = try buildRequest(path: path, method: "DELETE")
-        try await performVoid(request)
+        try await withUnauthorizedRetry {
+            let request = try await buildRequest(path: path, method: "DELETE")
+            try await performVoid(request)
+        }
     }
 
     // MARK: - File Operations
 
     func uploadFile(_ data: Data, to path: String) async throws -> FileUploadResponse {
-        guard let url = URL(string: path, relativeTo: baseURL) else {
-            throw APIError.invalidURL
+        try await withUnauthorizedRetry {
+            guard let url = URL(string: path, relativeTo: baseURL) else {
+                throw APIError.invalidURL
+            }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+
+            // Multipart form data
+            let boundary = UUID().uuidString
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+            let token = try await tokenProvider()
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            var body = Data()
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"file\"; filename=\"encrypted\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
+            body.append(data)
+            body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+
+            request.httpBody = body
+            return try await perform(request)
         }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-
-        // Multipart form data
-        let boundary = UUID().uuidString
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-
-        if let token = getPatToken() {
-            request.setValue("session=\(token)", forHTTPHeaderField: "Cookie")
-        }
-
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"encrypted\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
-        body.append(data)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-
-        request.httpBody = body
-        return try await perform(request)
     }
 
     func downloadFile(from path: String) async throws -> Data {
-        let request = try buildRequest(path: path, method: "GET")
-        let (data, response) = try await session.data(for: request)
+        try await withUnauthorizedRetry {
+            let request = try await buildRequest(path: path, method: "GET")
+            let (data, response) = try await session.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.networkError(URLError(.badServerResponse))
-        }
-
-        guard (200...299).contains(httpResponse.statusCode) else {
-            if httpResponse.statusCode == 401 {
-                throw APIError.unauthorized
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.networkError(URLError(.badServerResponse))
             }
-            throw APIError.httpError(statusCode: httpResponse.statusCode, message: nil)
-        }
 
-        return data
+            guard (200...299).contains(httpResponse.statusCode) else {
+                if httpResponse.statusCode == 401 {
+                    throw APIError.unauthorized
+                }
+                throw APIError.httpError(statusCode: httpResponse.statusCode, message: nil)
+            }
+
+            return data
+        }
     }
 
     // MARK: - Request Execution

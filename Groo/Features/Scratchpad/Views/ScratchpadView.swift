@@ -16,6 +16,8 @@ struct ScratchpadView: View {
     let padService: PadService
     let syncService: SyncService
 
+    @Environment(AuthService.self) private var authService
+
     @State private var allPads: [DecryptedScratchpad] = []
     @State private var selectedPad: DecryptedScratchpad?
     @State private var isLoading = true
@@ -59,7 +61,7 @@ struct ScratchpadView: View {
         }
         .task {
             await loadAllScratchpads()
-            setupWebSocket()
+            await setupWebSocket()
         }
         .onDisappear {
             webSocketService?.disconnect()
@@ -634,8 +636,8 @@ struct ScratchpadView: View {
 
     // MARK: - WebSocket Setup
 
-    private func setupWebSocket() {
-        let ws = WebSocketService()
+    private func setupWebSocket() async {
+        let ws = WebSocketService(authService: authService)
         ws.onScratchpadUpdated = { [self] id in
             handleRemoteScratchpadUpdate(id: id)
         }
@@ -657,7 +659,7 @@ struct ScratchpadView: View {
                 Log.scratchpad.info("WebSocket disconnected")
             }
         }
-        ws.connect()
+        await ws.connect()
         webSocketService = ws
     }
 
@@ -730,4 +732,5 @@ extension DecryptedScratchpad: Hashable {
         padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
         syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL))
     )
+    .environment(AuthService())
 }

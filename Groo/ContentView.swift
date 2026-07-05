@@ -58,11 +58,18 @@ struct ContentView: View {
     }
 
     private func initializeServices() {
-        let api = APIClient(baseURL: Config.padAPIBaseURL)
+        let api = APIClient(
+            baseURL: Config.padAPIBaseURL,
+            tokenProvider: { try await authService.accessToken() },
+            forceRefresh: { try await authService.forceRefresh() }
+        )
         padService = PadService(api: api)
         let sync = SyncService(api: api)
         syncService = sync
-        passService = PassService()
+        passService = PassService(
+            tokenProvider: { try await authService.accessToken() },
+            forceRefresh: { try await authService.forceRefresh() }
+        )
 
         // Wire up push notification sync callback
         pushService.onSyncRequested = { [weak sync] in

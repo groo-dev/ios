@@ -39,13 +39,17 @@ class WebSocketService: NSObject {
 
     private var webSocket: URLSessionWebSocketTask?
     private var session: URLSession?
-    private let keychain = KeychainService()
+    private let authService: AuthService
 
     private(set) var isConnected = false
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 5
     private var reconnectTimer: Timer?
     private var pingTimer: Timer?
+
+    /// Guards against retrying the forced-refresh more than once per connection
+    /// attempt: reset when a fresh `connect()` starts or the socket opens.
+    private var didRetryAfterUnauthorized = false
 
     // Connection URL
     private var webSocketURL: URL? {
@@ -56,20 +60,22 @@ class WebSocketService: NSObject {
         return components?.url
     }
 
-    override init() {
+    init(authService: AuthService) {
+        self.authService = authService
         super.init()
     }
 
     // MARK: - Connection Management
 
-    func connect() {
+    func connect() async {
         // Fresh connect: reset the reconnect backoff
         reconnectAttempts = 0
+        didRetryAfterUnauthorized = false
         stopReconnectTimer()
-        openConnection()
+        await openConnection()
     }
 
-    private func openConnection() {
+    private func openConnection() async {
         guard !isConnected, webSocket == nil else { return }
         guard let url = webSocketURL else {
             Log.sync.error("WebSocket connect failed: invalid URL")
@@ -77,18 +83,18 @@ class WebSocketService: NSObject {
             return
         }
 
-        // Get auth token
+        // Get auth token (Pad's /v1/ws accepts a Bearer token on the upgrade request)
         let token: String
         do {
-            token = try keychain.loadString(for: KeychainService.Key.patToken)
+            token = try await authService.accessToken()
         } catch {
-            Log.sync.error("WebSocket connect failed: couldn't load auth token: \(String(describing: error), privacy: .public)")
+            Log.sync.error("WebSocket connect failed: couldn't get access token: \(String(describing: error), privacy: .public)")
             isConnected = false
             return
         }
 
         var request = URLRequest(url: url)
-        request.setValue("session=\(token)", forHTTPHeaderField: "Cookie")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         webSocket = session?.webSocketTask(with: request)
@@ -98,6 +104,32 @@ class WebSocketService: NSObject {
         startPingTimer()
 
         Log.sync.debug("WebSocket connecting to \(url.absoluteString, privacy: .public)")
+    }
+
+    /// Handles a handshake that failed with HTTP 401: forces exactly one token
+    /// refresh and retries the connection once. A second 401 (or a failed
+    /// refresh) surfaces as a normal disconnect — no further retries here.
+    private func handleUnauthorizedHandshake(error: Error) async {
+        webSocket = nil
+        session = nil
+        isConnected = false
+        stopPingTimer()
+
+        guard !didRetryAfterUnauthorized else {
+            Log.sync.error("WebSocket handshake unauthorized again after refresh — giving up")
+            onDisconnected?(error)
+            return
+        }
+        didRetryAfterUnauthorized = true
+
+        do {
+            _ = try await authService.forceRefresh()
+        } catch {
+            Log.sync.error("WebSocket forced refresh failed: \(String(describing: error), privacy: .public)")
+            onDisconnected?(error)
+            return
+        }
+        await openConnection()
     }
 
     func disconnect() {
@@ -238,7 +270,7 @@ class WebSocketService: NSObject {
 
         reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             Task { @MainActor in
-                self?.openConnection()
+                await self?.openConnection()
             }
         }
     }
@@ -256,6 +288,7 @@ extension WebSocketService: URLSessionWebSocketDelegate {
         Task { @MainActor in
             isConnected = true
             reconnectAttempts = 0
+            didRetryAfterUnauthorized = false
             Log.sync.debug("WebSocket connected")
             onConnected?()
         }
@@ -266,6 +299,18 @@ extension WebSocketService: URLSessionWebSocketDelegate {
             let reasonString = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "unknown"
             Log.sync.debug("WebSocket closed: \(closeCode.rawValue) - \(reasonString, privacy: .public)")
             handleDisconnect(error: nil)
+        }
+    }
+
+    /// A failed handshake (before any WebSocket-specific delegate callback fires)
+    /// surfaces here — e.g. the server rejected the upgrade with 401. Other
+    /// completions (including our own `disconnect()` cancelling the task) are left
+    /// to `didCloseWith`/`receive`'s failure branch, which already drive the normal
+    /// reconnect flow — this handler only adds the 401-retry-once behavior.
+    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let error, (task.response as? HTTPURLResponse)?.statusCode == 401 else { return }
+        Task { @MainActor in
+            await handleUnauthorizedHandshake(error: error)
         }
     }
 }
