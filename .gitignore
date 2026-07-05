@@ -14,3 +14,4 @@ azan-audio-files/
 
 # Backup files
 *.bak
+.superpowers/
