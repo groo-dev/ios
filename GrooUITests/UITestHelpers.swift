@@ -81,6 +81,19 @@ enum UITest {
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
         return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
+
+    /// iOS's system "Save Password" prompt ("Save Password?" / "Not Now" / "Save")
+    /// can appear after submitting a form containing a username + password field
+    /// (textContentType(.username)/.password), and renders inside the app's own
+    /// window hierarchy — obscuring every other element until dismissed. Not
+    /// every save triggers it (simulator heuristics vary), so this is a no-op
+    /// when it doesn't appear within `timeout`.
+    static func dismissSavePasswordPromptIfPresent(_ app: XCUIApplication, timeout: TimeInterval = 3) {
+        let notNow = app.buttons["Not Now"]
+        if notNow.waitForExistence(timeout: timeout) {
+            notNow.tap()
+        }
+    }
 }
 
 extension XCUIElement {
