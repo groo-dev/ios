@@ -17,6 +17,12 @@ struct GrooApp: App {
     @State private var pushService = PushService()
     @State private var azanAudioService = AzanAudioService()
 
+    init() {
+        // UI-test isolation must engage before any store/service singleton
+        // (LocalStore.shared, Config URL reads) is first touched.
+        UITestMode.activateIfNeeded()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -39,6 +45,9 @@ struct GrooApp: App {
     }
 
     private func setupPushNotifications() {
+        // Never pop the push-permission system alert under UI tests
+        guard !UITestMode.isActive else { return }
+
         Task {
             do {
                 let granted = try await pushService.requestAuthorization()

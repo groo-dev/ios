@@ -129,7 +129,13 @@ enum Config {
 
     // MARK: - CoinGecko
 
+    /// CoinGecko API base URL. Override via UserDefaults "coinGeckoBaseURL"
+    /// (UI tests register a dead-end override so price lookups never leave
+    /// the machine).
     static var coinGeckoBaseURL: URL {
-        URL(string: "https://api.coingecko.com/api/v3")!
+        if let url = overrideURL(forKey: "coinGeckoBaseURL") {
+            return url
+        }
+        return URL(string: "https://api.coingecko.com/api/v3")!
     }
 }

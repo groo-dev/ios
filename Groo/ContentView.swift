@@ -18,7 +18,10 @@ struct ContentView: View {
     @State private var isGloballyUnlocked = false
     @State private var needsGlobalUnlock = false
 
-    private let keychain = KeychainService()
+    // Under --uitest the global-lock check must consult the same fake
+    // keychain the services write to, never the developer's real keychain.
+    private let keychain: any KeychainServicing =
+        UITestMode.isActive ? UITestMode.keychain : KeychainService()
 
     var body: some View {
         Group {
@@ -58,6 +61,21 @@ struct ContentView: View {
     }
 
     private func initializeServices() {
+        if UITestMode.isActive {
+            // Hermetic services: Pad/Sync API calls die at the token provider
+            // (no network I/O ever starts); Pass talks to the in-process stub;
+            // stores are in-memory (LocalStore.shared is uitest-aware).
+            let api = APIClient(
+                baseURL: Config.padAPIBaseURL,
+                tokenProvider: { throw APIError.unauthorized },
+                forceRefresh: { throw APIError.unauthorized }
+            )
+            padService = PadService(api: api, keychain: UITestMode.keychain)
+            syncService = SyncService(api: api, monitorsNetwork: false)
+            passService = UITestMode.makePassService()
+            return
+        }
+
         let api = APIClient(
             baseURL: Config.padAPIBaseURL,
             tokenProvider: { try await authService.accessToken() },
@@ -81,7 +99,9 @@ struct ContentView: View {
 
     private func updateState() {
         let wasLoggedIn = isLoggedIn
-        isLoggedIn = authService.isAuthenticated
+        // --uitest bypasses OAuth entirely; services never ask AuthService
+        // for tokens in that mode (see initializeServices)
+        isLoggedIn = authService.isAuthenticated || UITestMode.isActive
 
         // Check if global unlock is needed (biometric keys exist)
         if !wasLoggedIn && isLoggedIn {

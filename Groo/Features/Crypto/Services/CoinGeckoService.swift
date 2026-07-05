@@ -15,7 +15,8 @@ actor CoinGeckoService {
     private let cache: APICache
     private let sleep: @Sendable (Double) async throws -> Void
 
-    private let baseURL = URL(string: "https://api.coingecko.com/api/v3")!
+    // Same default URL; Config adds the UserDefaults override seam
+    private let baseURL = Config.coinGeckoBaseURL
 
     private let priceTTL: TimeInterval = 300    // 5 minutes
     private let chartTTL: TimeInterval = 900    // 15 minutes

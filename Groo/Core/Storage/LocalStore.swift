@@ -11,7 +11,11 @@ import os
 
 @MainActor
 final class LocalStore {
-    static let shared = LocalStore()
+    // Under --uitest every LocalStore.shared caller gets an in-memory store;
+    // the real App Group store is never opened in that mode.
+    static let shared: LocalStore = UITestMode.isActive
+        ? LocalStore(container: UITestMode.makeInMemoryModelContainer())
+        : LocalStore()
 
     let container: ModelContainer
 
