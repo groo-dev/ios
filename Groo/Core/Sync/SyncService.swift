@@ -24,14 +24,20 @@ class SyncService {
     private let networkMonitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "dev.groo.ios.network")
 
+    /// - Parameter monitorsNetwork: the production default starts NWPathMonitor
+    ///   (which flips `state.isOnline` and triggers sync on reconnect). Tests
+    ///   pass `false` and drive `state.isOnline` + `sync()` directly.
     init(
         api: APIClient,
-        store: LocalStore = .shared
+        store: LocalStore = .shared,
+        monitorsNetwork: Bool = true
     ) {
         self.api = api
         self.store = store
 
-        setupNetworkMonitoring()
+        if monitorsNetwork {
+            setupNetworkMonitoring()
+        }
     }
 
     // MARK: - Network Monitoring
