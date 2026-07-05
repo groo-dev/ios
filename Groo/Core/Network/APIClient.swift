@@ -42,6 +42,7 @@ actor APIClient {
     ///     production this is `authService.forceRefresh`.
     init(
         baseURL: URL,
+        sessionConfiguration: URLSessionConfiguration = .default,
         tokenProvider: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
         forceRefresh: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized }
     ) {
@@ -51,7 +52,7 @@ actor APIClient {
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
 
-        let config = URLSessionConfiguration.default
+        let config = sessionConfiguration
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
         self.session = URLSession(configuration: config)
