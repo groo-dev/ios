@@ -34,6 +34,8 @@
 		1B2850F42F14017A0046247D /* KeyboardExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850ED2F14017A0046247D /* KeyboardExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B48208B2F35625A0018D7FA /* web3swift in Frameworks */ = {isa = PBXBuildFile; productRef = 1B48208A2F35625A0018D7FA /* web3swift */; };
 		1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = 1B9FA3702F44944100D792F5 /* Adhan */; };
+		49D97460CA688A3010DB0AA2 /* SharedCredentialMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 082719DCAA94FAD63BD935F7 /* SharedCredentialMatcher.swift */; };
+		80BC638C1718B863502FC1D0 /* SharedCredentialMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 082719DCAA94FAD63BD935F7 /* SharedCredentialMatcher.swift */; };
 		AD4F8D1650FB9A99098DBC77 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1824F78163C97BE82976C04C /* Foundation.framework */; };
 		C28ED402534EC41C9D99BFB1 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1824F78163C97BE82976C04C /* Foundation.framework */; };
 		C32C63A5A95F4C7A29363DA9 /* GrooAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 6CB17EFCC3A613A008ADBD29 /* GrooAuth */; };
@@ -103,6 +105,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		082719DCAA94FAD63BD935F7 /* SharedCredentialMatcher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedCredentialMatcher.swift; sourceTree = "<group>"; };
 		1824F78163C97BE82976C04C /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		1B28391F2F1B7970008D348D /* GrooAutoFill.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GrooAutoFill.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B2839202F1B7970008D348D /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
@@ -206,11 +209,15 @@
 		};
 		5EE3A5983E9B0DC71FBFC004 /* GrooUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = GrooUITests;
 			sourceTree = "<group>";
 		};
 		7053C3AF65D76D022CD9DA03 /* GrooTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = GrooTests;
 			sourceTree = "<group>";
 		};
@@ -290,6 +297,7 @@
 				1B283A132F1B9700008D348D /* SharedPendingItemsStore.swift */,
 				1B283A102F1B9700008D348D /* SharedTotp.swift */,
 				1B2839EB2F1B83BC008D348D /* SharedVaultStore.swift */,
+				082719DCAA94FAD63BD935F7 /* SharedCredentialMatcher.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -624,6 +632,7 @@
 				1B283A152F1B9700008D348D /* SharedPendingItemsStore.swift in Sources */,
 				1B2839F52F1B83BC008D348D /* SharedCrypto.swift in Sources */,
 				1B2839F62F1B83BC008D348D /* SharedVaultStore.swift in Sources */,
+				49D97460CA688A3010DB0AA2 /* SharedCredentialMatcher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -640,6 +649,7 @@
 				1B2839EF2F1B83BC008D348D /* SharedKeychain.swift in Sources */,
 				1B2839F02F1B83BC008D348D /* SharedCrypto.swift in Sources */,
 				1B2839F12F1B83BC008D348D /* SharedVaultStore.swift in Sources */,
+				80BC638C1718B863502FC1D0 /* SharedCredentialMatcher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

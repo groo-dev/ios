@@ -44,8 +44,9 @@ class CredentialIdentityService: CredentialIdentityProviding {
         }
     }
 
-    /// Build password credential identities from vault items
-    private func buildPasswordIdentities(from items: [PassVaultItem]) -> [ASPasswordCredentialIdentity] {
+    /// Build password credential identities from vault items.
+    /// Internal (not private) so GrooTests can pin the payload building.
+    func buildPasswordIdentities(from items: [PassVaultItem]) -> [ASPasswordCredentialIdentity] {
         // Extract password items
         let passwordItems = items.compactMap { item -> PassPasswordItem? in
             guard case .password(let passwordItem) = item,
@@ -81,9 +82,10 @@ class CredentialIdentityService: CredentialIdentityProviding {
         }
     }
 
-    /// Build passkey credential identities from vault items (iOS 17+)
+    /// Build passkey credential identities from vault items (iOS 17+).
+    /// Internal (not private) so GrooTests can pin the payload building.
     @available(iOS 17.0, *)
-    private func buildPasskeyIdentities(from items: [PassVaultItem]) -> [ASPasskeyCredentialIdentity] {
+    func buildPasskeyIdentities(from items: [PassVaultItem]) -> [ASPasskeyCredentialIdentity] {
         return items.compactMap { item -> ASPasskeyCredentialIdentity? in
             guard case .passkey(let passkeyItem) = item, passkeyItem.deletedAt == nil else {
                 return nil

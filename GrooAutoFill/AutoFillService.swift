@@ -136,9 +136,8 @@ class AutoFillService: ObservableObject {
 
         // Merge passkeys created here but not yet synced into the vault by the main app
         do {
-            let knownCredentialIds = Set(passkeys.map(\.credentialId))
             let pending = try SharedPendingItemsStore.load(key: key)
-            passkeys.append(contentsOf: pending.filter { !knownCredentialIds.contains($0.credentialId) })
+            passkeys = SharedCredentialMatcher.mergingPendingPasskeys(vault: passkeys, pending: pending)
         } catch {
             // Don't fail the whole unlock over the queue; already logged by the store
             Log.autofill.error("Skipping pending passkeys: \(String(describing: error), privacy: .public)")
@@ -160,11 +159,8 @@ class AutoFillService: ObservableObject {
 
     /// Filter credentials by service identifiers (domains)
     func filteredCredentials(for serviceIdentifiers: [ASCredentialServiceIdentifier]) -> [SharedPassPasswordItem] {
-        guard !serviceIdentifiers.isEmpty else {
-            return credentials
-        }
-
-        // Extract domains from service identifiers
+        // Extract domains from service identifiers; the matcher treats an
+        // empty domain list as "no filter" (same as the previous early returns)
         let searchDomains = serviceIdentifiers.compactMap { identifier -> String? in
             switch identifier.type {
             case .domain:
@@ -180,75 +176,32 @@ class AutoFillService: ObservableObject {
             }
         }
 
-        guard !searchDomains.isEmpty else {
-            return credentials
-        }
-
-        // Filter credentials that match any of the domains (checks all URLs)
-        return credentials.filter { credential in
-            let credentialDomains = credential.domains
-            guard !credentialDomains.isEmpty else { return false }
-
-            return searchDomains.contains { searchDomain in
-                credentialDomains.contains { credDomain in
-                    Self.domainsMatch(credDomain, searchDomain)
-                }
-            }
-        }
-    }
-
-    /// Exact host or subdomain match: "accounts.google.com" matches a saved
-    /// "google.com" (and vice versa), but "app.com" never matches "myapp.com"
-    static func domainsMatch(_ a: String, _ b: String) -> Bool {
-        a == b || a.hasSuffix(".\(b)") || b.hasSuffix(".\(a)")
+        return SharedCredentialMatcher.credentials(credentials, matchingDomains: searchDomains)
     }
 
     /// Search credentials by query string
     func searchCredentials(query: String) -> [SharedPassPasswordItem] {
-        guard !query.isEmpty else {
-            return credentials
-        }
-
-        let lowercasedQuery = query.lowercased()
-
-        return credentials.filter { credential in
-            credential.name.lowercased().contains(lowercasedQuery) ||
-            credential.username.lowercased().contains(lowercasedQuery) ||
-            credential.urls.contains { $0.lowercased().contains(lowercasedQuery) }
-        }
+        SharedCredentialMatcher.credentials(credentials, matchingQuery: query)
     }
 
     // MARK: - Passkey Methods
 
     /// Find a passkey by its credential ID
     func findPasskey(credentialId: Data) -> SharedPassPasskeyItem? {
-        // Stored credentialId is base64url-encoded, so compare in same format
-        let credentialIdBase64URL = credentialId.base64URLEncodedString
-        return passkeys.first { $0.credentialId == credentialIdBase64URL }
+        SharedCredentialMatcher.passkey(in: passkeys, credentialId: credentialId)
     }
 
     /// Filter passkeys by relying party ID and the request's allowed credential list
     func filteredPasskeys(for rpId: String?, allowedCredentialIds: [Data] = []) -> [SharedPassPasskeyItem] {
-        guard let rpId = rpId else { return [] }
-
-        let allowed = Set(allowedCredentialIds.map { $0.base64URLEncodedString })
-        return passkeys.filter { passkey in
-            passkey.rpId == rpId && (allowed.isEmpty || allowed.contains(passkey.credentialId))
-        }
+        SharedCredentialMatcher.passkeys(
+            passkeys,
+            forRpId: rpId,
+            allowedCredentialIds: Set(allowedCredentialIds.map { $0.base64URLEncodedString })
+        )
     }
 
     /// Search passkeys by query string
     func searchPasskeys(query: String) -> [SharedPassPasskeyItem] {
-        guard !query.isEmpty else {
-            return passkeys
-        }
-
-        let lowercasedQuery = query.lowercased()
-
-        return passkeys.filter { passkey in
-            passkey.name.lowercased().contains(lowercasedQuery) ||
-            passkey.userName.lowercased().contains(lowercasedQuery) ||
-            passkey.rpId.lowercased().contains(lowercasedQuery)
-        }
+        SharedCredentialMatcher.passkeys(passkeys, matchingQuery: query)
     }
 }
