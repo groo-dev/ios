@@ -446,7 +446,7 @@
 			packageReferences = (
 				1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */,
 				1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */,
-				781332538BFA4F3F31472BD4 /* XCLocalSwiftPackageReference "../auth-swift" */,
+				781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1B2850A82F13FF540046247D /* Products */;
@@ -1076,14 +1076,15 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		781332538BFA4F3F31472BD4 /* XCLocalSwiftPackageReference "../auth-swift" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "../auth-swift";
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
+		781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groo-dev/auth-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.0.2;
+			};
+		};
 		1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/web3swift-team/web3swift";
@@ -1115,7 +1116,7 @@
 		};
 		6CB17EFCC3A613A008ADBD29 /* GrooAuth */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 781332538BFA4F3F31472BD4 /* XCLocalSwiftPackageReference "../auth-swift" */;
+			package = 781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */;
 			productName = GrooAuth;
 		};
 		B026D97D28BCC53D8ED6E1D0 /* Adhan */ = {

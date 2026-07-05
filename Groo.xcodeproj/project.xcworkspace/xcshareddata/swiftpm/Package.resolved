@@ -1,5 +1,5 @@
 {
-  "originHash" : "ab3d1e71757f962d7c6ecfc0088265aea2fad3bf52fc520e461950c938c14e64",
+  "originHash" : "c87d136c8fa39de7f0820eebd90727ec6cdded19115e1dc18ba5270577eb9dd9",
   "pins" : [
     {
       "identity" : "adhan-swift",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "6dc8309951fdaa0cd124c52b9a8de7e0da1ff2ce",
         "version" : "1.4.0"
+      }
+    },
+    {
+      "identity" : "auth-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/groo-dev/auth-swift.git",
+      "state" : {
+        "revision" : "1f279d6a00b5a1271bfbcb0d0db659a36e976d32",
+        "version" : "0.0.2"
       }
     },
     {
