@@ -24,14 +24,21 @@ enum SharedVaultStoreError: Error {
 enum SharedVaultStore {
     private static let fileManager = FileManager.default
 
+    /// Test seam: when set, vault files are read from under this directory
+    /// instead of the App Group container. Production never sets this.
+    nonisolated(unsafe) static var overrideDirectoryURL: URL?
+
     /// App Group container URL
     private static var containerURL: URL? {
         fileManager.containerURL(forSecurityApplicationGroupIdentifier: SharedConfig.appGroupIdentifier)
     }
 
-    /// Pass vault directory within App Group
+    /// Pass vault directory within App Group (or the injected override)
     private static var passDirectoryURL: URL? {
-        containerURL?.appendingPathComponent("pass", isDirectory: true)
+        if let overrideDirectoryURL {
+            return overrideDirectoryURL.appendingPathComponent("pass", isDirectory: true)
+        }
+        return containerURL?.appendingPathComponent("pass", isDirectory: true)
     }
 
     /// Encrypted vault data file

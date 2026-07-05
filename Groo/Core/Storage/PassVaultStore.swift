@@ -25,14 +25,25 @@ struct PassVaultMetadata: Codable {
 actor PassVaultStore {
     private let fileManager = FileManager.default
 
+    /// Test seam: when set, all vault files live under this directory
+    /// instead of the App Group container. Production always passes nil.
+    private let overrideDirectoryURL: URL?
+
+    init(directoryURL: URL? = nil) {
+        self.overrideDirectoryURL = directoryURL
+    }
+
     /// App Group container URL
     private var containerURL: URL? {
         fileManager.containerURL(forSecurityApplicationGroupIdentifier: Config.appGroupIdentifier)
     }
 
-    /// Pass vault directory within App Group
+    /// Pass vault directory within App Group (or the injected override)
     private var passDirectoryURL: URL? {
-        containerURL?.appendingPathComponent("pass", isDirectory: true)
+        if let overrideDirectoryURL {
+            return overrideDirectoryURL.appendingPathComponent("pass", isDirectory: true)
+        }
+        return containerURL?.appendingPathComponent("pass", isDirectory: true)
     }
 
     /// Encrypted vault data file
