@@ -95,6 +95,9 @@ final class URLSessionWebSocketConnection: NSObject, WebSocketConnection {
     func cancel(with closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
         task?.cancel(with: closeCode, reason: reason)
         task = nil
+        // The session retains its delegate (self) until invalidated — without
+        // this, every connect/disconnect cycle leaks a session+connection pair.
+        session?.invalidateAndCancel()
         session = nil
     }
 

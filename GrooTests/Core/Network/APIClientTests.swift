@@ -215,5 +215,120 @@ struct APIClientTests {
             (error as? URLError)?.code == .timedOut
         }
     }
+
+    // MARK: - File upload (multipart)
+
+    @Test func uploadFileBuildsMultipartBodyMatchingHeaderBoundary() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "POST", pathSuffix: "/v1/files", json: #"{"id":"f-1","size":9,"r2Key":"k/f-1"}"#)
+        let payload = Data("encrypted".utf8)
+
+        let response = try await Self.makeClient().uploadFile(payload, to: "/v1/files")
+
+        #expect(response.id == "f-1")
+        #expect(response.size == 9)
+        #expect(response.r2Key == "k/f-1")
+
+        let request = try #require(StubURLProtocol.recordedRequests.first)
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer tok-1")
+        let contentType = try #require(request.value(forHTTPHeaderField: "Content-Type"))
+        #expect(contentType.hasPrefix("multipart/form-data; boundary="))
+        let boundary = String(contentType.dropFirst("multipart/form-data; boundary=".count))
+        try #require(!boundary.isEmpty)
+
+        // Byte-exact multipart layout: the server contract for encrypted uploads
+        let body = try #require(request.bodyData)
+        let expected = Data((
+            "--\(boundary)\r\n" +
+            "Content-Disposition: form-data; name=\"file\"; filename=\"encrypted\"\r\n" +
+            "Content-Type: application/octet-stream\r\n\r\n"
+        ).utf8) + payload + Data("\r\n--\(boundary)--\r\n".utf8)
+        #expect(body == expected)
+    }
+
+    @Test func uploadFile401RefreshesAndRetriesWithFreshBoundary() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "POST", pathSuffix: "/v1/files", status: 401, json: "{}")
+        StubURLProtocol.enqueue(method: "POST", pathSuffix: "/v1/files", json: #"{"id":"f-1","size":4,"r2Key":"k"}"#)
+        let tokens = TokenSource()
+
+        _ = try await Self.makeClient(tokens: tokens).uploadFile(Data("data".utf8), to: "/v1/files")
+
+        #expect(tokens.refreshCalls == 1)
+        let requests = StubURLProtocol.recordedRequests
+        try #require(requests.count == 2)
+        #expect(requests[0].value(forHTTPHeaderField: "Authorization") == "Bearer tok-1")
+        #expect(requests[1].value(forHTTPHeaderField: "Authorization") == "Bearer tok-2")
+        // The retry re-runs the whole operation — each attempt's body opens
+        // with its own header's boundary (fresh UUID per attempt)
+        for request in requests {
+            let contentType = try #require(request.value(forHTTPHeaderField: "Content-Type"))
+            let boundary = String(contentType.dropFirst("multipart/form-data; boundary=".count))
+            let body = try #require(request.bodyData)
+            #expect(body.starts(with: Data("--\(boundary)\r\n".utf8)))
+        }
+    }
+
+    @Test func uploadFileHttpErrorSurfacesServerMessage() async {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "POST", pathSuffix: "/v1/files", status: 413, json: #"{"error":"too large"}"#)
+
+        await #expect {
+            _ = try await Self.makeClient().uploadFile(Data("x".utf8), to: "/v1/files")
+        } throws: { error in
+            guard case APIError.httpError(let status, let message) = error else { return false }
+            return status == 413 && message == "too large"
+        }
+    }
+
+    // MARK: - File download
+
+    @Test func downloadFileReturnsRawBytesWithoutDecoding() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/files/abc123", json: "raw-bytes-not-json")
+
+        let data = try await Self.makeClient().downloadFile(from: "/v1/files/abc123")
+
+        #expect(data == Data("raw-bytes-not-json".utf8))
+    }
+
+    @Test func downloadFileErrorHasNoServerMessage() async {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/files/abc123", status: 404, json: #"{"error":"gone"}"#)
+
+        await #expect {
+            _ = try await Self.makeClient().downloadFile(from: "/v1/files/abc123")
+        } throws: { error in
+            // Documents actual behavior: downloadFile never parses the server
+            // message — message is always nil (unlike perform/performVoid)
+            guard case APIError.httpError(let status, let message) = error else { return false }
+            return status == 404 && message == nil
+        }
+    }
+
+    // MARK: - Void POST
+
+    @Test func voidPostTreats2xxAsSuccess() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "POST", pathSuffix: "/v1/ping", status: 204, json: "")
+
+        try await Self.makeClient().post("/v1/ping")   // must not throw
+
+        let request = try #require(StubURLProtocol.recordedRequests.first)
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer tok-1")
+        #expect(request.bodyData == nil)
+    }
+
+    @Test func voidPostExtractsServerMessageOnError() async {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "POST", pathSuffix: "/v1/ping", status: 500, json: #"{"error":"boom"}"#)
+
+        await #expect {
+            try await Self.makeClient().post("/v1/ping")
+        } throws: { error in
+            guard case APIError.httpError(let status, let message) = error else { return false }
+            return status == 500 && message == "boom"
+        }
+    }
 }
 }
