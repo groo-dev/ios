@@ -11,6 +11,24 @@
 import XCTest
 
 final class PasswordGeneratorUITests: XCTestCase {
+    /// Flip a Toggle by accessibility identifier. SwiftUI renders the row as
+    /// a wide switch element whose center is the label area, so the tap
+    /// lands near the trailing edge where the actual control sits — but the
+    /// flip is verified by value (run-loop wait, not a sleep), so a
+    /// hit-target regression fails here instead of corrupting later asserts.
+    private func flipToggle(_ app: XCUIApplication, _ identifier: String) {
+        let toggle = app.switches[identifier].firstMatch
+        XCTAssertTrue(toggle.waitForExistence(timeout: UITest.timeout), "toggle \(identifier) not found")
+        let before = (toggle.value as? String) ?? ""
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        let flipped = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value != %@", before),
+            object: toggle
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [flipped], timeout: 5), .completed,
+                       "toggle \(identifier) did not flip from \(before)")
+    }
+
     func testGenerateOptionsCopyAndUsePassword() {
         let app = UITest.launchApp(selectedTab: "pass")
         UITest.unlockPass(app)
@@ -33,17 +51,11 @@ final class PasswordGeneratorUITests: XCTestCase {
         app.buttons["passgen.regenerate"].tap()
         XCTAssertNotEqual(valueText.label, initial)
 
-        // Options respected: switch off everything but numbers.
-        // SwiftUI exposes each Toggle row as two overlapping "Switch" elements:
-        // a wide one spanning the full row (carries the accessibility label,
-        // matched by app.switches[title]) and a narrow, unlabeled one at the
-        // trailing edge that is the actual hit-testable control. Tapping the
-        // labeled element's center (its default tap point) lands in the label
-        // area, not the switch, so the toggle never flips. Tapping a
-        // coordinate near its trailing edge lands inside the real control.
-        app.switches["Uppercase (A-Z)"].coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
-        app.switches["Lowercase (a-z)"].coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
-        app.switches["Symbols (!@#$...)"].coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        // Options respected: switch off everything but numbers, addressed by
+        // identifier (Phase 6 fast-follow — no more label-text coupling)
+        flipToggle(app, "passgen.toggle.uppercase")
+        flipToggle(app, "passgen.toggle.lowercase")
+        flipToggle(app, "passgen.toggle.symbols")
         let numericOnly = valueText.label
         XCTAssertTrue(numericOnly.allSatisfy(\.isNumber), "numbers-only charset violated: \(numericOnly)")
 

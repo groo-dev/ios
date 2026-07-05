@@ -24,7 +24,13 @@ import SwiftData
 
 enum UITestMode {
     /// The single fencing condition for every UI-test seam in the app.
+    /// Compile-time false in Release: UI tests always run Debug builds, and
+    /// a shipped binary must not carry a "--uitest" auth/keychain/API bypass.
+    #if DEBUG
     static let isActive = ProcessInfo.processInfo.arguments.contains("--uitest")
+    #else
+    static let isActive = false
+    #endif
 
     /// Master password of the stub server's seeded vault. Mirrored as a
     /// constant in GrooUITests/UITestHelpers.swift — keep in sync.

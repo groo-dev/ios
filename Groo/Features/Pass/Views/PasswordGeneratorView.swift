@@ -192,24 +192,28 @@ struct PasswordGeneratorView: View {
             VStack(spacing: Theme.Spacing.sm) {
                 characterToggle(
                     title: "Uppercase (A-Z)",
+                    identifier: "passgen.toggle.uppercase",
                     isOn: $includeUppercase,
                     disabled: !includeLowercase && !includeNumbers && !includeSymbols
                 )
 
                 characterToggle(
                     title: "Lowercase (a-z)",
+                    identifier: "passgen.toggle.lowercase",
                     isOn: $includeLowercase,
                     disabled: !includeUppercase && !includeNumbers && !includeSymbols
                 )
 
                 characterToggle(
                     title: "Numbers (0-9)",
+                    identifier: "passgen.toggle.numbers",
                     isOn: $includeNumbers,
                     disabled: !includeUppercase && !includeLowercase && !includeSymbols
                 )
 
                 characterToggle(
                     title: "Symbols (!@#$...)",
+                    identifier: "passgen.toggle.symbols",
                     isOn: $includeSymbols,
                     disabled: !includeUppercase && !includeLowercase && !includeNumbers
                 )
@@ -220,9 +224,10 @@ struct PasswordGeneratorView: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
     }
 
-    private func characterToggle(title: String, isOn: Binding<Bool>, disabled: Bool) -> some View {
+    private func characterToggle(title: String, identifier: String, isOn: Binding<Bool>, disabled: Bool) -> some View {
         Toggle(title, isOn: isOn)
             .disabled(disabled)
+            .accessibilityIdentifier(identifier)
             .onChange(of: isOn.wrappedValue) { _, _ in
                 generatePassword()
             }
