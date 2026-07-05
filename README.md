@@ -107,5 +107,7 @@ Conventions:
 - Wallet tests use real BIP39 derivation vectors (constants in `WalletManagerTests`) — a vector failure is a derivation regression, never a fixture to update.
 - SwiftData suites use in-memory containers via `InMemoryLocalStore.make()` — never `LocalStore.shared`.
 - WebSocket tests script a `FakeWebSocketConnection` (`GrooTests/Support/WebSocketFakes.swift`); reconnect/ping timers are recorded and fired manually, never waited on.
+- `Shared/` is a classic (non-synchronized) Xcode group: register new Shared files with `ruby scripts/register_shared_file.rb <File.swift> <Target>...` — never by hand-editing the pbxproj.
+- Extension pure logic lives in `Shared/` (`SharedCredentialMatcher`, `SharedPadCrypto`) and is tested from GrooTests through the app target; extension-target `.swift` files are not compiled into tests.
 
 Design: `docs/superpowers/specs/2026-07-05-ios-test-suite-design.md`.
