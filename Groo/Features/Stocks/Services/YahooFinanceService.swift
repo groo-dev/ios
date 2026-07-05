@@ -21,11 +21,18 @@ actor YahooFinanceService {
     private let chartTTL: TimeInterval = 300      // 5 minutes
     private let searchTTL: TimeInterval = 600     // 10 minutes
 
-    /// Testing seam: inject an APICache over a stubbed session. Production
-    /// callers share the process-wide cache.
-    init(cache: APICache = .shared) {
+    private let sleep: @Sendable (Double) async throws -> Void
+
+    /// Testing seams: inject an APICache over a stubbed session, and a
+    /// recorded sleep for 429 backoff (same shape as CoinGeckoService's).
+    /// Production callers share the process-wide cache and really sleep.
+    init(
+        cache: APICache = .shared,
+        sleep: @escaping @Sendable (Double) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
+    ) {
         self.decoder = JSONDecoder()
         self.cache = cache
+        self.sleep = sleep
     }
 
     private func withRetry<T>(maxAttempts: Int = 3, _ operation: () async throws -> T) async throws -> T {
@@ -35,15 +42,19 @@ actor YahooFinanceService {
                 return try await operation()
             } catch YahooFinanceError.httpError(let code) where code == 429 {
                 lastError = YahooFinanceError.httpError(429)
-                let delay = pow(2.0, Double(attempt))
-                logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
-                try await Task.sleep(for: .seconds(delay))
+                if attempt < maxAttempts - 1 {
+                    let delay = pow(2.0, Double(attempt))
+                    logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
+                    try await sleep(delay)
+                }
             } catch let error as APICacheError {
                 if case .httpError(let code, _) = error, code == 429 {
                     lastError = YahooFinanceError.httpError(429)
-                    let delay = pow(2.0, Double(attempt))
-                    logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
-                    try await Task.sleep(for: .seconds(delay))
+                    if attempt < maxAttempts - 1 {
+                        let delay = pow(2.0, Double(attempt))
+                        logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
+                        try await sleep(delay)
+                    }
                 } else if case .httpError(let code, _) = error {
                     throw YahooFinanceError.httpError(code)
                 } else {

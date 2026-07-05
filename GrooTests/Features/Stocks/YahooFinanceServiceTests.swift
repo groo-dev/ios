@@ -2,9 +2,8 @@
 //  YahooFinanceServiceTests.swift
 //  GrooTests
 //
-//  Quote/search/exchange-rate parsing over a stubbed APICache session.
-//  The 429 retry path uses real Task.sleep and is deliberately untested
-//  (no-sleeps rule) — flagged in the phase plan.
+//  Quote/search/exchange-rate parsing over a stubbed APICache session,
+//  plus 429 retry/backoff with recorded (never slept) delays.
 //
 
 import Foundation
@@ -117,6 +116,70 @@ struct YahooFinanceServiceTests {
 
         #expect(rate == 0.0068)
         #expect(StubURLProtocol.recordedRequests.first?.url?.path.hasSuffix("/chart/JPYUSD=X") == true)
+    }
+
+    // MARK: - 429 retry/backoff (Phase 6 fast-follow — mirrors CoinGeckoServiceTests)
+
+    /// Records backoff delays instead of sleeping — the no-sleeps rule.
+    final class SleepRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _delays: [Double] = []
+        var delays: [Double] { lock.lock(); defer { lock.unlock() }; return _delays }
+        func record(_ delay: Double) { lock.lock(); defer { lock.unlock() }; _delays.append(delay) }
+    }
+
+    static func makeRetryService() -> (service: YahooFinanceService, sleeps: SleepRecorder) {
+        let recorder = SleepRecorder()
+        let cache = APICache(sessionConfiguration: StubURLProtocol.stubbedConfiguration())
+        return (YahooFinanceService(cache: cache) { recorder.record($0) }, recorder)
+    }
+
+    @Test func rateLimitRetriesWithExponentialBackoffThenThrows() async {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/chart/AAPL", status: 429, json: "{}")
+        // last-response-repeats: every attempt sees 429
+        let (service, sleeps) = Self.makeRetryService()
+
+        await #expect {
+            _ = try await service.getQuote(symbol: "AAPL")
+        } throws: { error in
+            guard case YahooFinanceError.httpError(429) = error else { return false }
+            return true
+        }
+
+        // 2^0, 2^1 between three attempts — and NO terminal sleep after the
+        // last failure (the pre-existing 4s hang this seam also removes)
+        #expect(sleeps.delays == [1.0, 2.0])
+        #expect(StubURLProtocol.recordedRequests.count == 3)   // maxAttempts
+    }
+
+    @Test func rateLimitRecoversOnLaterAttempt() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/chart/AAPL", status: 429, json: "{}")
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/chart/AAPL",
+                                json: Self.chartJSON(price: "150.0", previousClose: "200.0"))
+        let (service, sleeps) = Self.makeRetryService()
+
+        let quote = try await service.getQuote(symbol: "AAPL")
+
+        #expect(quote.price == 150)
+        #expect(sleeps.delays == [1.0])
+    }
+
+    @Test func non429HttpErrorDoesNotRetry() async {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/chart/AAPL", status: 500, json: "{}")
+        let (service, sleeps) = Self.makeRetryService()
+
+        await #expect {
+            _ = try await service.getQuote(symbol: "AAPL")
+        } throws: { error in
+            guard case YahooFinanceError.httpError(500) = error else { return false }
+            return true
+        }
+
+        #expect(sleeps.delays.isEmpty)
+        #expect(StubURLProtocol.recordedRequests.count == 1)
     }
 }
 }
