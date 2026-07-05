@@ -12,6 +12,7 @@ import os
 actor YahooFinanceService {
     private let logger = Logger(subsystem: "dev.groo.ios", category: "YahooFinanceService")
     private let decoder: JSONDecoder
+    private let cache: APICache
 
     private let chartBaseURL = URL(string: "https://query1.finance.yahoo.com/v8/finance/chart")!
     private let searchBaseURL = URL(string: "https://query1.finance.yahoo.com/v1/finance/search")!
@@ -20,8 +21,11 @@ actor YahooFinanceService {
     private let chartTTL: TimeInterval = 300      // 5 minutes
     private let searchTTL: TimeInterval = 600     // 10 minutes
 
-    init() {
+    /// Testing seam: inject an APICache over a stubbed session. Production
+    /// callers share the process-wide cache.
+    init(cache: APICache = .shared) {
         self.decoder = JSONDecoder()
+        self.cache = cache
     }
 
     private func withRetry<T>(maxAttempts: Int = 3, _ operation: () async throws -> T) async throws -> T {
@@ -65,7 +69,7 @@ actor YahooFinanceService {
                 URLQueryItem(name: "interval", value: "5m"),
             ]
 
-            let data = try await APICache.shared.fetch(components.url!, ttl: self.quoteTTL, forceRefresh: forceRefresh)
+            let data = try await self.cache.fetch(components.url!, ttl: self.quoteTTL, forceRefresh: forceRefresh)
 
             let chartResponse = try self.decoder.decode(YahooChartResponse.self, from: data)
 
@@ -135,7 +139,7 @@ actor YahooFinanceService {
                 URLQueryItem(name: "interval", value: timeframe.interval),
             ]
 
-            let data = try await APICache.shared.fetch(components.url!, ttl: self.chartTTL, forceRefresh: forceRefresh)
+            let data = try await self.cache.fetch(components.url!, ttl: self.chartTTL, forceRefresh: forceRefresh)
 
             let chartResponse = try self.decoder.decode(YahooChartResponse.self, from: data)
 
@@ -189,7 +193,7 @@ actor YahooFinanceService {
             URLQueryItem(name: "newsCount", value: "0"),
         ]
 
-        let data = try await APICache.shared.fetch(components.url!, ttl: searchTTL)
+        let data = try await cache.fetch(components.url!, ttl: searchTTL)
 
         let searchResponse = try decoder.decode(YahooSearchResponse.self, from: data)
 

@@ -21,6 +21,14 @@ class StockPortfolioManager {
     private(set) var error: String?
     private(set) var exchangeRates: [String: Double] = [:]
 
+    private let store: LocalStore
+
+    /// Testing seam: inject an in-memory LocalStore. Production callers keep
+    /// using the shared App Group store.
+    init(store: LocalStore = .shared) {
+        self.store = store
+    }
+
     var displayCurrency: String {
         get { UserDefaults.standard.string(forKey: "displayCurrency") ?? "USD" }
         set { UserDefaults.standard.set(newValue, forKey: "displayCurrency") }
@@ -81,7 +89,7 @@ class StockPortfolioManager {
     // MARK: - Load
 
     func loadCachedHoldings() {
-        let stored = LocalStore.shared.getAllStockHoldings()
+        let stored = store.getAllStockHoldings()
         holdings = stored.map { local in
             StockHolding(
                 symbol: local.symbol,
@@ -158,7 +166,7 @@ class StockPortfolioManager {
                 updated[i].previousClose = quote.previousClose
 
                 // Update SwiftData cache
-                if let local = LocalStore.shared.getStockHolding(symbol: sym) {
+                if let local = store.getStockHolding(symbol: sym) {
                     local.cachedPrice = quote.price
                     local.cachedChangePercent = quote.changePercent
                     local.cachedPreviousClose = quote.previousClose
@@ -170,7 +178,7 @@ class StockPortfolioManager {
             }
         }
 
-        LocalStore.shared.saveStockChanges()
+        store.saveStockChanges()
 
         withAnimation {
             holdings = updated.sorted {
@@ -225,16 +233,16 @@ class StockPortfolioManager {
 
     func addHolding(symbol: String, companyName: String, exchange: String) {
         let upper = symbol.uppercased()
-        guard LocalStore.shared.getStockHolding(symbol: upper) == nil else { return }
+        guard store.getStockHolding(symbol: upper) == nil else { return }
         let holding = LocalStockHolding(symbol: upper, companyName: companyName, exchange: exchange)
-        LocalStore.shared.saveStockHolding(holding)
+        store.saveStockHolding(holding)
         loadCachedHoldings()
     }
 
     // MARK: - Transaction CRUD (Tier 2)
 
     func addTransaction(to symbol: String, type: TransactionType, shares: Double, totalCost: Double, date: Date) {
-        guard let local = LocalStore.shared.getStockHolding(symbol: symbol.uppercased()) else {
+        guard let local = store.getStockHolding(symbol: symbol.uppercased()) else {
             Log.stocks.error("addTransaction failed: no holding found for \(symbol.uppercased(), privacy: .public)")
             error = "Could not save transaction — \(symbol.uppercased()) not found"
             return
@@ -242,12 +250,12 @@ class StockPortfolioManager {
         let tx = LocalStockTransaction(type: type.rawValue, shares: shares, totalCost: totalCost, date: date)
         tx.holding = local
         local.transactions.append(tx)
-        LocalStore.shared.saveStockChanges()
+        store.saveStockChanges()
         loadCachedHoldings()
     }
 
     func updateTransaction(id: String, type: TransactionType, shares: Double, totalCost: Double, date: Date) {
-        guard let tx = LocalStore.shared.getStockTransaction(id: id) else {
+        guard let tx = store.getStockTransaction(id: id) else {
             Log.stocks.error("updateTransaction failed: no transaction found with id \(id, privacy: .public)")
             error = "Could not save changes — transaction not found"
             return
@@ -256,26 +264,26 @@ class StockPortfolioManager {
         tx.shares = shares
         tx.totalCost = totalCost
         tx.date = date
-        LocalStore.shared.saveStockChanges()
+        store.saveStockChanges()
         loadCachedHoldings()
     }
 
     func deleteTransaction(id: String) {
-        guard let tx = LocalStore.shared.getStockTransaction(id: id) else { return }
-        LocalStore.shared.deleteStockTransaction(tx)
+        guard let tx = store.getStockTransaction(id: id) else { return }
+        store.deleteStockTransaction(tx)
         loadCachedHoldings()
     }
 
     func deleteHolding(symbol: String) {
-        guard let local = LocalStore.shared.getStockHolding(symbol: symbol.uppercased()) else { return }
-        LocalStore.shared.deleteStockHolding(local)
+        guard let local = store.getStockHolding(symbol: symbol.uppercased()) else { return }
+        store.deleteStockHolding(local)
         loadCachedHoldings()
     }
 
     // MARK: - Backup / Restore
 
-    static func exportJSON() throws -> Data {
-        let stored = LocalStore.shared.getAllStockHoldings()
+    static func exportJSON(store: LocalStore = .shared) throws -> Data {
+        let stored = store.getAllStockHoldings()
         let backup = StockBackup(
             version: 1,
             exportedAt: Date(),
@@ -302,7 +310,7 @@ class StockPortfolioManager {
         return try encoder.encode(backup)
     }
 
-    static func importJSON(_ data: Data) -> Int {
+    static func importJSON(_ data: Data, store: LocalStore = .shared) -> Int {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let backup: StockBackup
@@ -316,7 +324,7 @@ class StockPortfolioManager {
         var imported = 0
         for holding in backup.holdings {
             let symbol = holding.symbol.uppercased()
-            guard LocalStore.shared.getStockHolding(symbol: symbol) == nil else { continue }
+            guard store.getStockHolding(symbol: symbol) == nil else { continue }
 
             let local = LocalStockHolding(
                 symbol: symbol,
@@ -324,7 +332,7 @@ class StockPortfolioManager {
                 exchange: holding.exchange,
                 currency: holding.currency
             )
-            LocalStore.shared.saveStockHolding(local)
+            store.saveStockHolding(local)
 
             for tx in holding.transactions {
                 let localTx = LocalStockTransaction(
@@ -337,7 +345,7 @@ class StockPortfolioManager {
                 )
                 local.transactions.append(localTx)
             }
-            LocalStore.shared.saveStockChanges()
+            store.saveStockChanges()
             imported += 1
         }
         return imported
