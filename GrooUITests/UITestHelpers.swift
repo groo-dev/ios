@@ -49,13 +49,17 @@ enum UITest {
         let more = app.tabBars.buttons["More"]
         if more.exists {
             more.tap()
-            let entry = app.buttons[title].firstMatch
+            // The More overflow is a UIKit table whose rows expose the tab
+            // titles as static texts inside cells (observed hierarchy: Table >
+            // Cell > StaticText 'Pad' — no Button elements), so match the row
+            // label rather than a button.
+            let entry = app.tables.cells.staticTexts[title].firstMatch
             if entry.waitForExistence(timeout: timeout) {
                 entry.tap()
                 return
             }
         }
-        XCTFail("Tab \(title) not reachable from the tab bar", file: file, line: line)
+        XCTFail("Tab \(title) not reachable from the tab bar:\n\(app.tabBars.firstMatch.debugDescription)", file: file, line: line)
     }
 
     /// Dismiss a system permission alert (e.g. location on the Azan tab) if
