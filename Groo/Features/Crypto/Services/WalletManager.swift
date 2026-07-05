@@ -19,6 +19,7 @@ import web3swift
 @Observable
 class WalletManager {
     private let passService: PassService
+    private let defaults: UserDefaults
 
     private(set) var walletAddresses: [String] = []
     private(set) var isLoading = false
@@ -27,19 +28,20 @@ class WalletManager {
     /// The currently active wallet address used for portfolio and transactions.
     private(set) var activeAddress: String?
 
-    init(passService: PassService) {
+    init(passService: PassService, defaults: UserDefaults = .standard) {
         self.passService = passService
+        self.defaults = defaults
         loadCachedAddresses()
         resolveActiveAddress()
     }
 
     func setActiveAddress(_ address: String) {
         activeAddress = address
-        UserDefaults.standard.set(address, forKey: "activeWalletAddress")
+        defaults.set(address, forKey: "activeWalletAddress")
     }
 
     private func resolveActiveAddress() {
-        if let saved = UserDefaults.standard.string(forKey: "activeWalletAddress"),
+        if let saved = defaults.string(forKey: "activeWalletAddress"),
            !saved.isEmpty {
             activeAddress = saved
         } else {
@@ -79,12 +81,12 @@ class WalletManager {
     // MARK: - Address Cache
 
     private func loadCachedAddresses() {
-        let raw = UserDefaults.standard.string(forKey: "walletAddresses") ?? ""
+        let raw = defaults.string(forKey: "walletAddresses") ?? ""
         walletAddresses = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
     }
 
     private func saveCachedAddresses() {
-        UserDefaults.standard.set(walletAddresses.joined(separator: ","), forKey: "walletAddresses")
+        defaults.set(walletAddresses.joined(separator: ","), forKey: "walletAddresses")
         resolveActiveAddress()
     }
 
