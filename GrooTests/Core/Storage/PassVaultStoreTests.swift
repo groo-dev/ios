@@ -81,6 +81,73 @@ struct PassVaultStoreTests {
         try Data("not json".utf8).write(to: metaURL)
         await #expect(throws: (any Error).self) { try await store.loadVault() }
     }
+
+    // MARK: - Concurrency sweep (Phase 6)
+
+    /// saveVault writes the data blob then the metadata with no suspension
+    /// point between them — actor isolation makes the pair atomic. 32 racing
+    /// writers with interleaved readers must never observe a torn pair
+    /// (blob from writer A, metadata from writer B). This is the invariant
+    /// that breaks if PassVaultStore ever stops being an actor or saveVault
+    /// gains an await between the two writes.
+    @Test func concurrentSaveAndLoadNeverTearDataMetadataPairs() async throws {
+        let (store, dir) = Self.makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for i in 0..<32 {
+                group.addTask {
+                    try await store.saveVault(
+                        encryptedData: Data("payload-\(i)".utf8),
+                        metadata: PassVaultMetadata(version: i, iv: "iv", updatedAt: i, lastSyncedAt: i)
+                    )
+                }
+                group.addTask {
+                    // Reads race the writes; nil (nothing written yet) is
+                    // fine — a mismatched pair is the failure being hunted
+                    if let loaded = try await store.loadVault() {
+                        #expect(loaded.data == Data("payload-\(loaded.metadata.version)".utf8),
+                                "torn pair: \(String(decoding: loaded.data, as: UTF8.self)) with metadata v\(loaded.metadata.version)")
+                    }
+                }
+            }
+            try await group.waitForAll()
+        }
+
+        // Terminal state is some writer's complete pair
+        let final = try #require(await store.loadVault())
+        #expect(final.data == Data("payload-\(final.metadata.version)".utf8))
+    }
+
+    @Test func concurrentClearAndSaveLeaveAConsistentTerminalState() async throws {
+        let (store, dir) = Self.makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for i in 0..<16 {
+                group.addTask {
+                    try await store.saveVault(
+                        encryptedData: Data("payload-\(i)".utf8),
+                        metadata: PassVaultMetadata(version: i, iv: "iv", updatedAt: i, lastSyncedAt: i)
+                    )
+                }
+                if i.isMultiple(of: 4) {
+                    group.addTask { try await store.clear() }
+                }
+            }
+            try await group.waitForAll()
+        }
+
+        // Whichever interleaving won, the store must agree with itself:
+        // fully present (a matched pair) or fully absent — never vaultExists
+        // without loadable metadata (that state breaks unlock at launch)
+        let exists = await store.vaultExists()
+        let loaded = try await store.loadVault()
+        #expect((loaded != nil) == exists)
+        if let loaded {
+            #expect(loaded.data == Data("payload-\(loaded.metadata.version)".utf8))
+        }
+    }
 }
 
 /// SharedVaultStore (extension-side reader) must agree with PassVaultStore

@@ -157,5 +157,35 @@ struct APICacheTests {
 
         #expect(StubURLProtocol.recordedRequests.count == 3)
     }
+
+    // MARK: - Concurrency sweep (Phase 6)
+
+    /// clearAll evicts the cache dictionary but must never touch in-flight
+    /// tasks: 16 fetches racing periodic clearAlls must all resolve to the
+    /// stubbed body (cache hit, in-flight join, or post-eviction refetch —
+    /// all legal), with no deadlock and no torn data.
+    @Test func clearAllRacingConcurrentFetchesStaysConsistent() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/prices/eth", json: #"{"v":1}"#)
+        // last-response-repeats: post-eviction refetches see the same body
+        let cache = Self.makeCache()
+
+        try await withThrowingTaskGroup(of: Data?.self) { group in
+            for i in 0..<16 {
+                group.addTask { try await cache.fetch(Self.url, ttl: 300) }
+                if i.isMultiple(of: 4) {
+                    group.addTask {
+                        await cache.clearAll()
+                        return nil
+                    }
+                }
+            }
+            for try await result in group {
+                if let result {
+                    #expect(result == Data(#"{"v":1}"#.utf8))
+                }
+            }
+        }
+    }
 }
 }

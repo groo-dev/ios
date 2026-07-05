@@ -78,4 +78,33 @@ struct StockModelsTests {
         #expect(Self.tx(.buy, shares: 4, totalCost: 500).costPerShare == 125)
         #expect(Self.tx(.buy, shares: 0, totalCost: 500).costPerShare == 0)
     }
+
+    // MARK: - CurrencyFormatter (Phase 6 locale sweep)
+
+    /// Digits-only projection: grouping separators and symbol placement vary
+    /// with the machine locale; the digit sequence must not.
+    private func digits(_ s: String) -> String { s.filter(\.isNumber) }
+
+    /// INR pins its own en_IN locale inside the formatter, so the Indian
+    /// lakh grouping is asserted exactly — on any machine.
+    @Test func inrUsesIndianGroupingRegardlessOfMachineLocale() {
+        let formatted = CurrencyFormatter.format(1_234_567.89, currencyCode: "INR")
+        #expect(formatted.contains("12,34,567.89"), "expected lakh grouping, got \(formatted)")
+    }
+
+    @Test func zeroDecimalCurrenciesRoundToWholeUnits() {
+        #expect(digits(CurrencyFormatter.format(1234.56, currencyCode: "JPY")) == "1235")
+        #expect(digits(CurrencyFormatter.format(999.6, currencyCode: "KRW")) == "1000")
+    }
+
+    @Test func subUnitValuesKeepFourFractionDigitsAndUnitValuesTwo() {
+        #expect(digits(CurrencyFormatter.format(0.1234, currencyCode: "USD")) == "01234")
+        #expect(digits(CurrencyFormatter.format(1.2345, currencyCode: "USD")) == "123")   // 1.23
+    }
+
+    @Test func showSignPrefixesOnlyNonNegatives() {
+        #expect(CurrencyFormatter.format(5, currencyCode: "USD", showSign: true).hasPrefix("+"))
+        #expect(CurrencyFormatter.format(0, currencyCode: "USD", showSign: true).hasPrefix("+"))
+        #expect(!CurrencyFormatter.format(-5, currencyCode: "USD", showSign: true).hasPrefix("+"))
+    }
 }

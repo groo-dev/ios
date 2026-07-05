@@ -119,4 +119,66 @@ struct PrayerTrackingServiceTests {
         #expect(abs(service.onTimeRate - 80.0) < 0.0001)                    // 4/5
         #expect(abs(service.thisWeekPercent - (5.0 / 35.0 * 100)) < 0.0001)
     }
+
+    // MARK: - Date-boundary sweep (Phase 6)
+
+    static func makeService(now fixedNow: Date) throws -> PrayerTrackingService {
+        let store = try InMemoryLocalStore.make()
+        return PrayerTrackingService(store: store, now: { fixedNow })
+    }
+
+    static func dateString(daysAgo: Int, from now: Date) -> String {
+        let date = Calendar.current.date(byAdding: .day, value: -daysAgo, to: now)!
+        return formatter.string(from: date)
+    }
+
+    static func logFullDay(_ service: PrayerTrackingService, daysAgo: Int, from now: Date) {
+        for prayer in Prayer.notifiable {
+            service.logPrayer(dateString: Self.dateString(daysAgo: daysAgo, from: now),
+                              prayer: prayer, status: .onTime)
+        }
+    }
+
+    /// The streak walk crosses Dec 31 → Jan 1 via Calendar day arithmetic +
+    /// string round-trips; an off-by-one at the year boundary breaks here.
+    @Test func streakWalksAcrossTheYearBoundary() throws {
+        let newYear = Date(timeIntervalSince1970: 1_767_268_800)   // 2026-01-01T12:00:00Z
+        let service = try Self.makeService(now: newYear)
+
+        for daysAgo in 0...2 { Self.logFullDay(service, daysAgo: daysAgo, from: newYear) }
+
+        // In every timezone within ±14h these three days straddle the year
+        // boundary (local "today" is Jan 1 or Jan 2)
+        #expect(service.currentStreak == 3)
+        #expect(service.bestStreak == 3)
+    }
+
+    @Test func weeklyGridIsSevenUniqueConsecutiveDaysAcrossLeapDay() throws {
+        let afterLeap = Date(timeIntervalSince1970: 1_835_611_200)   // 2028-03-02T12:00:00Z
+        let service = try Self.makeService(now: afterLeap)
+        service.recalculate()
+
+        let dates = service.weeklyGrid.map(\.dateString)
+        #expect(dates.count == 7)
+        #expect(Set(dates).count == 7, "grid duplicated a day: \(dates)")
+        // Oldest-first, derived through the same calendar walk the service uses
+        let expected = (0..<7).reversed().map { Self.dateString(daysAgo: $0, from: afterLeap) }
+        #expect(dates == expected)
+        // The 7-day window straddles the leap day for local "today" of
+        // either Mar 2 or Mar 3 (every timezone within ±14h of UTC)
+        #expect(dates.contains("2028-02-29"), "leap day missing from \(dates)")
+    }
+
+    /// US DST 2026 springs forward on Mar 8: local-midnight day arithmetic
+    /// must neither skip nor duplicate a date string across the jump.
+    @Test func streakSurvivesTheSpringForwardWeek() throws {
+        let afterDst = Date(timeIntervalSince1970: 1_773_144_000)   // 2026-03-10T12:00:00Z
+        let service = try Self.makeService(now: afterDst)
+
+        for daysAgo in 0...4 { Self.logFullDay(service, daysAgo: daysAgo, from: afterDst) }
+
+        let walked = (0...4).map { Self.dateString(daysAgo: $0, from: afterDst) }
+        #expect(Set(walked).count == 5, "day walk skipped/duplicated a date: \(walked)")
+        #expect(service.currentStreak == 5)
+    }
 }
