@@ -2,16 +2,19 @@
 //  StockPortfolioManagerTests.swift
 //  GrooTests
 //
-//  CRUD + load/sort semantics over an in-memory LocalStore. No network:
-//  refreshPrices/exchange-rate flows depend on UserDefaults.standard-backed
-//  displayCurrency and are deliberately out of scope (see phase plan).
+//  CRUD + load/sort semantics over an in-memory LocalStore. refreshPrices
+//  reads UserDefaults.standard-backed displayCurrency — pinned via
+//  withPinnedDefaults (Phase 7 helper) and restored after each use, same
+//  seam StockPortfolioCurrencyTests already relies on for exchange rates.
 //
 
 import Foundation
 import Testing
 @testable import Groo
 
+extension NetworkStubbedSuites {
 @MainActor
+@Suite(.serialized)
 struct StockPortfolioManagerTests {
     static func makeManager() throws -> (manager: StockPortfolioManager, store: LocalStore) {
         let store = try InMemoryLocalStore.make()
@@ -100,4 +103,58 @@ struct StockPortfolioManagerTests {
         #expect(StockPortfolioManager.importJSON(data, store: freshStore) == 0)
         #expect(freshStore.getStockHolding(symbol: "AAPL")?.transactions.count == 1)
     }
+
+    static func stubbedYahoo() -> YahooFinanceService {
+        YahooFinanceService(cache: APICache(sessionConfiguration: StubURLProtocol.stubbedConfiguration()))
+    }
+
+    @Test func refreshPricesUpdatesCachesQuotesAndFlagsFailures() async throws {
+        StubURLProtocol.reset()
+        let (manager, store) = try Self.makeManager()
+        manager.addHolding(symbol: "AAPL", companyName: "Apple", exchange: "NMS")
+        manager.addTransaction(to: "AAPL", type: .buy, shares: 10, totalCost: 1000, date: Date(timeIntervalSince1970: 1_700_000_000))
+        manager.addHolding(symbol: "MSFT", companyName: "Microsoft", exchange: "NMS")
+        // MSFT stays unstubbed → dropped from quotes → failedSymbols branch
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/chart/AAPL",
+                                json: YahooFinanceServiceTests.chartJSON(price: "150.0", previousClose: "148.0"))
+
+        await withPinnedDefaults(["displayCurrency": "USD"]) {
+            await manager.refreshPrices(using: Self.stubbedYahoo())
+        }
+
+        let aapl = try #require(manager.holdings.first { $0.symbol == "AAPL" })
+        #expect(aapl.currentPrice == 150)
+        #expect(store.getStockHolding(symbol: "AAPL")?.cachedPrice == 150)
+        #expect(manager.staleReason?.contains("MSFT") == true)
+        #expect(manager.isOffline == false)
+        // Single currency (USD == displayCurrency) — short-circuits to 1.0, no rate fetch
+        #expect(manager.exchangeRates == ["USD": 1.0])
+    }
+
+    @Test func refreshPricesCompleteFailureWithNoCacheSurfacesError() async throws {
+        StubURLProtocol.reset()
+        let (manager, _) = try Self.makeManager()
+        manager.addHolding(symbol: "GHOST", companyName: "Ghost Co", exchange: "NMS")
+        manager.addTransaction(to: "GHOST", type: .buy, shares: 1, totalCost: 10, date: Date(timeIntervalSince1970: 1_700_000_000))
+        // No stub enqueued at all → getQuotes returns empty → complete-failure branch
+
+        await withPinnedDefaults(["displayCurrency": "USD"]) {
+            await manager.refreshPrices(using: Self.stubbedYahoo())
+        }
+
+        #expect(manager.error == "Failed to load prices for GHOST — check your connection and try again")
+        #expect(manager.isLoading == false)
+    }
+
+    @Test func deleteHoldingRemovesFromStoreAndList() throws {
+        let (manager, store) = try Self.makeManager()
+        manager.addHolding(symbol: "AAPL", companyName: "Apple", exchange: "NMS")
+        #expect(store.getStockHolding(symbol: "AAPL") != nil)
+
+        manager.deleteHolding(symbol: "aapl")
+
+        #expect(store.getStockHolding(symbol: "AAPL") == nil)
+        #expect(manager.holdings.isEmpty)
+    }
+}
 }
