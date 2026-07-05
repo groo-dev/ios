@@ -12,14 +12,21 @@ import os
 actor CoinGeckoService {
     private let logger = Logger(subsystem: "dev.groo.ios", category: "CoinGeckoService")
     private let decoder: JSONDecoder
+    private let cache: APICache
+    private let sleep: @Sendable (Double) async throws -> Void
 
     private let baseURL = URL(string: "https://api.coingecko.com/api/v3")!
 
     private let priceTTL: TimeInterval = 300    // 5 minutes
     private let chartTTL: TimeInterval = 900    // 15 minutes
 
-    init() {
+    init(
+        cache: APICache = .shared,
+        sleep: @escaping @Sendable (Double) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
+    ) {
         self.decoder = JSONDecoder()
+        self.cache = cache
+        self.sleep = sleep
     }
 
     private func withRetry<T>(maxAttempts: Int = 3, _ operation: () async throws -> T) async throws -> T {
@@ -29,15 +36,19 @@ actor CoinGeckoService {
                 return try await operation()
             } catch CoinGeckoError.rateLimited {
                 lastError = CoinGeckoError.rateLimited
-                let delay = pow(2.0, Double(attempt))
-                logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
-                try await Task.sleep(for: .seconds(delay))
+                if attempt < maxAttempts - 1 {
+                    let delay = pow(2.0, Double(attempt))
+                    logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
+                    try await sleep(delay)
+                }
             } catch let error as APICacheError {
                 if case .httpError(let code, _) = error, code == 429 {
                     lastError = CoinGeckoError.rateLimited
-                    let delay = pow(2.0, Double(attempt))
-                    logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
-                    try await Task.sleep(for: .seconds(delay))
+                    if attempt < maxAttempts - 1 {
+                        let delay = pow(2.0, Double(attempt))
+                        logger.info("Rate limited, retrying in \(delay)s (attempt \(attempt + 1)/\(maxAttempts))")
+                        try await sleep(delay)
+                    }
                 } else if case .httpError(let code, _) = error {
                     throw CoinGeckoError.httpError(code)
                 } else {
@@ -59,7 +70,7 @@ actor CoinGeckoService {
                 URLQueryItem(name: "days", value: String(days))
             ]
 
-            let data = try await APICache.shared.fetch(components.url!, ttl: self.chartTTL, forceRefresh: forceRefresh)
+            let data = try await self.cache.fetch(components.url!, ttl: self.chartTTL, forceRefresh: forceRefresh)
 
             let chart = try self.decoder.decode(CoinGeckoMarketChart.self, from: data)
             return chart.prices.map { entry in
@@ -80,7 +91,7 @@ actor CoinGeckoService {
                 URLQueryItem(name: "days", value: String(days))
             ]
 
-            let data = try await APICache.shared.fetch(components.url!, ttl: self.chartTTL, forceRefresh: forceRefresh)
+            let data = try await self.cache.fetch(components.url!, ttl: self.chartTTL, forceRefresh: forceRefresh)
 
             let chart = try self.decoder.decode(CoinGeckoMarketChart.self, from: data)
             return chart.prices.map { entry in
@@ -104,7 +115,7 @@ actor CoinGeckoService {
                 URLQueryItem(name: "include_24hr_change", value: "true")
             ]
 
-            let data = try await APICache.shared.fetch(components.url!, ttl: self.priceTTL, forceRefresh: forceRefresh)
+            let data = try await self.cache.fetch(components.url!, ttl: self.priceTTL, forceRefresh: forceRefresh)
             let result = try self.decoder.decode([String: CoinGeckoSimplePrice].self, from: data)
 
             guard let price = result["ethereum"] else {
@@ -145,7 +156,7 @@ actor CoinGeckoService {
                         URLQueryItem(name: "include_24hr_change", value: "true")
                     ]
 
-                    let data = try await APICache.shared.fetch(components.url!, ttl: self.priceTTL, forceRefresh: forceRefresh)
+                    let data = try await self.cache.fetch(components.url!, ttl: self.priceTTL, forceRefresh: forceRefresh)
                     let result = try self.decoder.decode([String: CoinGeckoSimplePrice].self, from: data)
                     for (addr, price) in result {
                         prices[addr.lowercased()] = price
