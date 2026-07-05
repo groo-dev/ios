@@ -23,6 +23,15 @@ class PrayerTimeService {
     private var currentParams: CalculationParameters?
     private var preferences: LocalAzanPreferences?
 
+    /// Injected clock. Tests pass fixed instants so "today", next-prayer
+    /// selection, qaza deadlines, and Ramadan detection are deterministic;
+    /// production uses the real clock. Zero behavior change.
+    private let now: () -> Date
+
+    init(now: @escaping () -> Date = Date.init) {
+        self.now = now
+    }
+
     // MARK: - Configuration
 
     func configure(latitude: Double, longitude: Double, preferences: LocalAzanPreferences) {
@@ -38,15 +47,15 @@ class PrayerTimeService {
     func recalculate() {
         guard let coords = currentCoordinates, let params = currentParams else { return }
 
+        let now = self.now()
         let cal = Calendar.current
-        let today = cal.dateComponents([.year, .month, .day], from: Date())
+        let today = cal.dateComponents([.year, .month, .day], from: now)
 
         guard let prayerTimes = PrayerTimes(coordinates: coords, date: today, calculationParameters: params) else {
             Log.azan.error("[PrayerTime] PrayerTimes calculation failed for \(String(describing: coords), privacy: .public), date \(String(describing: today), privacy: .public)")
             return
         }
 
-        let now = Date()
         let nextAdhanPrayer = prayerTimes.nextPrayer(at: now)
 
         // Update next prayer and deadline first so we can derive isCurrent for rows
@@ -87,7 +96,7 @@ class PrayerTimeService {
         var results: [(date: Date, prayers: [(Prayer, Date)])] = []
 
         for dayOffset in 0..<days {
-            guard let date = cal.date(byAdding: .day, value: dayOffset, to: Date()) else {
+            guard let date = cal.date(byAdding: .day, value: dayOffset, to: now()) else {
                 Log.azan.error("[PrayerTime] Failed to compute date for day offset \(dayOffset) — skipping day")
                 continue
             }
@@ -113,7 +122,7 @@ class PrayerTimeService {
         let cal = Calendar.current
 
         // Find next Friday
-        var date = Date()
+        var date = now()
         while cal.component(.weekday, from: date) != 6 {
             guard let next = cal.date(byAdding: .day, value: 1, to: date) else { return nil }
             date = next
@@ -301,10 +310,10 @@ class PrayerTimeService {
                 }
             }
             // Fallback: midnight
-            return cal.startOfDay(for: cal.date(byAdding: .day, value: 1, to: prayerTimes.fajr) ?? Date())
+            return cal.startOfDay(for: cal.date(byAdding: .day, value: 1, to: prayerTimes.fajr) ?? now())
         default:
             // sunrise/sunset are info-only, not applicable
-            return Date()
+            return now()
         }
     }
 
@@ -322,7 +331,7 @@ class PrayerTimeService {
     private func updateRamadanInfo(prayerTimes: PrayerTimes) {
         let islamicCal = Calendar(identifier: .islamicUmmAlQura)
         let gregorianCal = Calendar.current
-        let now = Date()
+        let now = self.now()
         let maghribTime = adjustedTime(for: .maghrib, from: prayerTimes)
         let fajrTime = adjustedTime(for: .fajr, from: prayerTimes)
         let isAfterMaghrib = now >= maghribTime
@@ -382,7 +391,7 @@ class PrayerTimeService {
 
     private func tickCountdown() {
         guard let current = nextPrayer else { return }
-        let now = Date()
+        let now = self.now()
         let remaining = current.time.timeIntervalSince(now)
         if remaining <= 0 {
             recalculate()
