@@ -10,7 +10,7 @@ import AuthenticationServices
 import Foundation
 import os
 
-class CredentialIdentityService {
+class CredentialIdentityService: CredentialIdentityProviding {
     private let store = ASCredentialIdentityStore.shared
 
     /// Update the credential identity store with current password and passkey items

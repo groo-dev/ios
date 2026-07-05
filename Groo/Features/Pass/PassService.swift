@@ -53,7 +53,7 @@ class PassService {
     private let crypto: CryptoService
     private let keychain: any KeychainServicing
     private let vaultStore: PassVaultStore
-    private let credentialService: CredentialIdentityService
+    private let credentialService: any CredentialIdentityProviding
 
     // Encryption state
     private var encryptionKey: SymmetricKey?
@@ -74,7 +74,7 @@ class PassService {
         crypto: CryptoService = CryptoService(),
         keychain: any KeychainServicing = KeychainService(),
         vaultStore: PassVaultStore = PassVaultStore(),
-        credentialService: CredentialIdentityService = CredentialIdentityService(),
+        credentialService: any CredentialIdentityProviding = CredentialIdentityService(),
         tokenProvider: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
         forceRefresh: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized }
     ) {
