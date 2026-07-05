@@ -18,10 +18,21 @@ class RecitationAudioService {
     private(set) var currentFile: String?
     private(set) var lastError: String?
 
-    private var audioPlayer: AVAudioPlayer?
+    private var audioPlayer: (any AudioPlaying)?
     private var playbackDelegate: PlaybackDelegate?
 
-    private init() {}
+    private let makePlayer: (URL) throws -> any AudioPlaying
+    private let audioSession: any AudioSessionControlling
+
+    /// Phase 7: internal (was private) so tests build isolated instances;
+    /// the production singleton keeps the real defaults.
+    init(
+        makePlayer: @escaping (URL) throws -> any AudioPlaying = { try AVAudioPlayer(contentsOf: $0) },
+        audioSession: any AudioSessionControlling = SystemAudioSession()
+    ) {
+        self.makePlayer = makePlayer
+        self.audioSession = audioSession
+    }
 
     // MARK: - Playback
 
@@ -43,11 +54,9 @@ class RecitationAudioService {
         }
 
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [])
-            try session.setActive(true)
+            try audioSession.activatePlayback()
 
-            audioPlayer = try AVAudioPlayer(contentsOf: url)
+            audioPlayer = try makePlayer(url)
             playbackDelegate = PlaybackDelegate { [weak self] in
                 Task { @MainActor in self?.stop() }
             }
@@ -69,7 +78,7 @@ class RecitationAudioService {
         playbackDelegate = nil
         isPlaying = false
         currentFile = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        audioSession.deactivate()
     }
 
     func isCurrentlyPlaying(_ fileName: String) -> Bool {

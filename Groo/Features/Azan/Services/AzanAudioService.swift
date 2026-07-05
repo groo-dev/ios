@@ -17,8 +17,20 @@ class AzanAudioService {
     private(set) var currentPrayer: Prayer?
     private(set) var playbackProgress: Double = 0
 
-    private var audioPlayer: AVAudioPlayer?
+    private var audioPlayer: (any AudioPlaying)?
     private var progressTimer: Timer?
+
+    private let makePlayer: (URL) throws -> any AudioPlaying
+    private let audioSession: any AudioSessionControlling
+
+    /// Phase 7 seams: production plays real AVAudioPlayers on the shared session.
+    init(
+        makePlayer: @escaping (URL) throws -> any AudioPlaying = { try AVAudioPlayer(contentsOf: $0) },
+        audioSession: any AudioSessionControlling = SystemAudioSession()
+    ) {
+        self.makePlayer = makePlayer
+        self.audioSession = audioSession
+    }
 
     // MARK: - Playback
 
@@ -27,9 +39,7 @@ class AzanAudioService {
 
         // Configure audio session for playback
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [])
-            try session.setActive(true)
+            try audioSession.activatePlayback()
         } catch {
             // Playback may still work with the default session — log and continue
             Log.azan.error("[AzanAudio] Failed to configure audio session: \(String(describing: error), privacy: .public)")
@@ -48,7 +58,7 @@ class AzanAudioService {
         }
 
         do {
-            audioPlayer = try AVAudioPlayer(contentsOf: url)
+            audioPlayer = try makePlayer(url)
             audioPlayer?.prepareToPlay()
             audioPlayer?.play()
             isPlaying = true
@@ -71,7 +81,7 @@ class AzanAudioService {
         playbackProgress = 0
 
         // Deactivate audio session
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        audioSession.deactivate()
     }
 
     func togglePlayback(for prayer: Prayer, soundName: String? = nil) {

@@ -17,7 +17,13 @@ class AzanNotificationService {
     private(set) var isAuthorized = false
     private(set) var authorizationDenied = false
 
-    private let center = UNUserNotificationCenter.current()
+    private let center: any NotificationScheduling
+
+    /// Phase 7 seam: production talks to the real notification center.
+    init(center: any NotificationScheduling = UNUserNotificationCenter.current()) {
+        self.center = center
+    }
+
     private let maxNotifications = 60
     private let daysAhead = 12
 
@@ -38,9 +44,9 @@ class AzanNotificationService {
     }
 
     func checkAuthorization() async {
-        let settings = await center.notificationSettings()
-        isAuthorized = settings.authorizationStatus == .authorized
-        authorizationDenied = settings.authorizationStatus == .denied
+        let status = await center.authorizationStatus()
+        isAuthorized = status == .authorized
+        authorizationDenied = status == .denied
     }
 
     // MARK: - Registration

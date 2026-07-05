@@ -22,11 +22,18 @@ class AzanLocationService: NSObject {
 
     var hasLocation: Bool { latitude != 0 || longitude != 0 }
 
-    private let locationManager = CLLocationManager()
-    private let geocoder = CLGeocoder()
+    private let locationManager: any LocationProviding
+    private let geocodeName: (CLLocation) async throws -> String?
     private var locationContinuation: CheckedContinuation<CLLocation, Error>?
 
-    override init() {
+    /// Phase 7 seams: production uses the real CLLocationManager and
+    /// CLGeocoder; tests inject a fake manager + geocode closure.
+    init(
+        manager: any LocationProviding = CLLocationManager(),
+        geocodeName: @escaping (CLLocation) async throws -> String? = AzanLocationService.systemGeocodeName
+    ) {
+        self.locationManager = manager
+        self.geocodeName = geocodeName
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
@@ -97,19 +104,26 @@ class AzanLocationService: NSObject {
 
     private func reverseGeocode(_ location: CLLocation) async {
         do {
-            let placemarks = try await geocoder.reverseGeocodeLocation(location)
-            if let placemark = placemarks.first {
-                let city = placemark.locality ?? ""
-                let country = placemark.country ?? ""
-                if !city.isEmpty && !country.isEmpty {
-                    locationName = "\(city), \(country)"
-                } else {
-                    locationName = city.isEmpty ? country : city
-                }
+            if let name = try await geocodeName(location) {
+                locationName = name
             }
         } catch {
-            locationName = String(format: "%.2f, %.2f", location.coordinate.latitude, location.coordinate.longitude)
+            locationName = String(format: "%.2f, %.2f",
+                                  location.coordinate.latitude, location.coordinate.longitude)
         }
+    }
+
+    /// Production geocode: CLGeocoder → "City, Country". Returns nil when
+    /// the placemark has neither (leaves the previous name untouched —
+    /// matching the old behavior for the no-placemark case).
+    static func systemGeocodeName(_ location: CLLocation) async throws -> String? {
+        let placemarks = try await CLGeocoder().reverseGeocodeLocation(location)
+        guard let placemark = placemarks.first else { return nil }
+        let city = placemark.locality ?? ""
+        let country = placemark.country ?? ""
+        if !city.isEmpty && !country.isEmpty { return "\(city), \(country)" }
+        let single = city.isEmpty ? country : city
+        return single.isEmpty ? nil : single
     }
 }
 

@@ -28,6 +28,15 @@ struct DeviceRegistration: Encodable {
     let name: String
 }
 
+/// Phase 7 token seam for device registration. AuthService satisfies it as-is.
+@MainActor
+protocol PushTokenProviding: AnyObject {
+    func accessToken() async throws -> String
+    func forceRefresh() async throws -> String
+}
+
+extension AuthService: PushTokenProviding {}
+
 // MARK: - PushService
 
 @MainActor
@@ -37,16 +46,31 @@ class PushService {
     private(set) var deviceToken: String?
     private(set) var lastRegistrationError: String?
 
-    private let keychain = KeychainService()
+    private let keychain: any KeychainServicing
+    private let center: any NotificationScheduling
+    private let session: URLSession
+    private let registerForRemoteNotifications: @MainActor () -> Void
 
     /// Wired up by `GrooApp` after both services are constructed. Used to obtain
     /// the OAuth access token for device registration requests.
-    weak var authService: AuthService?
+    weak var authService: (any PushTokenProviding)?
 
     // Callback for when a sync notification is received
     var onSyncRequested: (() -> Void)?
 
-    init() {
+    /// Phase 7 seams (all production defaults — behavior unchanged).
+    init(
+        center: any NotificationScheduling = UNUserNotificationCenter.current(),
+        keychain: any KeychainServicing = KeychainService(),
+        sessionConfiguration: URLSessionConfiguration = .default,
+        registerForRemoteNotifications: @escaping @MainActor () -> Void = {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+    ) {
+        self.center = center
+        self.keychain = keychain
+        self.session = URLSession(configuration: sessionConfiguration)
+        self.registerForRemoteNotifications = registerForRemoteNotifications
         // Load cached token
         deviceToken = try? keychain.loadString(for: KeychainService.Key.deviceToken)
         isRegistered = deviceToken != nil
@@ -55,15 +79,12 @@ class PushService {
     // MARK: - Authorization
 
     func requestAuthorization() async throws -> Bool {
-        let center = UNUserNotificationCenter.current()
-
         let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
 
         if granted {
-            // Register for remote notifications on main thread
-            await MainActor.run {
-                UIApplication.shared.registerForRemoteNotifications()
-            }
+            // PushService is @MainActor — the previous MainActor.run hop was
+            // redundant; the injected closure defaults to UIApplication.
+            registerForRemoteNotifications()
         }
 
         return granted
@@ -115,7 +136,7 @@ class PushService {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             request.httpBody = body
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
                 Log.push.error("Device registration failed: invalid response type")
                 throw PushError.registrationFailed
@@ -160,7 +181,7 @@ class PushService {
             var request = URLRequest(url: url)
             request.httpMethod = "DELETE"
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             return (data, response as? HTTPURLResponse)
         }
 

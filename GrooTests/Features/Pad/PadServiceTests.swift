@@ -215,5 +215,56 @@ struct PadServiceTests {
             Issue.record("expected PadError.noEncryptionKey, got \(error)")
         }
     }
+
+    // MARK: - Password unlock at injected KDF iterations (Phase 7 seam)
+
+    /// Builds the GET /v1/state payload PadService.unlock expects, with the
+    /// salt + encryption-test blob derived at 1k iterations (vault-test rule).
+    static func stubStateForUnlock(password: String, iterations: UInt32) throws -> SymmetricKey {
+        let crypto = CryptoService()
+        let salt = Data("pad-unlock-salt-0123456789abcdef".utf8)
+        let key = try crypto.deriveKey(password: password, salt: salt, iterations: iterations)
+        let combined = try crypto.encryptData(Data("groo-encryption-test".utf8), using: key)
+        let test = PadEncryptedPayload(
+            ciphertext: combined.dropFirst(12).base64EncodedString(),
+            iv: combined.prefix(12).base64EncodedString(), version: 1)
+        let testJSON = String(decoding: try JSONEncoder().encode(test), as: UTF8.self)
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/state", json:
+            #"{"activeId":"pad-1","scratchpads":{},"list":[],"encryptionSalt":"\#(salt.base64EncodedString())","encryptionTest":\#(testJSON)}"#)
+        return key
+    }
+
+    static func makeLockedService(kdfIterations: UInt32) throws -> (service: PadService, keychain: InMemoryKeychain) {
+        let keychain = InMemoryKeychain()
+        let service = PadService(
+            api: APIClient(baseURL: URL(string: "https://pad.test")!,
+                           sessionConfiguration: StubURLProtocol.stubbedConfiguration(),
+                           tokenProvider: { "pad-token" }),
+            keychain: keychain,
+            store: try InMemoryLocalStore.make(),
+            kdfIterations: kdfIterations)
+        return (service, keychain)
+    }
+
+    @Test func passwordUnlockSucceedsAtInjectedIterations() async throws {
+        StubURLProtocol.reset()
+        _ = try Self.stubStateForUnlock(password: "pad-master", iterations: 1_000)
+        let (service, keychain) = try Self.makeLockedService(kdfIterations: 1_000)
+
+        #expect(try await service.unlock(password: "pad-master"))
+        #expect(service.isUnlocked)
+        #expect(keychain.biometricProtectedKeyExists(for: KeychainService.Key.padEncryptionKey),
+                "unlock must store the key for the extensions")
+    }
+
+    @Test func wrongPasswordFailsVerificationWithoutUnlocking() async throws {
+        StubURLProtocol.reset()
+        _ = try Self.stubStateForUnlock(password: "pad-master", iterations: 1_000)
+        let (service, keychain) = try Self.makeLockedService(kdfIterations: 1_000)
+
+        #expect(!(try await service.unlock(password: "wrong-password")))
+        #expect(!service.isUnlocked)
+        #expect(!keychain.biometricProtectedKeyExists(for: KeychainService.Key.padEncryptionKey))
+    }
 }
 }

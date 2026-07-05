@@ -41,16 +41,22 @@ class PadService {
     // Number of items that failed to decrypt during the last getDecryptedItems() call
     private(set) var decryptFailureCount = 0
 
+    /// Phase 7: kdfIterations mirrors CryptoService.pbkdf2Iterations
+    /// (600k); tests pass 1k — the vault-test rule.
+    private let kdfIterations: UInt32
+
     init(
         api: APIClient,
         crypto: CryptoService = CryptoService(),
         keychain: any KeychainServicing = KeychainService(),
-        store: LocalStore = .shared
+        store: LocalStore = .shared,
+        kdfIterations: UInt32 = 600_000
     ) {
         self.api = api
         self.crypto = crypto
         self.keychain = keychain
         self.store = store
+        self.kdfIterations = kdfIterations
     }
 
     // MARK: - Encryption Setup
@@ -72,7 +78,7 @@ class PadService {
             throw PadError.encryptionNotSetup
         }
 
-        let key = try crypto.deriveKey(password: password, salt: salt)
+        let key = try crypto.deriveKey(password: password, salt: salt, iterations: kdfIterations)
 
         // Verify the key by decrypting the test payload
         let encPayload = testPayload.toEncryptedPayload()
