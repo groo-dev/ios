@@ -86,34 +86,10 @@ enum ExtensionKeychain {
 
 // MARK: - Crypto Helper
 
-enum ExtensionCrypto {
-    struct EncryptedPayload: Codable {
-        let ciphertext: String
-        let iv: String
-        let version: Int
-    }
-
-    enum DecryptError: Error {
-        case malformedPayload
-        case invalidUTF8
-    }
-
-    /// Decrypt text using AES-256-GCM
-    static func decrypt(_ payload: EncryptedPayload, using key: SymmetricKey) throws -> String {
-        guard let ciphertextData = Data(base64Encoded: payload.ciphertext),
-              let ivData = Data(base64Encoded: payload.iv) else {
-            throw DecryptError.malformedPayload
-        }
-
-        let nonce = try AES.GCM.Nonce(data: ivData)
-        let sealedBox = try AES.GCM.SealedBox(nonce: nonce, ciphertext: ciphertextData.dropLast(16), tag: ciphertextData.suffix(16))
-        let decryptedData = try AES.GCM.open(sealedBox, using: key)
-        guard let text = String(data: decryptedData, encoding: .utf8) else {
-            throw DecryptError.invalidUTF8
-        }
-        return text
-    }
-}
+// Pad-payload decryption now lives in Shared/SharedPadCrypto.swift (compiled
+// into this extension target); the alias keeps this file's call sites — and
+// the byte-identical Widget/Keyboard copies — unchanged.
+typealias ExtensionCrypto = SharedPadCrypto
 
 // MARK: - Decrypted Item for Extensions
 

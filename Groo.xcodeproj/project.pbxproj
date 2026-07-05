@@ -34,9 +34,12 @@
 		1B2850F42F14017A0046247D /* KeyboardExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850ED2F14017A0046247D /* KeyboardExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B48208B2F35625A0018D7FA /* web3swift in Frameworks */ = {isa = PBXBuildFile; productRef = 1B48208A2F35625A0018D7FA /* web3swift */; };
 		1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = 1B9FA3702F44944100D792F5 /* Adhan */; };
+		3895E09DCB8C3836CF4EDB82 /* SharedPadCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */; };
 		49D97460CA688A3010DB0AA2 /* SharedCredentialMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 082719DCAA94FAD63BD935F7 /* SharedCredentialMatcher.swift */; };
 		80BC638C1718B863502FC1D0 /* SharedCredentialMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 082719DCAA94FAD63BD935F7 /* SharedCredentialMatcher.swift */; };
+		9CA5EADA873D22ECCB2633D6 /* SharedPadCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */; };
 		AD4F8D1650FB9A99098DBC77 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1824F78163C97BE82976C04C /* Foundation.framework */; };
+		BC82ED089E0E728AE427CDEE /* SharedPadCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */; };
 		C28ED402534EC41C9D99BFB1 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1824F78163C97BE82976C04C /* Foundation.framework */; };
 		C32C63A5A95F4C7A29363DA9 /* GrooAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 6CB17EFCC3A613A008ADBD29 /* GrooAuth */; };
 		C469004D4292690B7FEA6654 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = B026D97D28BCC53D8ED6E1D0 /* Adhan */; };
@@ -124,6 +127,7 @@
 		1B2850D02F1401620046247D /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		1B2850D22F1401620046247D /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		1B2850ED2F14017A0046247D /* KeyboardExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KeyboardExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedPadCrypto.swift; sourceTree = "<group>"; };
 		9926010AD047E44A252977C2 /* GrooTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GrooTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FDB0B53A16A5327609878A8A /* GrooUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GrooUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -209,11 +213,15 @@
 		};
 		5EE3A5983E9B0DC71FBFC004 /* GrooUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = GrooUITests;
 			sourceTree = "<group>";
 		};
 		7053C3AF65D76D022CD9DA03 /* GrooTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = GrooTests;
 			sourceTree = "<group>";
 		};
@@ -294,6 +302,7 @@
 				1B283A102F1B9700008D348D /* SharedTotp.swift */,
 				1B2839EB2F1B83BC008D348D /* SharedVaultStore.swift */,
 				082719DCAA94FAD63BD935F7 /* SharedCredentialMatcher.swift */,
+				2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -646,6 +655,7 @@
 				1B2839F02F1B83BC008D348D /* SharedCrypto.swift in Sources */,
 				1B2839F12F1B83BC008D348D /* SharedVaultStore.swift in Sources */,
 				80BC638C1718B863502FC1D0 /* SharedCredentialMatcher.swift in Sources */,
+				9CA5EADA873D22ECCB2633D6 /* SharedPadCrypto.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -660,6 +670,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3895E09DCB8C3836CF4EDB82 /* SharedPadCrypto.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -667,6 +678,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BC82ED089E0E728AE427CDEE /* SharedPadCrypto.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
