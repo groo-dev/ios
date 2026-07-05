@@ -19,6 +19,39 @@ struct APICacheTests {
         APICache(sessionConfiguration: StubURLProtocol.stubbedConfiguration())
     }
 
+    /// Advanceable wall clock for TTL tests (no sleeps).
+    final class MutableClock: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _now = Date(timeIntervalSince1970: 1_700_000_000)
+        var now: Date { lock.lock(); defer { lock.unlock() }; return _now }
+        func advance(by seconds: TimeInterval) {
+            lock.lock(); defer { lock.unlock() }
+            _now = _now.addingTimeInterval(seconds)
+        }
+    }
+
+    @Test func entryExpiresWhenTtlElapsesOnInjectedClock() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/prices/eth", json: #"{"v":1}"#)
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/prices/eth", json: #"{"v":2}"#)
+        let clock = MutableClock()
+        let cache = APICache(
+            sessionConfiguration: StubURLProtocol.stubbedConfiguration(),
+            now: { clock.now }
+        )
+
+        let first = try await cache.fetch(Self.url, ttl: 300)
+        clock.advance(by: 299)
+        let stillCached = try await cache.fetch(Self.url, ttl: 300)   // 299s < 300s TTL
+        #expect(stillCached == first)
+        #expect(StubURLProtocol.recordedRequests.count == 1)
+
+        clock.advance(by: 2)   // 301s total — past the TTL
+        let refreshed = try await cache.fetch(Self.url, ttl: 300)
+        #expect(refreshed == Data(#"{"v":2}"#.utf8))
+        #expect(StubURLProtocol.recordedRequests.count == 2)
+    }
+
     @Test func cacheHitWithinTtlSkipsNetwork() async throws {
         StubURLProtocol.reset()
         StubURLProtocol.enqueue(method: "GET", pathSuffix: "/prices/eth", json: #"{"v":1}"#)

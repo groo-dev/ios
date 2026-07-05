@@ -172,6 +172,83 @@ struct WalletManagerTests {
         #expect(signed.first == 0xf8)  // RLP list prefix for a legacy signed tx of this size
     }
 
+    enum RLPError: Error { case malformed }
+
+    /// Minimal RLP decoder for a top-level list of byte-string items — just
+    /// enough to pull v/r/s out of a signed legacy transaction. Nested lists
+    /// are rejected (a legacy tx has none).
+    static func rlpListItems(_ data: Data) throws -> [Data] {
+        let bytes = [UInt8](data)
+        guard let first = bytes.first else { throw RLPError.malformed }
+
+        var index: Int
+        let end: Int
+        if (0xc0...0xf7).contains(first) {
+            index = 1
+            end = index + Int(first - 0xc0)
+        } else if first >= 0xf8 {
+            let lengthOfLength = Int(first - 0xf7)
+            guard bytes.count > lengthOfLength else { throw RLPError.malformed }
+            let length = bytes[1...lengthOfLength].reduce(0) { $0 << 8 | Int($1) }
+            index = 1 + lengthOfLength
+            end = index + length
+        } else {
+            throw RLPError.malformed
+        }
+        guard end <= bytes.count else { throw RLPError.malformed }
+
+        var items: [Data] = []
+        while index < end {
+            let marker = bytes[index]
+            switch marker {
+            case 0x00...0x7f:
+                items.append(Data([marker]))
+                index += 1
+            case 0x80...0xb7:
+                let length = Int(marker - 0x80)
+                guard index + 1 + length <= end else { throw RLPError.malformed }
+                items.append(Data(bytes[(index + 1)..<(index + 1 + length)]))
+                index += 1 + length
+            case 0xb8...0xbf:
+                let lengthOfLength = Int(marker - 0xb7)
+                guard index + 1 + lengthOfLength <= end else { throw RLPError.malformed }
+                let length = bytes[(index + 1)...(index + lengthOfLength)].reduce(0) { $0 << 8 | Int($1) }
+                guard index + 1 + lengthOfLength + length <= end else { throw RLPError.malformed }
+                items.append(Data(bytes[(index + 1 + lengthOfLength)..<(index + 1 + lengthOfLength + length)]))
+                index += 1 + lengthOfLength + length
+            default:
+                throw RLPError.malformed   // nested list — not valid in a legacy tx
+            }
+        }
+        return items
+    }
+
+    /// A wallet signing for the wrong chain is a real failure mode: the
+    /// signature would be valid on some other network and replayable there.
+    /// EIP-155: v = chainId * 2 + 35 (+ recovery bit) → 37/38 for mainnet.
+    @Test func signTransactionEmbedsChainId1InV() async throws {
+        let walletEnv = try await Self.makeWalletEnv()
+        defer { Self.tearDown(walletEnv) }
+        _ = try await walletEnv.manager.importWallet(privateKey: Self.vectorPrivateKey)
+
+        let signed = try walletEnv.manager.signTransaction(
+            to: "0x3535353535353535353535353535353535353535",
+            value: BigUInt(1_000_000_000_000_000_000),
+            nonce: BigUInt(9),
+            gasPrice: BigUInt(20_000_000_000),
+            gasLimit: BigUInt(21_000),
+            fromAddress: Self.vectorPrivateKeyAddress
+        )
+
+        // Legacy signed tx RLP: [nonce, gasPrice, gasLimit, to, value, data, v, r, s]
+        let fields = try Self.rlpListItems(signed)
+        #expect(fields.count == 9)
+        let v = fields[6].reduce(BigUInt(0)) { $0 << 8 | BigUInt($1) }
+        try #require(v >= 35, "expected an EIP-155 v, got \(v) — pre-EIP-155 signature has no replay protection")
+        let chainId = (v - 35) / 2
+        #expect(chainId == 1, "transaction signed for chainId \(chainId), not Ethereum mainnet (1) — wrong-chain signature")
+    }
+
     @Test func signTransactionWithoutKeyThrows() async throws {
         let walletEnv = try await Self.makeWalletEnv()
         defer { Self.tearDown(walletEnv) }

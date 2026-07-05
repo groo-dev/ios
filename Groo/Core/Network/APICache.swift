@@ -29,12 +29,18 @@ actor APICache {
         let data: Data
         let timestamp: Date
 
-        func isValid(ttl: TimeInterval) -> Bool {
-            Date().timeIntervalSince(timestamp) < ttl
+        func isValid(ttl: TimeInterval, now: Date) -> Bool {
+            now.timeIntervalSince(timestamp) < ttl
         }
     }
 
-    init(sessionConfiguration: URLSessionConfiguration = .default) {
+    private let now: @Sendable () -> Date
+
+    init(
+        sessionConfiguration: URLSessionConfiguration = .default,
+        now: @escaping @Sendable () -> Date = Date.init
+    ) {
+        self.now = now
         let config = sessionConfiguration
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30
@@ -45,7 +51,7 @@ actor APICache {
         let key = url.absoluteString
 
         // 1. Cache check
-        if !forceRefresh, let entry = cache[key], entry.isValid(ttl: ttl) {
+        if !forceRefresh, let entry = cache[key], entry.isValid(ttl: ttl, now: now()) {
             return entry.data
         }
 
@@ -72,7 +78,7 @@ actor APICache {
         do {
             let data = try await task.value
             // 4. Store result
-            cache[key] = Entry(data: data, timestamp: Date())
+            cache[key] = Entry(data: data, timestamp: now())
             inFlight[key] = nil
             return data
         } catch {
