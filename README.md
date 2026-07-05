@@ -87,3 +87,21 @@ API endpoints:
 - Pad API
 - Pass API
 - Accounts API
+
+## Testing
+
+Unit + integration tests live in `GrooTests` (Swift Testing), UI tests in `GrooUITests` (XCUITest).
+
+```bash
+scripts/test.sh          # unit + integration
+scripts/test.sh --ui     # UI tests (slow — boots the app)
+scripts/test.sh --all    # everything
+```
+
+Conventions:
+- Test files mirror source paths (`GrooTests/Features/Pass/TotpServiceTests.swift`).
+- No sleeps; time is injected. Network via `StubURLProtocol` (suites using it are nested under the `NetworkStubbedSuites` `@Suite(.serialized)` umbrella in `GrooTests/Support/NetworkStubbedSuites.swift`, so they serialize relative to each other, not just internally).
+- Keychain via `InMemoryKeychain` (`KeychainServicing` seam); vault storage via `PassVaultStore(directoryURL:)`.
+- Never use production KDF iteration counts (600k) in tests.
+
+Design: `docs/superpowers/specs/2026-07-05-ios-test-suite-design.md`.
