@@ -195,6 +195,97 @@ struct CryptoViewSnapshotTests {
             })
     }
 
+    // Gap-menu follow-on (P7 Task 9): loadPortfolio()'s branches are gated
+    // by private @State populated only inside its own .task, driven by real
+    // (stubbed) network round trips — pixel comparison after an
+    // un-awaited internal Task is the exact non-determinism this suite
+    // avoids elsewhere (see ScratchpadView's loadWarning note), so these
+    // stay render-only (branch coverage, no reference image) with a
+    // generous yield count for the async-let fan-out + sequential token
+    // price hop to settle.
+    @Test func portfolioViewLoadedStatesRenderOnly() async throws {
+        StubURLProtocol.reset()
+        let tokenContract = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+        let setup = try await Self.makeWalletSetup(
+            items: [Self.walletItem(id: "w-1", name: "Main", address: Self.address)],
+            addresses: [Self.address])
+        let trackingKey = "trackedTokens_\(Self.address.lowercased())"
+        let previousTracking = UserDefaults.standard.object(forKey: trackingKey)
+        defer {
+            Self.tearDown(setup)
+            LocalStore.shared.clearCachedPortfolio(wallet: Self.address)
+            if let previousTracking { UserDefaults.standard.set(previousTracking, forKey: trackingKey) }
+            else { UserDefaults.standard.removeObject(forKey: trackingKey) }
+        }
+
+        // Happy path: ETH balance + price, one non-zero ERC-20 with a fresh price.
+        StubURLProtocol.enqueue(method: "POST", pathSuffix: "",
+                                json: #"{"jsonrpc":"2.0","id":1,"result":"0xde0b6b3a7640000"}"#)
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/simple/price",
+                                json: #"{"ethereum":{"usd":2000,"usd_24h_change":2.5}}"#)
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/api", json: #"""
+        {"message":"OK","status":"1","result":[
+          {"balance":"250000000","contractAddress":"\#(tokenContract)","decimals":"6","name":"USD Coin","symbol":"USDC","type":"ERC-20"}
+        ]}
+        """#)
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/simple/token_price/ethereum",
+                                json: #"{"\#(tokenContract.lowercased())":{"usd":1.0,"usd_24h_change":-0.1}}"#)
+        await ViewRender.assertSettledRenders(
+            NavigationStack {
+                PortfolioView(walletManager: setup.manager, ethereumService: Self.stubbedEthereum(),
+                              coinGeckoService: Self.stubbedCoinGecko(), passService: setup.env.service)
+            }, yields: 40)
+
+        LocalStore.shared.clearCachedPortfolio(wallet: Self.address)
+        UserDefaults.standard.removeObject(forKey: "trackedTokens_\(Self.address.lowercased())")
+
+        // Stale-price banner: token price fetch fails → staleReason set,
+        // and the token's price<=0 placeholder row renders.
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "POST", pathSuffix: "",
+                                json: #"{"jsonrpc":"2.0","id":1,"result":"0xde0b6b3a7640000"}"#)
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/simple/price",
+                                json: #"{"ethereum":{"usd":2000,"usd_24h_change":2.5}}"#)
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/api", json: #"""
+        {"message":"OK","status":"1","result":[
+          {"balance":"250000000","contractAddress":"\#(tokenContract)","decimals":"6","name":"USD Coin","symbol":"USDC","type":"ERC-20"}
+        ]}
+        """#)
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/simple/token_price/ethereum",
+                                status: 500, json: "{}")
+        await ViewRender.assertSettledRenders(
+            NavigationStack {
+                PortfolioView(walletManager: setup.manager, ethereumService: Self.stubbedEthereum(),
+                              coinGeckoService: Self.stubbedCoinGecko(), passService: setup.env.service)
+            }, yields: 40)
+        LocalStore.shared.clearCachedPortfolio(wallet: Self.address)
+
+        // Offline banner: cached data present, then a not-connected error.
+        LocalStore.shared.upsertCachedPortfolio([Self.ethAsset], wallet: Self.address)
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "POST", pathSuffix: "",
+                                error: URLError(.notConnectedToInternet))
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/api",
+                                error: URLError(.notConnectedToInternet))
+        await ViewRender.assertSettledRenders(
+            NavigationStack {
+                PortfolioView(walletManager: setup.manager, ethereumService: Self.stubbedEthereum(),
+                              coinGeckoService: Self.stubbedCoinGecko(), passService: setup.env.service)
+            }, yields: 40)
+        LocalStore.shared.clearCachedPortfolio(wallet: Self.address)
+
+        // Empty + error alert: no cached data, a non-network-down failure.
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(method: "POST", pathSuffix: "",
+                                json: #"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"boom"}}"#)
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/api", json: #"{"message":"OK","status":"1","result":[]}"#)
+        await ViewRender.assertSettledRenders(
+            NavigationStack {
+                PortfolioView(walletManager: setup.manager, ethereumService: Self.stubbedEthereum(),
+                              coinGeckoService: Self.stubbedCoinGecko(), passService: setup.env.service)
+            }, yields: 40)
+    }
+
     @Test func assetDetailInitial() async throws {
         StubURLProtocol.reset()
         let setup = try await Self.makeWalletSetup(
