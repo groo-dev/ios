@@ -143,5 +143,44 @@ struct ScratchpadViewSnapshotTests {
             ScratchpadView(padService: env.pad.service, syncService: env.sync, store: env.store)
                 .environment(AuthService()))
     }
+
+    // Gap-menu follow-on (P7 Task 9): the iPad side-by-side branch
+    // (horizontalSizeClass == .regular) — never exercised by the iPhone
+    // NavigationStack-based tests above. Both no-selection and
+    // with-selection sub-states.
+    @Test func scratchpadViewIPadSplitRendersOnly() async throws {
+        let env = try ScratchpadStoreTests.makeEnv()
+        try ScratchpadStoreTests.seed(env, id: "p-1", content: "# Shopping\nmilk, eggs", updatedAt: 1_700_000_000)
+        await env.store.loadAllScratchpads()
+        await ViewRender.assertSettledRenders(
+            ScratchpadView(padService: env.pad.service, syncService: env.sync, store: env.store)
+                .environment(AuthService())
+                .environment(\.horizontalSizeClass, .regular))
+
+        env.store.selectPad(try #require(env.store.allPads.first))
+        await ViewRender.assertSettledRenders(
+            ScratchpadView(padService: env.pad.service, syncService: env.sync, store: env.store)
+                .environment(AuthService())
+                .environment(\.horizontalSizeClass, .regular))
+    }
+
+    // Gap-menu follow-on (P7 Task 9): the safeAreaInset loadWarning banner —
+    // a decrypt failure alongside a good pad (mirrors
+    // ScratchpadStoreTests.decryptFailureCountsIntoLoadWarning).
+    @Test func scratchpadViewLoadWarningRendersOnly() async throws {
+        let env = try ScratchpadStoreTests.makeEnv()
+        try ScratchpadStoreTests.seed(env, id: "p-good", content: "# Good", updatedAt: 1_700_100_000)
+        let garbage = LocalScratchpad(
+            id: "p-bad",
+            encryptedContentJSON: #"{"ciphertext":"Z2FyYmFnZQ==","iv":"AAAAAAAAAAAAAAAA","version":1}"#,
+            createdAt: Date(timeIntervalSince1970: 1_699_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        env.pad.store.context.insert(garbage)
+        try env.pad.store.context.save()
+        await env.store.loadAllScratchpads()
+        await ViewRender.assertSettledRenders(
+            ScratchpadView(padService: env.pad.service, syncService: env.sync, store: env.store)
+                .environment(AuthService()))
+    }
 }
 }
