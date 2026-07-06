@@ -112,6 +112,38 @@ struct RootViewSnapshotTests {
         }
     }
 
+    // Gap-menu follow-on (P7 Task 9): HomeView's Pad card unlocked branches
+    // (padService.isUnlocked, gated by loadCachedData()'s synchronous
+    // onAppear reloadPadItems() — no .task/network involved) — populated
+    // (up to 3 rows) and empty. Live prayer countdown elsewhere → render-only.
+    @Test func homeViewPadUnlockedRendersOnly() throws {
+        StubURLProtocol.reset()
+        let padEnv = try PadServiceTests.makeUnlockedEnv()
+        try PadViewSnapshotTests.seedItem(padEnv, id: "i-1", text: "Wifi password: hunter2")
+        try PadViewSnapshotTests.seedItem(padEnv, id: "i-2", text: "Locker combo: 12-34-56")
+        let passEnv = try PassServiceIntegrationTests.makeEnv(items: [])
+        defer { try? FileManager.default.removeItem(at: passEnv.tempDir) }
+        withPinnedDefaults(Self.deadURLDefaults) {
+            ViewRender.assertRenders(
+                HomeView(padService: padEnv.service,
+                         syncService: PadViewSnapshotTests.offlineSync(store: padEnv.store),
+                         passService: passEnv.service))
+        }
+    }
+
+    @Test func homeViewPadUnlockedEmptyRendersOnly() throws {
+        StubURLProtocol.reset()
+        let padEnv = try PadServiceTests.makeUnlockedEnv()
+        let passEnv = try PassServiceIntegrationTests.makeEnv(items: [])
+        defer { try? FileManager.default.removeItem(at: passEnv.tempDir) }
+        withPinnedDefaults(Self.deadURLDefaults) {
+            ViewRender.assertRenders(
+                HomeView(padService: padEnv.service,
+                         syncService: PadViewSnapshotTests.offlineSync(store: padEnv.store),
+                         passService: passEnv.service))
+        }
+    }
+
     @Test func mainTabViewRendersOnly() throws {
         StubURLProtocol.reset()
         let (padService, store) = try PadViewSnapshotTests.lockedPadService()
