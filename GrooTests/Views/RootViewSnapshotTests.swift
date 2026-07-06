@@ -144,6 +144,26 @@ struct RootViewSnapshotTests {
         }
     }
 
+    // Gap-menu follow-on (P7 Task 9): HomeView's crypto-card wallet branch —
+    // loadCachedData() builds WalletManager over UserDefaults.standard, so
+    // pinning walletAddresses/activeWalletAddress flips hasWallets and the
+    // "Open wallet" sub-branch renders. Render-only (the card's
+    // sparkline/total refresh via .task against the dead URLs).
+    @Test func homeViewCryptoWalletCardRendersOnly() throws {
+        StubURLProtocol.reset()
+        let (padService, store) = try PadViewSnapshotTests.lockedPadService()
+        let passEnv = try PassServiceIntegrationTests.makeEnv(items: [])
+        defer { try? FileManager.default.removeItem(at: passEnv.tempDir) }
+        let address = "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"
+        withPinnedDefaults(Self.deadURLDefaults.merging(
+            ["walletAddresses": address, "activeWalletAddress": address]) { _, new in new }) {
+            ViewRender.assertRenders(
+                HomeView(padService: padService,
+                         syncService: PadViewSnapshotTests.offlineSync(store: store),
+                         passService: passEnv.service))
+        }
+    }
+
     @Test func mainTabViewRendersOnly() throws {
         StubURLProtocol.reset()
         let (padService, store) = try PadViewSnapshotTests.lockedPadService()
