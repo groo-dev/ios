@@ -73,6 +73,31 @@ struct RootViewSnapshotTests {
         }
     }
 
+    // Gap-menu follow-on (P7 Task 9): SettingsView's `if let date =
+    // lastBackupDate` branch — loadLastBackupDate() (called from the
+    // view's own .task, after loadBiometricState()) finds an unlocked
+    // vault's "Stock Portfolio Backup" note and populates the date label.
+    @Test func settingsViewWithBackupDate() async throws {
+        StubURLProtocol.reset()
+        let (padService, _) = try PadViewSnapshotTests.lockedPadService()
+        let backupNote = PassVaultItem.note(PassNoteItem(
+            id: "note-backup", type: .note, name: "Stock Portfolio Backup",
+            content: "{}", folderId: nil, favorite: nil,
+            createdAt: 1_700_000_000_000, updatedAt: 1_700_000_000_000, deletedAt: nil))
+        let passEnv = try PassServiceIntegrationTests.makeEnv(items: [backupNote])
+        defer { try? FileManager.default.removeItem(at: passEnv.tempDir) }
+        _ = try await passEnv.service.unlock(password: PassServiceIntegrationTests.password)
+        await withPinnedDefaults(Self.deadURLDefaults) {
+            await assertSettledViewSnapshot(
+                of: NavigationStack {
+                    SettingsView(padService: padService, passService: passEnv.service,
+                                 onSignOut: {}, onLock: {})
+                }
+                .environment(AuthService()),
+                named: "backup-date")
+        }
+    }
+
     @Test func homeViewRendersOnly() throws {
         StubURLProtocol.reset()
         let (padService, store) = try PadViewSnapshotTests.lockedPadService()

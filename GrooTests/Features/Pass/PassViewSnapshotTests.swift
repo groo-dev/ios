@@ -70,6 +70,18 @@ struct PassViewSnapshotTests {
             named: "locked")
     }
 
+    // Gap-menu follow-on (P7 Task 9): PassView's own `passService.isUnlocked
+    // || isUnlocked` branch — an already-unlocked passService renders the
+    // PassItemListView shell (with its own toolbar/menu) directly, never
+    // exercised by the locked-shell test above.
+    @Test func passViewUnlockedShell() async throws {
+        let env = try await Self.makeUnlockedEnv(items: try Self.allItems())
+        defer { Self.cleanUp(env) }
+        assertViewSnapshot(
+            of: PassView(passService: env.service, onSignOut: {}),
+            named: "unlocked", size: Self.tallListSize)
+    }
+
     // MARK: - Item list (dark + Dynamic Type representative set lives here)
 
     // NB: PassItemListView combines NavigationStack + .searchable(.automatic) +
@@ -211,6 +223,22 @@ struct PassViewSnapshotTests {
                                  onSave: {}, onCancel: {})
             },
             named: "edit-note")
+        // Gap-menu follow-on (P7 Task 9): the remaining two form-editable
+        // types (itemType switch only handles password/card/bankAccount/note).
+        let card = try #require(items.first(where: { $0.type == .card }))
+        let bankAccount = try #require(items.first(where: { $0.type == .bankAccount }))
+        assertViewSnapshot(
+            of: NavigationStack {
+                PassItemFormView(passService: env.service, editingItem: card,
+                                 onSave: {}, onCancel: {})
+            },
+            named: "edit-card")
+        assertViewSnapshot(
+            of: NavigationStack {
+                PassItemFormView(passService: env.service, editingItem: bankAccount,
+                                 onSave: {}, onCancel: {})
+            },
+            named: "edit-bank-account")
     }
 
     // MARK: - Folders / trash
