@@ -271,7 +271,7 @@ struct AzanSettingsView: View {
 
 // MARK: - Sound Picker Sheet
 
-private struct SoundPickerSheet: View {
+struct SoundPickerSheet: View {
     @Binding var selection: String
     let title: String
     let audioService: AzanAudioService
@@ -334,7 +334,7 @@ private struct SoundPickerSheet: View {
 
 // MARK: - Default Sound Row
 
-private struct DefaultSoundRow: View {
+struct DefaultSoundRow: View {
     let isSelected: Bool
     let onSelect: () -> Void
 
@@ -363,7 +363,7 @@ private struct DefaultSoundRow: View {
 
 // MARK: - Sound Card with Waveform
 
-private struct SoundCard: View {
+struct SoundCard: View {
     let sound: String
     let isSelected: Bool
     let isPlaying: Bool

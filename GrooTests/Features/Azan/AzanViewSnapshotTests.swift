@@ -166,6 +166,14 @@ struct AzanViewSnapshotTests {
         withPinnedDefaults(Self.hanafiDefaults.merging(["prayerGuideMadhab": FiqhMadhab.shafii.rawValue]) { _, new in new }) {
             assertViewSnapshot(of: NavigationStack { PrayerDetailView(prayer: .fajr) }, named: "madhab-unavailable")
         }
+        // Gap-menu lever 3 (P7 Task 9): the remaining PrayerRole cases —
+        // munfarid (praying alone) is already covered by hanafiDefaults.
+        withPinnedDefaults(Self.hanafiDefaults.merging(["prayerGuideRole": PrayerRole.imam.rawValue]) { _, new in new }) {
+            assertViewSnapshot(of: NavigationStack { PrayerDetailView(prayer: .dhuhr) }, named: "role-imam")
+        }
+        withPinnedDefaults(Self.hanafiDefaults.merging(["prayerGuideRole": PrayerRole.muqtadi.rawValue]) { _, new in new }) {
+            assertViewSnapshot(of: NavigationStack { PrayerDetailView(prayer: .dhuhr) }, named: "role-muqtadi")
+        }
     }
 
     @Test func prayerDetailRepresentativeSet() {
@@ -235,6 +243,18 @@ struct AzanViewSnapshotTests {
                                  locationService: AzanLocationService(), onSave: { _ in })
             },
             named: "defaults")
+    }
+
+    // Gap-menu lever 2 (P7 Task 9): SoundPickerSheet (notification-sound
+    // case) — made internal (visibility-only, zero-behavior) so it's
+    // reachable from tests without a tap-simulated sheet presentation.
+    @Test func soundPickerSheetNotification() {
+        assertViewSnapshot(
+            of: NavigationStack {
+                SoundPickerSheet(selection: .constant("default"), title: "Notification Sound",
+                                  audioService: AzanAudioService())
+            },
+            named: "notification")
     }
 
     @Test func locationSearchEmpty() {

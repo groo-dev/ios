@@ -100,5 +100,14 @@ struct RootViewSnapshotTests {
                     .environment(AuthService()))
         }
     }
+
+    // Gap-menu lever 1 (P7 Task 9): ContentView's !isLoggedIn branch — the
+    // real root view (not LoginView directly), exercising ContentView's own
+    // body/onAppear/initializeServices path when no auth session exists.
+    @Test func contentViewLoggedOutRendersOnly() {
+        StubURLProtocol.reset()
+        ViewRender.assertRenders(
+            ContentView().environment(AuthService()).environment(PushService()))
+    }
 }
 }

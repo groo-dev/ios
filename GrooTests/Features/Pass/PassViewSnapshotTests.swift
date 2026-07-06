@@ -160,6 +160,25 @@ struct PassViewSnapshotTests {
             named: "corrupted")
     }
 
+    // Gap-menu lever 5 (P7 Task 9): PassItemDetailView branches not hit by
+    // the canonical fixtures — not-favorite (no star), no notes (section
+    // omitted), and multiple URLs (ForEach over 2+ rows).
+    @Test func itemDetailExtraStates() async throws {
+        let item = PassVaultItem.password(PassPasswordItem(
+            id: "pw-extra", type: .password, name: "Multi URL Login", username: "user2@example.com",
+            password: "another-secret",
+            urls: ["https://example.com/login", "https://example.org/login"],
+            notes: nil, totp: nil, folderId: nil, favorite: false,
+            createdAt: Self.fixedMs, updatedAt: Self.fixedMs, deletedAt: nil))
+        let env = try await Self.makeUnlockedEnv(items: [item])
+        defer { Self.cleanUp(env) }
+        assertViewSnapshot(
+            of: NavigationStack {
+                PassItemDetailView(item: item, passService: env.service, onDismiss: {})
+            },
+            named: "not-favorite-no-notes-multi-url")
+    }
+
     // MARK: - Form (add per editable type + edit mode)
 
     @Test func formAddModes() async throws {
