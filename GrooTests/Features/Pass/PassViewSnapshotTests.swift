@@ -239,6 +239,45 @@ struct PassViewSnapshotTests {
                                  onSave: {}, onCancel: {})
             },
             named: "edit-bank-account")
+        // Gap-menu follow-on (P7 Task 9): editing a non-form-editable type
+        // (passkey/file/cryptoWallet/corrupted only pre-populate `name` in
+        // init, then the itemType switch renders EmptyView for their fields).
+        let passkey = try #require(items.first(where: { $0.type == .passkey }))
+        assertViewSnapshot(
+            of: NavigationStack {
+                PassItemFormView(passService: env.service, editingItem: passkey,
+                                 onSave: {}, onCancel: {})
+            },
+            named: "edit-passkey")
+        // Multi-URL minus-button branch (urls.count > 1), unreached by the
+        // single-URL edit-password fixture above.
+        let multiURLItem = PassPasswordItem(
+            id: "pw-multi-url", type: .password, name: "Multi URL", username: "user@example.com",
+            password: "secret", urls: ["https://a.example.com", "https://b.example.com"],
+            notes: nil, totp: nil, folderId: nil, favorite: nil,
+            createdAt: Self.fixedMs, updatedAt: Self.fixedMs, deletedAt: nil)
+        assertViewSnapshot(
+            of: NavigationStack {
+                PassItemFormView(passService: env.service, editingItem: .password(multiURLItem),
+                                 onSave: {}, onCancel: {})
+            },
+            named: "edit-multi-url")
+    }
+
+    // Gap-menu follow-on (P7 Task 9): the folder Picker section — never
+    // shown in formEditModes() above (its env has no folders seeded).
+    @Test func formEditModeWithFolders() async throws {
+        let folders = [PassFolder(id: "f-1", name: "Work", parentId: nil)]
+        let env = try await Self.makeUnlockedEnv(
+            items: [Self.snapPassword(folderId: "f-1")], folders: folders)
+        defer { Self.cleanUp(env) }
+        assertViewSnapshot(
+            of: NavigationStack {
+                PassItemFormView(passService: env.service,
+                                 editingItem: Self.snapPassword(folderId: "f-1"),
+                                 onSave: {}, onCancel: {})
+            },
+            named: "edit-with-folder-picker")
     }
 
     // MARK: - Folders / trash
