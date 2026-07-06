@@ -96,5 +96,52 @@ struct ScratchpadViewSnapshotTests {
         #expect(contents == ["# Edited"])
         #expect(errors == ["editor exploded"])
     }
+
+    // MARK: - Store-injected view states (Phase 7 Task 8)
+
+    @Test func scratchpadViewStoreStates() async throws {
+        let env = try ScratchpadStoreTests.makeEnv()
+        try ScratchpadStoreTests.seed(env, id: "p-1", content: "# Shopping\nmilk, eggs", updatedAt: 1_700_100_000)
+        try ScratchpadStoreTests.seed(env, id: "p-2", content: "# Ideas", updatedAt: 1_700_000_000)
+        await env.store.loadAllScratchpads()
+
+        // Render-only, not a pixel snapshot: ScratchpadContentView's own
+        // .task unconditionally re-invokes loadAllScratchpads() on appear
+        // (matching the pre-refactor view, which always reloaded on
+        // .task regardless of any pre-loaded store) and that reload
+        // performs a real (if stubless-and-failing) SyncService.sync()
+        // network round trip. Confirmed via diagnostic instrumentation:
+        // the store's own state does converge (isLoading flips back to
+        // false, allPads repopulates) once that task's await chain
+        // resolves, but this harness's manual CALayer render
+        // (ViewRender.draw, see ViewRenderHarness.swift) does not
+        // reliably re-flush for a conditional branch switch driven by a
+        // *post-appear* async Task mutation — only assertSettledRenders'
+        // non-comparing check is meaningful here. Every existing
+        // assertSettledViewSnapshot use elsewhere in this codebase
+        // (PadListView, WalletListView, …) populates its state via a
+        // *synchronous* onAppear, so it never exercises this path.
+        await ViewRender.assertSettledRenders(
+            ScratchpadView(padService: env.pad.service, syncService: env.sync, store: env.store)
+                .environment(AuthService()))
+
+        let emptyEnv = try ScratchpadStoreTests.makeEnv()
+        await emptyEnv.store.loadAllScratchpads()
+        await ViewRender.assertSettledRenders(
+            ScratchpadView(padService: emptyEnv.pad.service, syncService: emptyEnv.sync,
+                           store: emptyEnv.store)
+                .environment(AuthService()))
+    }
+
+    @Test func scratchpadViewEditorStateRendersOnly() async throws {
+        let env = try ScratchpadStoreTests.makeEnv()
+        try ScratchpadStoreTests.seed(env, id: "p-1", content: "# Editing", updatedAt: 1_700_000_000)
+        await env.store.loadAllScratchpads()
+        env.store.selectPad(try #require(env.store.allPads.first))
+        // Editor hosts a live WKWebView — render-only.
+        await ViewRender.assertSettledRenders(
+            ScratchpadView(padService: env.pad.service, syncService: env.sync, store: env.store)
+                .environment(AuthService()))
+    }
 }
 }

@@ -2,8 +2,9 @@
 //  ScratchpadView.swift
 //  Groo
 //
-//  Main scratchpad container with list and editor.
-//  Manages loading, editing, and auto-saving scratchpad content.
+//  Main scratchpad container with list and editor. State/logic lives in
+//  ScratchpadStore (Phase 7 extraction); this view owns only the WebKit
+//  editor plumbing and the photo/file picker UI.
 //
 
 import SwiftUI
@@ -15,65 +16,86 @@ import os
 struct ScratchpadView: View {
     let padService: PadService
     let syncService: SyncService
+    /// Test seam: inject a pre-built (possibly pre-loaded) store. Production
+    /// leaves this nil and resolves one with a real WebSocket factory.
+    var store: ScratchpadStore? = nil
 
     @Environment(AuthService.self) private var authService
+    @State private var resolvedStore: ScratchpadStore?
 
-    @State private var allPads: [DecryptedScratchpad] = []
-    @State private var selectedPad: DecryptedScratchpad?
-    @State private var isLoading = true
-    @State private var error: String?
+    var body: some View {
+        Group {
+            if let resolvedStore {
+                ScratchpadContentView(store: resolvedStore, padService: padService)
+            } else {
+                Color.clear
+            }
+        }
+        .onAppear {
+            guard resolvedStore == nil else { return }
+            if let store {
+                resolvedStore = store
+            } else {
+                let auth = authService
+                resolvedStore = ScratchpadStore(
+                    padService: padService,
+                    syncService: syncService,
+                    makeWebSocket: { WebSocketService(authService: auth) }
+                )
+            }
+        }
+    }
+}
+
+private struct ScratchpadContentView: View {
+    @Bindable var store: ScratchpadStore
+    let padService: PadService
+
     @State private var webView: WKWebView?
-    @State private var isSaving = false
-    @State private var saveFailed = false
-    @State private var lastSavedContent: String = ""
-    @State private var actionError: String?
-    @State private var loadWarning: String?
     @State private var showDeleteConfirmation = false
     @State private var padToDelete: DecryptedScratchpad?
-    @State private var isCreating = false
-
-    // Debounce timer for auto-save
-    @State private var saveTask: Task<Void, Never>?
 
     // File attachment state
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var showFilePicker = false
-    @State private var isUploadingFile = false
-
-    // Real-time sync
-    @State private var webSocketService: WebSocketService?
-    @State private var isWebSocketConnected = false
 
     // For iPad split view
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         Group {
-            if isLoading {
+            if store.isLoading {
                 loadingView
-            } else if let error = error {
+            } else if let error = store.error {
                 errorView(error)
-            } else if allPads.isEmpty {
+            } else if store.allPads.isEmpty {
                 emptyView
             } else {
                 contentView
             }
         }
         .task {
-            await loadAllScratchpads()
-            await setupWebSocket()
+            store.setEditorContent = { [bind = $webView] content in
+                bind.wrappedValue?.evaluateJavaScript(EditorCommand.setContent(content).jsCall) { _, error in
+                    if let error = error {
+                        Log.scratchpad.error("Failed to set editor content: \(error.localizedDescription)")
+                    }
+                }
+            }
+            await store.loadAllScratchpads()
+            await store.setupWebSocket()
         }
         .onDisappear {
-            webSocketService?.disconnect()
+            store.disconnect()
         }
         .safeAreaInset(edge: .top) {
-            if let warning = loadWarning {
+            if let warning = store.loadWarning {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                     Text(warning)
                     Spacer()
                     Button {
-                        loadWarning = nil
+                        store.dismissLoadWarning()
                     } label: {
                         Image(systemName: "xmark")
                     }
@@ -88,13 +110,13 @@ struct ScratchpadView: View {
         .alert(
             "Something Went Wrong",
             isPresented: Binding(
-                get: { actionError != nil },
-                set: { if !$0 { actionError = nil } }
+                get: { store.actionError != nil },
+                set: { if !$0 { store.actionError = nil } }
             )
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(actionError ?? "")
+            Text(store.actionError ?? "")
         }
         .confirmationDialog(
             "Delete Scratchpad",
@@ -103,7 +125,10 @@ struct ScratchpadView: View {
         ) {
             Button("Delete", role: .destructive) {
                 if let pad = padToDelete {
-                    Task { await deletePad(pad) }
+                    Task {
+                        await store.deletePad(pad)
+                        padToDelete = nil
+                    }
                 }
             }
             Button("Cancel", role: .cancel) {
@@ -123,18 +148,18 @@ struct ScratchpadView: View {
             HStack(spacing: 0) {
                 // Sidebar
                 ScratchpadListView(
-                    pads: allPads,
-                    selectedId: selectedPad?.id,
-                    onSelect: selectPad,
+                    pads: store.allPads,
+                    selectedId: store.selectedPad?.id,
+                    onSelect: store.selectPad,
                     onDelete: confirmDelete,
-                    onCreate: { Task { await createPad() } }
+                    onCreate: { Task { await store.createPad() } }
                 )
                 .frame(width: 280)
 
                 Divider()
 
                 // Editor
-                if let pad = selectedPad {
+                if let pad = store.selectedPad {
                     editorView(pad)
                 } else {
                     noSelectionView
@@ -144,14 +169,14 @@ struct ScratchpadView: View {
             // iPhone: Navigation-based layout
             NavigationStack {
                 ScratchpadListView(
-                    pads: allPads,
-                    selectedId: selectedPad?.id,
-                    onSelect: selectPad,
+                    pads: store.allPads,
+                    selectedId: store.selectedPad?.id,
+                    onSelect: store.selectPad,
                     onDelete: confirmDelete,
-                    onCreate: { Task { await createPad() } }
+                    onCreate: { Task { await store.createPad() } }
                 )
                 .navigationTitle("Scratchpads")
-                .navigationDestination(item: $selectedPad) { pad in
+                .navigationDestination(item: $store.selectedPad) { pad in
                     editorView(pad)
                         .navigationTitle(pad.title)
                         .navigationBarTitleDisplayMode(.inline)
@@ -186,7 +211,7 @@ struct ScratchpadView: View {
                 .multilineTextAlignment(.center)
 
             Button("Retry") {
-                Task { await loadAllScratchpads() }
+                Task { await store.loadAllScratchpads() }
             }
             .buttonStyle(.bordered)
         }
@@ -207,12 +232,12 @@ struct ScratchpadView: View {
                 .foregroundStyle(.secondary)
 
             Button {
-                Task { await createPad() }
+                Task { await store.createPad() }
             } label: {
                 Label("New Scratchpad", systemImage: "square.and.pencil")
             }
             .buttonStyle(.bordered)
-            .disabled(isCreating)
+            .disabled(store.isCreating)
         }
         .padding()
     }
@@ -235,7 +260,7 @@ struct ScratchpadView: View {
                 ScratchpadWebView(
                     initialContent: pad.content,
                     onContentChange: { newContent in
-                        handleContentChange(newContent, padId: pad.id)
+                        store.handleContentChange(newContent, padId: pad.id)
                     },
                     onReady: {
                         Log.scratchpad.info("Editor ready for pad: \(pad.id)")
@@ -249,15 +274,15 @@ struct ScratchpadView: View {
                 // Status indicator
                 HStack(spacing: 8) {
                     // Sync indicator
-                    if isSaving || isUploadingFile {
+                    if store.isSaving || store.isUploadingFile {
                         HStack(spacing: 6) {
                             ProgressView()
                                 .scaleEffect(0.7)
-                            Text(isUploadingFile ? "Uploading..." : "Saving...")
+                            Text(store.isUploadingFile ? "Uploading..." : "Saving...")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                    } else if saveFailed {
+                    } else if store.saveFailed {
                         // Save failure - distinct from offline so data loss is visible
                         HStack(spacing: 4) {
                             Circle()
@@ -271,9 +296,9 @@ struct ScratchpadView: View {
                         // Connection status
                         HStack(spacing: 4) {
                             Circle()
-                                .fill(isWebSocketConnected ? Color.green : Color.orange)
+                                .fill(store.isWebSocketConnected ? Color.green : Color.orange)
                                 .frame(width: 6, height: 6)
-                            Text(isWebSocketConnected ? "Synced" : "Offline")
+                            Text(store.isWebSocketConnected ? "Synced" : "Offline")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -322,7 +347,7 @@ struct ScratchpadView: View {
                     Label("Attach", systemImage: "paperclip")
                         .font(.subheadline)
                 }
-                .disabled(isUploadingFile)
+                .disabled(store.isUploadingFile)
 
                 Spacer()
 
@@ -336,7 +361,7 @@ struct ScratchpadView: View {
         }
         .onChange(of: pad.id) { _, _ in
             // Reset saved content tracking when switching pads
-            lastSavedContent = pad.content
+            store.resetSavedContent(to: pad.content)
         }
         .onChange(of: selectedPhotos) { _, newItems in
             Task {
@@ -353,12 +378,12 @@ struct ScratchpadView: View {
         }
     }
 
-    // MARK: - File Attachment Handling
+    // MARK: - File Attachment Handling (data collection only — uploads live in the store)
 
     private func loadSelectedPhotos(_ items: [PhotosPickerItem], for pad: DecryptedScratchpad) async {
         guard !items.isEmpty else { return }
 
-        isUploadingFile = true
+        var uploads: [ScratchpadStore.PendingUpload] = []
         var failedCount = 0
 
         for item in items {
@@ -389,21 +414,21 @@ struct ScratchpadView: View {
                 fileName = "photo_\(Int(Date().timeIntervalSince1970)).jpg"
             }
 
-            await uploadFile(name: fileName, type: mimeType, data: data, to: pad)
+            uploads.append(ScratchpadStore.PendingUpload(name: fileName, type: mimeType, data: data))
         }
 
         if failedCount > 0 {
-            actionError = "\(failedCount) photo\(failedCount == 1 ? "" : "s") couldn't be loaded"
+            store.actionError = "\(failedCount) photo\(failedCount == 1 ? "" : "s") couldn't be loaded"
         }
 
-        isUploadingFile = false
+        await store.uploadFiles(uploads, to: pad)
     }
 
     private func handleFileImport(_ result: Result<[URL], Error>, for pad: DecryptedScratchpad) {
         switch result {
         case .success(let urls):
             Task {
-                isUploadingFile = true
+                var uploads: [ScratchpadStore.PendingUpload] = []
                 var failedCount = 0
 
                 for url in urls {
@@ -418,7 +443,7 @@ struct ScratchpadView: View {
                         let data = try Data(contentsOf: url)
                         let fileName = url.lastPathComponent
                         let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-                        await uploadFile(name: fileName, type: mimeType, data: data, to: pad)
+                        uploads.append(ScratchpadStore.PendingUpload(name: fileName, type: mimeType, data: data))
                     } catch {
                         Log.scratchpad.error("Failed to read imported file \(url.lastPathComponent): \(String(describing: error))")
                         failedCount += 1
@@ -426,296 +451,20 @@ struct ScratchpadView: View {
                 }
 
                 if failedCount > 0 {
-                    actionError = "\(failedCount) file\(failedCount == 1 ? "" : "s") couldn't be read"
+                    store.actionError = "\(failedCount) file\(failedCount == 1 ? "" : "s") couldn't be read"
                 }
 
-                isUploadingFile = false
+                await store.uploadFiles(uploads, to: pad)
             }
         case .failure(let error):
             Log.scratchpad.error("File import failed: \(String(describing: error))")
-            actionError = error.localizedDescription
+            store.actionError = error.localizedDescription
         }
     }
-
-    private func uploadFile(name: String, type: String, data: Data, to pad: DecryptedScratchpad) async {
-        do {
-            // Upload the file
-            let attachment = try await padService.uploadFile(name: name, type: type, data: data)
-
-            // Add to scratchpad
-            try await syncService.addFileToScratchpad(id: pad.id, file: attachment)
-
-            // Update local state
-            let decryptedFile = DecryptedFileAttachment(
-                id: attachment.id,
-                name: name,
-                type: type,
-                size: attachment.size,
-                r2Key: attachment.r2Key
-            )
-
-            if let index = allPads.firstIndex(where: { $0.id == pad.id }) {
-                var updatedFiles = allPads[index].files
-                updatedFiles.append(decryptedFile)
-                allPads[index] = DecryptedScratchpad(
-                    id: allPads[index].id,
-                    content: allPads[index].content,
-                    files: updatedFiles,
-                    createdAt: Int(allPads[index].createdAt.timeIntervalSince1970 * 1000),
-                    updatedAt: Int(Date().timeIntervalSince1970 * 1000)
-                )
-
-                if selectedPad?.id == pad.id {
-                    selectedPad = allPads[index]
-                }
-            }
-
-            Log.scratchpad.info("File uploaded: \(name)")
-        } catch {
-            Log.scratchpad.error("File upload failed for \(name): \(String(describing: error))")
-            actionError = "Couldn't upload \(name): \(error.localizedDescription)"
-        }
-    }
-
-    // MARK: - Data Loading
-
-    private func loadAllScratchpads() async {
-        isLoading = true
-        error = nil
-
-        // Ensure we have synced data
-        await syncService.sync()
-
-        // Get all scratchpads
-        let encryptedPads = syncService.getEncryptedScratchpads()
-
-        var decrypted: [DecryptedScratchpad] = []
-        var failedCount = 0
-        for encryptedPad in encryptedPads {
-            do {
-                decrypted.append(try padService.decryptScratchpad(encryptedPad))
-            } catch {
-                failedCount += 1
-                Log.scratchpad.error("Failed to decrypt scratchpad \(encryptedPad.id): \(String(describing: error))")
-            }
-        }
-
-        // Distinguish decrypt failures from an empty list
-        loadWarning = failedCount > 0
-            ? "\(failedCount) scratchpad\(failedCount == 1 ? "" : "s") couldn't be decrypted"
-            : nil
-
-        // Sort by updatedAt descending
-        allPads = decrypted.sorted { $0.updatedAt > $1.updatedAt }
-
-        // Don't auto-select - let user tap to open a pad
-
-        isLoading = false
-    }
-
-    // MARK: - Pad Selection
-
-    private func selectPad(_ pad: DecryptedScratchpad) {
-        // Save any pending changes before switching
-        saveTask?.cancel()
-
-        selectedPad = pad
-        lastSavedContent = pad.content
-
-        // Update webview content
-        setEditorContent(pad.content)
-    }
-
-    /// Push content into the webview editor, logging any JS failure
-    private func setEditorContent(_ content: String) {
-        webView?.evaluateJavaScript(EditorCommand.setContent(content).jsCall) { _, error in
-            if let error = error {
-                Log.scratchpad.error("Failed to set editor content: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    // MARK: - Create Pad
-
-    private func createPad() async {
-        isCreating = true
-
-        do {
-            let newId = try await syncService.createScratchpad(
-                encryptedContent: padService.encryptScratchpadContent("# New Scratchpad\n")
-            )
-
-            // Reload to get the new pad
-            await loadAllScratchpads()
-
-            // Select the new pad
-            if let newPad = allPads.first(where: { $0.id == newId }) {
-                selectPad(newPad)
-            }
-        } catch {
-            Log.scratchpad.error("Create failed: \(String(describing: error))")
-            actionError = "Couldn't create scratchpad: \(error.localizedDescription)"
-        }
-
-        isCreating = false
-    }
-
-    // MARK: - Delete Pad
 
     private func confirmDelete(_ pad: DecryptedScratchpad) {
         padToDelete = pad
         showDeleteConfirmation = true
-    }
-
-    private func deletePad(_ pad: DecryptedScratchpad) async {
-        do {
-            try await syncService.deleteScratchpad(id: pad.id)
-
-            // Remove from local list
-            allPads.removeAll { $0.id == pad.id }
-
-            // Select another pad if we deleted the selected one
-            if selectedPad?.id == pad.id {
-                selectedPad = allPads.first
-                if let newPad = selectedPad {
-                    lastSavedContent = newPad.content
-                    setEditorContent(newPad.content)
-                }
-            }
-        } catch {
-            Log.scratchpad.error("Delete failed for pad \(pad.id): \(String(describing: error))")
-            actionError = "Couldn't delete scratchpad: \(error.localizedDescription)"
-        }
-
-        padToDelete = nil
-    }
-
-    // MARK: - Content Changes
-
-    private func handleContentChange(_ newContent: String, padId: String) {
-        // Skip if content hasn't actually changed
-        guard newContent != lastSavedContent else { return }
-
-        // Update local state
-        if let index = allPads.firstIndex(where: { $0.id == padId }) {
-            allPads[index].content = newContent
-        }
-        if selectedPad?.id == padId {
-            selectedPad?.content = newContent
-        }
-
-        // Cancel any pending save
-        saveTask?.cancel()
-
-        // Debounce save by 500ms
-        saveTask = Task {
-            try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
-
-            guard !Task.isCancelled else { return }
-
-            await saveContent(newContent, padId: padId)
-        }
-    }
-
-    private func saveContent(_ content: String, padId: String) async {
-        isSaving = true
-
-        do {
-            let encrypted = try padService.encryptScratchpadContent(content)
-            try await syncService.updateScratchpad(id: padId, encryptedContent: encrypted)
-            lastSavedContent = content
-            saveFailed = false
-        } catch {
-            // Leave lastSavedContent untouched so the next edit retries the save
-            Log.scratchpad.error("Save failed for pad \(padId): \(String(describing: error))")
-            saveFailed = true
-        }
-
-        isSaving = false
-    }
-
-    // MARK: - WebSocket Setup
-
-    private func setupWebSocket() async {
-        let ws = WebSocketService(authService: authService)
-        ws.onScratchpadUpdated = { [self] id in
-            handleRemoteScratchpadUpdate(id: id)
-        }
-        ws.onScratchpadCreated = { [self] id in
-            handleRemoteScratchpadCreated(id: id)
-        }
-        ws.onScratchpadDeleted = { [self] id in
-            handleRemoteScratchpadDeleted(id: id)
-        }
-        ws.onConnected = { [self] in
-            isWebSocketConnected = true
-            Log.scratchpad.info("WebSocket connected")
-        }
-        ws.onDisconnected = { [self] (error: Error?) in
-            isWebSocketConnected = false
-            if let error = error {
-                Log.scratchpad.error("WebSocket disconnected: \(String(describing: error))")
-            } else {
-                Log.scratchpad.info("WebSocket disconnected")
-            }
-        }
-        await ws.connect()
-        webSocketService = ws
-    }
-
-    /// Handle real-time update from another device
-    private func handleRemoteScratchpadUpdate(id: String) {
-        Task {
-            // Don't refresh if we're currently editing this pad
-            if selectedPad?.id == id && isSaving {
-                return
-            }
-
-            // Sync first to get latest data
-            await syncService.sync()
-
-            // Refresh the specific scratchpad
-            if let encryptedPad = syncService.getEncryptedScratchpad(id: id) {
-                let decrypted: DecryptedScratchpad
-                do {
-                    decrypted = try padService.decryptScratchpad(encryptedPad)
-                } catch {
-                    Log.scratchpad.error("Failed to decrypt remote update for pad \(id): \(String(describing: error))")
-                    return
-                }
-
-                if let index = allPads.firstIndex(where: { $0.id == id }) {
-                    allPads[index] = decrypted
-                }
-
-                // If this is the selected pad, update the editor
-                if selectedPad?.id == id {
-                    selectedPad = decrypted
-                    lastSavedContent = decrypted.content
-                    setEditorContent(decrypted.content)
-                }
-            }
-        }
-    }
-
-    /// Handle new scratchpad created on another device
-    private func handleRemoteScratchpadCreated(id: String) {
-        Task {
-            await loadAllScratchpads()
-        }
-    }
-
-    /// Handle scratchpad deleted on another device
-    private func handleRemoteScratchpadDeleted(id: String) {
-        allPads.removeAll { $0.id == id }
-
-        if selectedPad?.id == id {
-            selectedPad = allPads.first
-            if let newPad = selectedPad {
-                lastSavedContent = newPad.content
-                setEditorContent(newPad.content)
-            }
-        }
     }
 }
 
