@@ -31,7 +31,7 @@ enum VaultItemFixtures {
     """
 
     static let fileItemJSON = """
-    {"id":"fl-1","type":"file","name":"Tax Doc","fileName":"2025.pdf","fileSize":1024,"mimeType":"application/pdf","r2Key":"files/abc","encryptionIv":"aXY=","createdAt":1700000000000,"updatedAt":1700000000000}
+    {"id":"fl-1","type":"file","name":"Tax Doc","fileName":"2025.pdf","fileSize":1024,"mimeType":"application/pdf","r2Key":"files/abc","encryptionIv":"aXY=","wrappedFileKey":"d3JhcHBlZC1maWxlLWtleQ==","wrappedFileKeyIv":"ZmlsZS1rZXktaXY=","createdAt":1700000000000,"updatedAt":1700000000000}
     """
 
     static let cryptoWalletItemJSON = """
@@ -71,7 +71,7 @@ enum VaultItemFixtures {
     """
 
     static let unicodeFileItemJSON = """
-    {"id":"fl-u","type":"file","name":"📄 書類","fileName":"税務書類 2025 📎.pdf","fileSize":1024,"mimeType":"application/pdf","r2Key":"files/例え","encryptionIv":"aXY=","createdAt":1700000000000,"updatedAt":1700000000000}
+    {"id":"fl-u","type":"file","name":"📄 書類","fileName":"税務書類 2025 📎.pdf","fileSize":1024,"mimeType":"application/pdf","r2Key":"files/例え","encryptionIv":"aXY=","wrappedFileKey":"d3JhcHBlZC1maWxlLWtleQ==","wrappedFileKeyIv":"ZmlsZS1rZXktaXY=","createdAt":1700000000000,"updatedAt":1700000000000}
     """
 
     static let unicodeCryptoWalletItemJSON = """

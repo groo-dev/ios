@@ -53,7 +53,7 @@ struct PassAPIClientTests {
     @Test func getDecodesResponseAndSendsBearerToken() async throws {
         StubURLProtocol.reset()
         StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault/key-info",
-                                json: #"{"keySalt":"c2FsdA==","kdfIterations":1000}"#)
+                                json: #"{"keySalt":"c2FsdA==","kdfIterations":1000,"wrappedVaultKey":"d3JhcHBlZA==","wrapIv":"aXY="}"#)
 
         let info: PassKeyInfo = try await Self.makeClient().get(PassAPIClient.Endpoint.keyInfo)
 
@@ -67,7 +67,7 @@ struct PassAPIClientTests {
         StubURLProtocol.reset()
         StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault/key-info", status: 401, json: "{}")
         StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault/key-info",
-                                json: #"{"keySalt":"c2FsdA==","kdfIterations":1000}"#)
+                                json: #"{"keySalt":"c2FsdA==","kdfIterations":1000,"wrappedVaultKey":"d3JhcHBlZA==","wrapIv":"aXY="}"#)
 
         let info: PassKeyInfo = try await Self.makeClient().get(PassAPIClient.Endpoint.keyInfo)
 

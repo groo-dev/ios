@@ -131,10 +131,22 @@ class PassService {
         keySalt = salt
         kdfIterations = UInt32(keyInfo.kdfIterations)
 
-        // Derive encryption key using server-provided iterations
-        let key = try crypto.deriveKey(password: password, salt: salt, iterations: kdfIterations)
+        // Derive the wrapping key, then unwrap the vault key. Unwrapping IS the
+        // password check — it fails on 32 bytes, before any vault fetch.
+        let wrappingKey = try crypto.deriveKey(
+            password: password,
+            salt: salt,
+            iterations: kdfIterations
+        )
+        let key = try crypto.unwrapKey(
+            EncryptedPayload(
+                ciphertext: keyInfo.wrappedVaultKey,
+                iv: keyInfo.wrapIv,
+                version: 1
+            ),
+            using: wrappingKey
+        )
 
-        // Fetch and decrypt vault to verify password
         let vaultResponse: PassVaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
 
         guard let encryptedData = Data(base64Encoded: vaultResponse.encryptedData),
@@ -142,7 +154,6 @@ class PassService {
             throw PassError.invalidVaultData
         }
 
-        // Decrypt vault
         let decryptedData = try decryptVaultData(encryptedData, iv: iv, using: key)
 
         // Decryption succeeded, so a decode failure is a schema bug — not a wrong password

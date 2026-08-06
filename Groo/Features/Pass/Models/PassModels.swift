@@ -20,8 +20,10 @@ struct PassVaultResponse: Codable {
 
 /// Key info response from GET /v1/vault/key-info
 struct PassKeyInfo: Codable {
-    let keySalt: String        // base64 encoded
+    let keySalt: String         // base64 encoded
     let kdfIterations: Int
+    let wrappedVaultKey: String // base64, vault key wrapped by the passphrase-derived key
+    let wrapIv: String          // base64
 }
 
 /// Setup request for POST /v1/vault/setup
@@ -30,6 +32,8 @@ struct PassVaultSetupRequest: Codable {
     let kdfIterations: Int?
     let encryptedData: String  // base64 encoded
     let iv: String             // base64 encoded
+    let wrappedVaultKey: String // base64, vault key wrapped by the passphrase-derived key
+    let wrapIv: String          // base64
 }
 
 /// Update request for PUT /v1/vault
@@ -835,6 +839,8 @@ struct PassFileItem: PassBaseItem {
     var mimeType: String
     var r2Key: String
     var encryptionIv: String
+    var wrappedFileKey: String
+    var wrappedFileKeyIv: String
     var notes: String?
     var folderId: String?
     var favorite: Bool?
@@ -843,7 +849,7 @@ struct PassFileItem: PassBaseItem {
     var deletedAt: Int?
 
     enum CodingKeys: String, CodingKey {
-        case id, type, name, fileName, fileSize, mimeType, r2Key, encryptionIv, notes, folderId, favorite, createdAt, updatedAt, deletedAt
+        case id, type, name, fileName, fileSize, mimeType, r2Key, encryptionIv, wrappedFileKey, wrappedFileKeyIv, notes, folderId, favorite, createdAt, updatedAt, deletedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -856,6 +862,8 @@ struct PassFileItem: PassBaseItem {
         mimeType = try container.decode(String.self, forKey: .mimeType)
         r2Key = try container.decode(String.self, forKey: .r2Key)
         encryptionIv = try container.decode(String.self, forKey: .encryptionIv)
+        wrappedFileKey = try container.decode(String.self, forKey: .wrappedFileKey)
+        wrappedFileKeyIv = try container.decode(String.self, forKey: .wrappedFileKeyIv)
         notes = try container.decodeIfPresent(String.self, forKey: .notes)
         folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
         favorite = try container.decodeIfPresent(Bool.self, forKey: .favorite)

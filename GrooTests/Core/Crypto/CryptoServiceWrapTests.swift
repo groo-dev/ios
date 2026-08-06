@@ -3,11 +3,12 @@
 //  GrooTests
 //
 
-import XCTest
 import CryptoKit
+import Foundation
+import Testing
 @testable import Groo
 
-final class CryptoServiceWrapTests: XCTestCase {
+struct CryptoServiceWrapTests {
     private let crypto = CryptoService()
 
     private struct WrapVector: Decodable {
@@ -20,14 +21,15 @@ final class CryptoServiceWrapTests: XCTestCase {
     }
 
     private func loadVector() throws -> WrapVector {
-        let url = try XCTUnwrap(
-            Bundle(for: Self.self).url(forResource: "wrap-vector", withExtension: "json"),
+        let bundle = Bundle(for: BundleToken.self)
+        let url = try #require(
+            bundle.url(forResource: "wrap-vector", withExtension: "json"),
             "wrap-vector.json is not a member of the GrooTests target"
         )
         return try JSONDecoder().decode(WrapVector.self, from: Data(contentsOf: url))
     }
 
-    func testWrapUnwrapRoundTrip() throws {
+    @Test func wrapUnwrapRoundTrip() throws {
         let wrapping = try crypto.deriveKey(
             password: "correct horse",
             salt: crypto.generateSalt(),
@@ -38,16 +40,15 @@ final class CryptoServiceWrapTests: XCTestCase {
         let payload = try crypto.wrapKey(vaultKey, using: wrapping)
         let unwrapped = try crypto.unwrapKey(payload, using: wrapping)
 
-        XCTAssertEqual(
-            unwrapped.withUnsafeBytes { Data($0) },
-            vaultKey.withUnsafeBytes { Data($0) }
+        #expect(
+            unwrapped.withUnsafeBytes { Data($0) } == vaultKey.withUnsafeBytes { Data($0) }
         )
     }
 
     /// The interop guarantee: a vault key wrapped by apps/web must unwrap here.
-    func testUnwrapsCanonicalVectorFromWeb() throws {
+    @Test func unwrapsCanonicalVectorFromWeb() throws {
         let vector = try loadVector()
-        let salt = try XCTUnwrap(Data(base64Encoded: vector.salt))
+        let salt = try #require(Data(base64Encoded: vector.salt))
         let wrapping = try crypto.deriveKey(
             password: vector.passphrase,
             salt: salt,
@@ -59,20 +60,22 @@ final class CryptoServiceWrapTests: XCTestCase {
             using: wrapping
         )
 
-        XCTAssertEqual(
-            vaultKey.withUnsafeBytes { Data($0) }.base64EncodedString(),
-            vector.vaultKeyRaw
+        #expect(
+            vaultKey.withUnsafeBytes { Data($0) }.base64EncodedString() == vector.vaultKeyRaw
         )
     }
 
-    func testWrongPassphraseThrows() throws {
+    @Test func wrongPassphraseThrows() throws {
         let salt = crypto.generateSalt()
         let right = try crypto.deriveKey(password: "right", salt: salt, iterations: 10_000)
         let wrong = try crypto.deriveKey(password: "wrong", salt: salt, iterations: 10_000)
         let payload = try crypto.wrapKey(crypto.generateContentKey(), using: right)
 
-        XCTAssertThrowsError(try crypto.unwrapKey(payload, using: wrong)) { error in
-            XCTAssertEqual(error as? CryptoError, .wrongPassphrase)
+        #expect(throws: CryptoError.wrongPassphrase) {
+            try crypto.unwrapKey(payload, using: wrong)
         }
     }
 }
+
+/// Anchor class for locating the test bundle (Bundle(for:) needs a class).
+private final class BundleToken {}

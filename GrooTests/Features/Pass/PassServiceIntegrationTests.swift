@@ -38,7 +38,12 @@ struct PassServiceIntegrationTests {
         StubURLProtocol.reset()
 
         let salt = Data("integration-salt".utf8)
-        let key = try crypto.deriveKey(password: password, salt: salt, iterations: iterations)
+        // The passphrase-derived key only wraps the vault key now — it is never
+        // used to encrypt the vault directly. `key` (below) is the vault key,
+        // exactly what PassService ends up storing/using after unlock.
+        let wrappingKey = try crypto.deriveKey(password: password, salt: salt, iterations: iterations)
+        let key = crypto.generateContentKey()
+        let wrapped = try crypto.wrapKey(key, using: wrappingKey)
 
         let vault = PassVault(version: 1, items: items, folders: folders, lastModified: 1_700_000_000_000)
         let combined = try crypto.encryptData(try JSONEncoder().encode(vault), using: key)
@@ -47,7 +52,7 @@ struct PassServiceIntegrationTests {
 
         StubURLProtocol.enqueue(
             method: "GET", pathSuffix: "/v1/vault/key-info",
-            json: #"{"keySalt":"\#(salt.base64EncodedString())","kdfIterations":\#(iterations)}"#)
+            json: #"{"keySalt":"\#(salt.base64EncodedString())","kdfIterations":\#(iterations),"wrappedVaultKey":"\#(wrapped.ciphertext)","wrapIv":"\#(wrapped.iv)"}"#)
         StubURLProtocol.enqueue(
             method: "GET", pathSuffix: "/v1/vault",
             json: #"{"encryptedData":"\#(ciphertext.base64EncodedString())","iv":"\#(iv.base64EncodedString())","version":\#(vaultVersion),"updatedAt":1700000000}"#)
@@ -145,6 +150,39 @@ struct PassServiceIntegrationTests {
         // Remove ALL stubs: any network dependency now fails loudly.
         // (Background sync will fail and log — by design; the unlock itself
         // must succeed purely from the local cache + keychain.)
+        StubURLProtocol.reset()
+
+        let unlocked = try await env.service.unlockWithBiometric(context: nil)
+
+        #expect(unlocked)
+        #expect(env.service.getItems().map(\.id) == ["pw-1"])
+    }
+
+    /// Seeds the Keychain and local cache directly — the way `storeKeyInKeychain`
+    /// and the cache write would after a real password unlock — without ever
+    /// calling `unlock(password:)`. Proves `unlockWithBiometric` relies solely
+    /// on the raw key bytes already in the Keychain (the vault key, post-cutover)
+    /// and never re-derives anything from a passphrase.
+    @Test func keychainKeyRoundTripsIntoCacheUnlockWithoutPasswordDerivation() async throws {
+        let item = PassVaultItem.password(VaultItemFixtures.samplePasswordItem())
+        let env = try Self.makeEnv(items: [])
+        defer { try? FileManager.default.removeItem(at: env.tempDir) }
+
+        try env.keychain.saveBiometricProtected(
+            env.key.withUnsafeBytes { Data($0) }, for: KeychainService.Key.passEncryptionKey)
+        try env.keychain.save(env.salt, for: KeychainService.Key.passSalt)
+
+        let vault = PassVault(version: 1, items: [item], folders: [], lastModified: 1_700_000_000_000)
+        let combined = try Self.crypto.encryptData(try JSONEncoder().encode(vault), using: env.key)
+        let iv = combined.prefix(12)
+        let ciphertext = combined.dropFirst(12)
+        try await PassVaultStore(directoryURL: env.tempDir).saveVault(
+            encryptedData: ciphertext,
+            metadata: PassVaultMetadata(
+                version: 7, iv: iv.base64EncodedString(), updatedAt: 1_700_000_000, lastSyncedAt: 1_700_000_000))
+
+        // No stubs at all: any network dependency fails loudly. Unlock must
+        // succeed purely from the Keychain key + local cache.
         StubURLProtocol.reset()
 
         let unlocked = try await env.service.unlockWithBiometric(context: nil)
