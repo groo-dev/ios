@@ -26,12 +26,13 @@ struct EncryptedPayload: Codable {
     let version: Int
 }
 
-enum CryptoError: Error {
+enum CryptoError: Error, Equatable {
     case keyDerivationFailed
     case encryptionFailed
     case decryptionFailed
     case invalidPayload
     case invalidBase64
+    case wrongPassphrase
 }
 
 // MARK: - CryptoService
@@ -157,6 +158,36 @@ struct CryptoService {
         // Data format: [12-byte IV][ciphertext][16-byte tag]
         let sealedBox = try AES.GCM.SealedBox(combined: encryptedData)
         return try AES.GCM.open(sealedBox, using: key)
+    }
+
+    // MARK: - Key Wrapping
+
+    /// Generate a random AES-256 content key: the vault key, or a per-file key.
+    func generateContentKey() -> SymmetricKey {
+        SymmetricKey(size: .bits256)
+    }
+
+    /// Wrap one key with another. The wrapped form is the base64 of the raw key
+    /// bytes, AES-GCM encrypted as a UTF-8 string — byte-identical to the
+    /// TypeScript `wrapKey` in pass/apps/web/src/lib/crypto.ts. Do not change
+    /// this framing without changing that one too.
+    func wrapKey(_ target: SymmetricKey, using wrappingKey: SymmetricKey) throws -> EncryptedPayload {
+        let raw = target.withUnsafeBytes { Data($0) }.base64EncodedString()
+        return try encrypt(raw, using: wrappingKey)
+    }
+
+    /// Unwrap a key. A failure here always means the wrapping key was wrong.
+    func unwrapKey(_ payload: EncryptedPayload, using wrappingKey: SymmetricKey) throws -> SymmetricKey {
+        let raw: String
+        do {
+            raw = try decrypt(payload, using: wrappingKey)
+        } catch {
+            throw CryptoError.wrongPassphrase
+        }
+        guard let keyData = Data(base64Encoded: raw), keyData.count == keyLength else {
+            throw CryptoError.wrongPassphrase
+        }
+        return SymmetricKey(data: keyData)
     }
 
     // MARK: - Verification

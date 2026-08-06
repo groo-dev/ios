@@ -1,0 +1,9 @@
+{
+  "_comment": "Canonical wrap format vector. Source of truth for @pass/crypto and for gr/ios GrooTests/Fixtures/wrap-vector.json. Regenerate with scripts/generate-wrap-vector.mjs.",
+  "passphrase": "correct horse battery staple",
+  "salt": "h5LxErBOWcnbkUwMHyull1rfJdnyP3CSbVYhFUtMHE4=",
+  "iterations": 10000,
+  "vaultKeyRaw": "UvM7DjvJyUqBFknA+rEsspyInhKL+yqBlV3rSsRSlgM=",
+  "wrapped": "DIqKoe+851lXkQpNWjGJ8ylVWmosD6t6aHtCCNrReRp1/0NTBhrBe3G58tBw9uJz9Yriq659QtfBpV6e",
+  "wrapIv": "oTwL6neYWu+QKeyG"
+}
