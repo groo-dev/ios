@@ -144,3 +144,89 @@ struct SharedRecordStoreTests {
         #expect(cached.cursor == 10)
     }
 }
+
+/// The record cache is only useful if the READ path consults it.
+///
+/// A background refresh persisted records, but `loadCredentials` rebuilt state
+/// from the blob cache on every fresh AutoFill process — so a passkey synced
+/// from another client was suggested by QuickType (that identity lives in the
+/// OS store) yet could not be resolved by `findPasskey`, and the sheet
+/// dismissed with credentialIdentityNotFound.
+struct AutoFillRecordDecodingTests {
+    private let key = SymmetricKey(size: .bits256)
+
+    private func record(id: String, seq: Int, payload: String) throws -> SharedServerRecord {
+        let enc = try SharedRecordCrypto.encryptRecord(
+            id: id, kind: .item, payload: Data(payload.utf8), vaultKey: key
+        )
+        return SharedServerRecord(
+            id: id, encryptedData: enc.encryptedData, iv: enc.iv,
+            wrappedRecordKey: enc.wrappedRecordKey, wrapIv: enc.wrapIv,
+            version: 1, seq: seq, isDeleted: false, createdAt: 1, updatedAt: 1
+        )
+    }
+
+    @Test("decodes a passkey record into something findPasskey can resolve")
+    func decodesPasskey() throws {
+        let payload = """
+        {"id":"pk-1","type":"passkey","name":"webauthn.io","rpId":"webauthn.io",\
+        "rpName":"webauthn.io","credentialId":"Y3JlZA","publicKey":"cHVi",\
+        "privateKey":"cHJpdg","userHandle":"dWg","userName":"test","signCount":0,\
+        "createdAt":1,"updatedAt":1}
+        """
+        let decoded = SharedRecordDecoder.decodeItems(
+            [try record(id: "pk-1", seq: 1, payload: payload)], key: key
+        )
+
+        #expect(decoded.passkeys.count == 1)
+        #expect(decoded.passkeys.first?.credentialId == "Y3JlZA")
+        #expect(decoded.passwords.isEmpty)
+    }
+
+    @Test("decodes a password record")
+    func decodesPassword() throws {
+        let payload = """
+        {"id":"pw-1","type":"password","name":"Example","username":"u",\
+        "password":"p","urls":["https://example.com"],"createdAt":1,"updatedAt":1}
+        """
+        let decoded = SharedRecordDecoder.decodeItems(
+            [try record(id: "pw-1", seq: 1, payload: payload)], key: key
+        )
+
+        #expect(decoded.passwords.count == 1)
+        #expect(decoded.passwords.first?.username == "u")
+    }
+
+    @Test("skips an unreadable record rather than losing every other credential")
+    func skipsUnreadable() throws {
+        let good = try record(
+            id: "pw-1", seq: 1,
+            payload: #"{"id":"pw-1","type":"password","name":"E","username":"u","password":"p","urls":[],"createdAt":1,"updatedAt":1}"#
+        )
+        let foreign = try SharedRecordCrypto.encryptRecord(
+            id: "x", kind: .item, payload: Data("{}".utf8), vaultKey: SymmetricKey(size: .bits256)
+        )
+        let unreadable = SharedServerRecord(
+            id: "x", encryptedData: foreign.encryptedData, iv: foreign.iv,
+            wrappedRecordKey: foreign.wrappedRecordKey, wrapIv: foreign.wrapIv,
+            version: 1, seq: 2, isDeleted: false, createdAt: 1, updatedAt: 1
+        )
+
+        let decoded = SharedRecordDecoder.decodeItems([good, unreadable], key: key)
+
+        #expect(decoded.passwords.count == 1)
+    }
+
+    @Test("omits trashed items")
+    func omitsTrashed() throws {
+        let payload = """
+        {"id":"pw-1","type":"password","name":"E","username":"u","password":"p",\
+        "urls":[],"createdAt":1,"updatedAt":1,"deletedAt":99}
+        """
+        let decoded = SharedRecordDecoder.decodeItems(
+            [try record(id: "pw-1", seq: 1, payload: payload)], key: key
+        )
+
+        #expect(decoded.passwords.isEmpty)
+    }
+}

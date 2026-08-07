@@ -98,7 +98,20 @@ class AutoFillService: ObservableObject {
             throw AutoFillError.vaultLocked
         }
 
-        // Load encrypted vault
+        // Per-item records first. A background refresh persists them, but each
+        // AutoFill invocation is a fresh process — reading only the blob cache
+        // rebuilt state from whatever the main app last wrote and discarded
+        // everything the refresh had synced. QuickType kept suggesting the new
+        // passkey (that lives in the OS store) while findPasskey could not
+        // resolve it, so the sheet dismissed with credentialIdentityNotFound.
+        if let cached = try? SharedRecordStore.load(key: key), !cached.records.isEmpty {
+            let decoded = SharedRecordDecoder.decodeItems(cached.records, key: key)
+            credentials = decoded.passwords
+            passkeys = Self.withPendingPasskeys(decoded.passkeys, key: key)
+            return
+        }
+
+        // No records yet (never refreshed, or still on the blob format).
         let (encryptedData, metadata) = try SharedVaultStore.loadVault()
 
         // Decrypt vault
@@ -146,13 +159,23 @@ class AutoFillService: ObservableObject {
             return passkeyItem
         }
 
-        // Merge passkeys created here but not yet synced into the vault by the main app
+        passkeys = Self.withPendingPasskeys(passkeys, key: key)
+    }
+
+    /// Fold in passkeys registered here but not yet merged into the vault by the
+    /// main app. A queue that cannot be read must not fail the whole unlock.
+    static func withPendingPasskeys(
+        _ passkeys: [SharedPassPasskeyItem],
+        key: SymmetricKey
+    ) -> [SharedPassPasskeyItem] {
         do {
             let pending = try SharedPendingItemsStore.load(key: key)
-            passkeys = SharedCredentialMatcher.mergingPendingPasskeys(vault: passkeys, pending: pending)
+            return SharedCredentialMatcher.mergingPendingPasskeys(vault: passkeys, pending: pending)
         } catch {
-            // Don't fail the whole unlock over the queue; already logged by the store
-            Log.autofill.error("Skipping pending passkeys: \(String(describing: error), privacy: .public)")
+            Log.autofill.error(
+                "Skipping pending passkeys: \(String(describing: error), privacy: .public)"
+            )
+            return passkeys
         }
     }
 
@@ -224,11 +247,8 @@ class AutoFillService: ObservableObject {
 
         try SharedRecordStore.save(cached, key: key)
 
-        let decoded = Self.decodeItems(cached.records, key: key)
-        let mergedPasskeys = SharedCredentialMatcher.mergingPendingPasskeys(
-            vault: decoded.passkeys,
-            pending: (try? SharedPendingItemsStore.load(key: key)) ?? []
-        )
+        let decoded = SharedRecordDecoder.decodeItems(cached.records, key: key)
+        let mergedPasskeys = Self.withPendingPasskeys(decoded.passkeys, key: key)
 
         await MainActor.run {
             self.credentials = decoded.passwords
@@ -294,30 +314,6 @@ class AutoFillService: ObservableObject {
                 "Failed to update QuickType identities: \(String(describing: error), privacy: .public)"
             )
         }
-    }
-
-    /// Decode records for display only. The lossy `SharedPassVaultItem` is safe
-    /// here precisely because AutoFill never writes these back.
-    static func decodeItems(
-        _ records: [SharedServerRecord],
-        key: SymmetricKey
-    ) -> (passwords: [SharedPassPasswordItem], passkeys: [SharedPassPasskeyItem]) {
-        var passwords: [SharedPassPasswordItem] = []
-        var passkeys: [SharedPassPasskeyItem] = []
-
-        for record in records {
-            guard
-                let decrypted = try? SharedRecordCrypto.decryptRecord(record, vaultKey: key),
-                decrypted.kind == .item,
-                let item = try? JSONDecoder().decode(SharedPassVaultItem.self, from: decrypted.data)
-            else {
-                // One unreadable row must not cost the user every other credential.
-                continue
-            }
-            if let password = item.passwordItem, !password.isDeleted { passwords.append(password) }
-            if let passkey = item.passkeyItem, !passkey.isDeleted { passkeys.append(passkey) }
-        }
-        return (passwords, passkeys)
     }
 
     /// Persist a newly registered passkey to the pending queue for the main app to sync
