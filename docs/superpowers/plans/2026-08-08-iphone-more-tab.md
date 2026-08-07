@@ -73,11 +73,19 @@
 
 ## Phase A — Stack hoisting
 
-Behavior-neutral. After every task in this phase the app must render identically on both idioms; the snapshot suites are the proof. **Phase A introduces no new behavior — if a snapshot changes, you broke something, do not re-record it.**
+Behavior-neutral **measured against the merge base** (`ae11ce5`), not against the immediately preceding commit. **Phase A introduces no new behavior — if a snapshot changes, you broke something, do not re-record it.**
+
+**Correction, learned during Task 3 — read before doing Tasks 4 or 5.** Task 1 wrapped all nine tabs in a host `NavigationStack` while hoisting only three screens (Home, Azan, Drive). Every screen not yet hoisted is therefore *transiently double-stacked* between Task 1 and its own hoist task. At the time of writing, Scratchpad, Stocks and Wallet are still in that state. Consequently:
+
+- A hoist in Tasks 4-5 **removes a double stack and therefore legitimately changes rendering versus the current `HEAD`** — content that was pushed down by a redundant second navigation bar moves back up (~86px was measured for Pad). That is the fix, not a regression. It must still match the **merge base** rendering.
+- **The snapshot suites cannot see this.** They render screens directly (`ViewRender.assertRenders(SomeView())`), never through `MainTabView`, so a double stack is invisible to them and the failing-set diff stays empty either way. An empty diff is necessary but **not sufficient** evidence in Phase A.
+- Therefore each remaining hoist must additionally prove itself **through the host**, the way Task 3's fix did: render the screen wrapped in exactly one `NavigationStack` at the merge base and at `HEAD`, and compare the images with a scratch `snapshotDirectory:` outside `__Snapshots__`. Never write a reference image to prove a point.
 
 ### Task 1: Extract the `FeatureContent` factory
 
-Pure refactor. `MainTabView.tabContent(for:)` becomes a standalone type both roots can use, and each tab gains a host-provided `NavigationStack`. Screens still own their own stacks at this point, so this task deliberately creates *temporary* double stacks — Task 1 therefore also hoists the three simplest screens (Home, Azan, Drive) so nothing is ever left double-wrapped at a commit boundary.
+Pure refactor. `MainTabView.tabContent(for:)` becomes a standalone type both roots can use, and each tab gains a host-provided `NavigationStack`. Screens still own their own stacks at this point, so this task creates *temporary* double stacks; it hoists the three simplest screens (Home, Azan, Drive) in the same commit.
+
+> **Retrospective correction (written after Task 3).** The original rationale here claimed this arrangement meant "nothing is ever left double-wrapped at a commit boundary." That was wrong: wrapping all nine tabs while hoisting three leaves the other six double-wrapped until their own hoist task. No user-visible harm — the branch was never released mid-Phase-A — but it invalidated the "empty failing-set diff proves neutrality" reasoning for Tasks 2-5, because the snapshot suites bypass the host and cannot see a double stack. See the corrected Phase A preamble above.
 
 **Files:**
 - Create: `Groo/Views/FeatureContent.swift`
