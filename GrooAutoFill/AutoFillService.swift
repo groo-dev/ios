@@ -225,11 +225,73 @@ class AutoFillService: ObservableObject {
         try SharedRecordStore.save(cached, key: key)
 
         let decoded = Self.decodeItems(cached.records, key: key)
+        let mergedPasskeys = SharedCredentialMatcher.mergingPendingPasskeys(
+            vault: decoded.passkeys,
+            pending: (try? SharedPendingItemsStore.load(key: key)) ?? []
+        )
+
         await MainActor.run {
             self.credentials = decoded.passwords
-            self.passkeys = SharedCredentialMatcher.mergingPendingPasskeys(
-                vault: decoded.passkeys,
-                pending: (try? SharedPendingItemsStore.load(key: key)) ?? []
+            self.passkeys = mergedPasskeys
+        }
+
+        // Refreshing the in-memory list only updates OUR sheet. The keyboard's
+        // QuickType strip is driven by ASCredentialIdentityStore, which iOS
+        // keeps separately — so without this a newly synced item shows in the
+        // sheet but is never suggested until the main app runs.
+        await updateQuickTypeIdentities(passwords: decoded.passwords, passkeys: mergedPasskeys)
+    }
+
+    /// Republish QuickType suggestions from a completed refresh.
+    ///
+    /// Replaces rather than adds, so items deleted elsewhere stop being
+    /// suggested. Safe because a successful refresh holds the complete record
+    /// set, not a partial page.
+    private func updateQuickTypeIdentities(
+        passwords: [SharedPassPasswordItem],
+        passkeys: [SharedPassPasskeyItem]
+    ) async {
+        let store = ASCredentialIdentityStore.shared
+        guard await store.state().isEnabled else { return }
+
+        var identities: [any ASCredentialIdentity] = passwords.flatMap {
+            item -> [ASPasswordCredentialIdentity] in
+            item.urls.compactMap { urlString in
+                // Saved URLs may be bare domains; URL(string:) yields no host
+                // for those, so force a scheme before parsing.
+                let normalized = urlString.hasPrefix("http") ? urlString : "https://\(urlString)"
+                guard let host = URL(string: normalized)?.host else { return nil }
+                return ASPasswordCredentialIdentity(
+                    serviceIdentifier: ASCredentialServiceIdentifier(identifier: host, type: .domain),
+                    user: item.username,
+                    recordIdentifier: item.id
+                )
+            }
+        }
+
+        if #available(iOS 17.0, *) {
+            identities.append(contentsOf: passkeys.compactMap { passkey in
+                guard
+                    let credentialID = Data(base64URLEncoded: passkey.credentialId),
+                    let userHandle = Data(base64URLEncoded: passkey.userHandle)
+                else { return nil }
+                return ASPasskeyCredentialIdentity(
+                    relyingPartyIdentifier: passkey.rpId,
+                    userName: passkey.userName,
+                    credentialID: credentialID,
+                    userHandle: userHandle,
+                    recordIdentifier: passkey.id
+                )
+            })
+        }
+
+        do {
+            try await store.replaceCredentialIdentities(identities)
+        } catch {
+            // QuickType drifts from the vault when this fails, but the sheet
+            // itself is unaffected — so log rather than surface.
+            Log.autofill.error(
+                "Failed to update QuickType identities: \(String(describing: error), privacy: .public)"
             )
         }
     }
