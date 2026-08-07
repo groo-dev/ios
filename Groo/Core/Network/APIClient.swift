@@ -10,14 +10,8 @@ import os
 
 // MARK: - Types
 
-enum APIError: Error {
-    case invalidURL
-    case noData
-    case decodingFailed(Error)
-    case httpError(statusCode: Int, message: String?)
-    case networkError(Error)
-    case unauthorized
-}
+// APIError moved to Shared/SharedAPIError.swift so the AutoFill extension
+// can use PassAPIClient. Same name, same cases.
 
 struct APIResponse<T: Decodable>: Decodable {
     let data: T?

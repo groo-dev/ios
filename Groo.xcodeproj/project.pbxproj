@@ -38,6 +38,7 @@
 		33014595B70E77D7AFDAA895 /* SharedRecordModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56362AA81D8016439917CC5 /* SharedRecordModels.swift */; };
 		3895E09DCB8C3836CF4EDB82 /* SharedPadCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */; };
 		49D97460CA688A3010DB0AA2 /* SharedCredentialMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 082719DCAA94FAD63BD935F7 /* SharedCredentialMatcher.swift */; };
+		60C669D31E461B90BD1F0EDF /* SharedAPIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADAAA706A00A60B44BEBF74F /* SharedAPIError.swift */; };
 		80BC638C1718B863502FC1D0 /* SharedCredentialMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 082719DCAA94FAD63BD935F7 /* SharedCredentialMatcher.swift */; };
 		9CA5EADA873D22ECCB2633D6 /* SharedPadCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */; };
 		A3BD28C085538D3ECB44D79D /* SharedRecordCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1216F05DAB33620E75E2624 /* SharedRecordCrypto.swift */; };
@@ -48,6 +49,9 @@
 		C28ED402534EC41C9D99BFB1 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1824F78163C97BE82976C04C /* Foundation.framework */; };
 		C32C63A5A95F4C7A29363DA9 /* GrooAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 6CB17EFCC3A613A008ADBD29 /* GrooAuth */; };
 		C469004D4292690B7FEA6654 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = B026D97D28BCC53D8ED6E1D0 /* Adhan */; };
+		D070088143A9E97B17B36A78 /* SharedPassAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB87AB7F5FD7807E1D49B4 /* SharedPassAPIClient.swift */; };
+		D98D408903A5F83C7A67E76A /* SharedPassAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB87AB7F5FD7807E1D49B4 /* SharedPassAPIClient.swift */; };
+		DEBF3BD72D0B0019273982DB /* SharedAPIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADAAA706A00A60B44BEBF74F /* SharedAPIError.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -133,8 +137,10 @@
 		1B2850D22F1401620046247D /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		1B2850ED2F14017A0046247D /* KeyboardExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KeyboardExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedPadCrypto.swift; sourceTree = "<group>"; };
+		7ECB87AB7F5FD7807E1D49B4 /* SharedPassAPIClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedPassAPIClient.swift; sourceTree = "<group>"; };
 		9926010AD047E44A252977C2 /* GrooTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GrooTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A56362AA81D8016439917CC5 /* SharedRecordModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedRecordModels.swift; sourceTree = "<group>"; };
+		ADAAA706A00A60B44BEBF74F /* SharedAPIError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedAPIError.swift; sourceTree = "<group>"; };
 		C1216F05DAB33620E75E2624 /* SharedRecordCrypto.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedRecordCrypto.swift; sourceTree = "<group>"; };
 		FDB0B53A16A5327609878A8A /* GrooUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GrooUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -313,6 +319,8 @@
 				2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */,
 				A56362AA81D8016439917CC5 /* SharedRecordModels.swift */,
 				C1216F05DAB33620E75E2624 /* SharedRecordCrypto.swift */,
+				ADAAA706A00A60B44BEBF74F /* SharedAPIError.swift */,
+				7ECB87AB7F5FD7807E1D49B4 /* SharedPassAPIClient.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -654,6 +662,8 @@
 				49D97460CA688A3010DB0AA2 /* SharedCredentialMatcher.swift in Sources */,
 				33014595B70E77D7AFDAA895 /* SharedRecordModels.swift in Sources */,
 				A3BD28C085538D3ECB44D79D /* SharedRecordCrypto.swift in Sources */,
+				60C669D31E461B90BD1F0EDF /* SharedAPIError.swift in Sources */,
+				D070088143A9E97B17B36A78 /* SharedPassAPIClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -674,6 +684,8 @@
 				9CA5EADA873D22ECCB2633D6 /* SharedPadCrypto.swift in Sources */,
 				AFBF72D6FF86652019136C53 /* SharedRecordModels.swift in Sources */,
 				BB659CF4118678279427B23D /* SharedRecordCrypto.swift in Sources */,
+				DEBF3BD72D0B0019273982DB /* SharedAPIError.swift in Sources */,
+				D98D408903A5F83C7A67E76A /* SharedPassAPIClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
