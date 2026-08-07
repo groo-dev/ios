@@ -54,6 +54,7 @@ class PassService {
     private let keychain: any KeychainServicing
     private let vaultStore: PassVaultStore
     private let credentialService: any CredentialIdentityProviding
+    private let pendingPasskeys: any PendingPasskeyStoring
 
     // Encryption state
     private var encryptionKey: SymmetricKey?
@@ -75,6 +76,7 @@ class PassService {
         keychain: any KeychainServicing = KeychainService(),
         vaultStore: PassVaultStore = PassVaultStore(),
         credentialService: any CredentialIdentityProviding = CredentialIdentityService(),
+        pendingPasskeys: any PendingPasskeyStoring = SharedPendingPasskeyStore(),
         tokenProvider: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
         forceRefresh: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized }
     ) {
@@ -83,6 +85,7 @@ class PassService {
         self.keychain = keychain
         self.vaultStore = vaultStore
         self.credentialService = credentialService
+        self.pendingPasskeys = pendingPasskeys
     }
 
     // MARK: - State Properties
@@ -790,7 +793,7 @@ class PassService {
 
         let pending: [SharedPassPasskeyItem]
         do {
-            pending = try SharedPendingItemsStore.load(key: key)
+            pending = try pendingPasskeys.load(key: key)
         } catch {
             // Never clear an unreadable queue; already logged by the store
             Log.pass.error("Cannot read pending passkey queue: \(String(describing: error), privacy: .public)")
@@ -832,7 +835,7 @@ class PassService {
                 try await saveVault()
                 Log.pass.info("Merged \(pending.count) pending passkey(s) from AutoFill")
             }
-            SharedPendingItemsStore.clear()
+            pendingPasskeys.clear()
         } catch {
             // Keep the queue so the merge retries on the next unlock/sync —
             // but a persistent failure must be observable
@@ -884,6 +887,13 @@ class PassService {
 
         // Update AutoFill credential identities
         await credentialService.updateCredentialIdentities(from: serverVault.items)
+
+        // Drain passkeys the AutoFill extension queued. Runs last so the merge
+        // applies on top of the vault/serverVersion just fetched, keeping its
+        // PUT's expectedVersion current. Without this the queue only drained on
+        // unlock, which — since the app never re-locks on background — meant a
+        // cold start.
+        await mergePendingPasskeys()
     }
 
     // MARK: - Private Helpers

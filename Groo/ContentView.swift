@@ -10,6 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AuthService.self) private var authService
     @Environment(PushService.self) private var pushService
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var isLoggedIn = false
     @State private var padService: PadService?
@@ -57,6 +58,15 @@ struct ContentView: View {
         }
         .onChange(of: authService.isAuthenticated) {
             updateState()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            // The AutoFill extension may have registered a passkey while we were
+            // backgrounded. The app doesn't re-lock on background, so without
+            // this the queue would wait for the next cold start. A locked vault
+            // makes this a no-op — mergePendingPasskeys can't decrypt the queue
+            // without the key, and the unlock paths already cover that case.
+            Task { await passService?.mergePendingPasskeys() }
         }
     }
 
