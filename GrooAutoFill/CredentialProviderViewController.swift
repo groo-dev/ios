@@ -300,6 +300,7 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
         guard let request = registrationRequest as? ASPasskeyCredentialRequest,
               let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity,
               request.supportedAlgorithms.contains(ASCOSEAlgorithmIdentifier.ES256) else {
+            Log.autofill.error("Rejecting registration: unsupported request shape or no ES256")
             extensionContext.cancelRequest(
                 withError: NSError(
                     domain: ASExtensionErrorDomain,
@@ -357,6 +358,7 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
                         Data(base64URLEncoded: passkey.credentialId).map { excludedIds.contains($0) } == true
                     }
                     if hasExcluded {
+                        Log.autofill.error("Refusing registration: RP excluded a credential we already hold")
                         extensionContext.cancelRequest(
                             withError: NSError(
                                 domain: ASExtensionErrorDomain,
@@ -407,13 +409,10 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
                 // Face ID failed or was cancelled — let the user retry
                 service.error = "Couldn't unlock. Try again."
             } catch {
-                extensionContext.cancelRequest(
-                    withError: NSError(
-                        domain: ASExtensionErrorDomain,
-                        code: ASExtensionError.failed.rawValue,
-                        userInfo: [NSLocalizedDescriptionKey: error.localizedDescription]
-                    )
-                )
+                // This used to cancelRequest with no log, making a refusal
+                // indistinguishable from a crash. Surface it instead.
+                Log.autofill.error("Passkey registration failed: \(String(describing: error), privacy: .public)")
+                service.error = "Registration failed: \(error.localizedDescription)"
             }
         }
     }
