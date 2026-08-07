@@ -89,6 +89,37 @@ enum SharedPendingItemsStore {
         try combined.write(to: url, options: .atomic)
     }
 
+    /// Remove one passkey from the queue by credential id.
+    ///
+    /// Needed because a push succeeds for one item at a time: `clear()` would
+    /// discard any other passkey queued alongside it, and those hold private
+    /// keys that exist nowhere else yet.
+    static func remove(
+        credentialId: String,
+        key: SymmetricKey,
+        fileURL: URL? = SharedPendingItemsStore.defaultFileURL
+    ) throws {
+        guard let url = fileURL else {
+            throw SharedPendingItemsStoreError.containerNotAvailable
+        }
+
+        let items = try load(key: key, fileURL: url)
+        let remaining = items.filter { $0.credentialId != credentialId }
+        guard remaining.count != items.count else { return }
+
+        if remaining.isEmpty {
+            clear(fileURL: url)
+            return
+        }
+
+        let data = try JSONEncoder().encode(remaining)
+        let sealed = try AES.GCM.seal(data, using: key)
+        guard let combined = sealed.combined else {
+            throw SharedCryptoError.decryptionFailed
+        }
+        try combined.write(to: url, options: .atomic)
+    }
+
     /// Remove the pending queue (after the main app has merged it)
     static func clear(fileURL: URL? = SharedPendingItemsStore.defaultFileURL) {
         guard let url = fileURL, FileManager.default.fileExists(atPath: url.path) else { return }
