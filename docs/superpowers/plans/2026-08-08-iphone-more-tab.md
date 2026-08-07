@@ -454,7 +454,9 @@ The trickiest hoist. `ScratchpadView.contentView` branches on `horizontalSizeCla
 
 - [ ] **Step 1: Hoist the unlock view's stack**
 
-In `ScratchpadTabView.swift`, `ScratchpadUnlockView.body` opens with `NavigationStack {` at `:47`. Delete it and its matching close, de-indent one level, and append `.toolbar(.hidden, for: .navigationBar)` to the outermost view — this screen showed no navigation bar before, and must not start showing one:
+In `ScratchpadTabView.swift`, `ScratchpadUnlockView.body` opens with `NavigationStack {` at `:47`. Delete it and its matching close, and de-indent one level.
+
+> **Correction (applied during execution — the original instruction here was wrong).** This step originally also told the implementer to append `.toolbar(.hidden, for: .navigationBar)`, on the rationale that "this screen never had a visible bar." That rationale was copied from `PadUnlockView` without checking Scratchpad, and it is false: at the merge base `ScratchpadUnlockView` carries `.navigationTitle("Scratchpad")` and renders a real, titled navigation bar. Hiding the bar deletes a title users currently see — a regression, not a neutral hoist, and it dropped `scratchpadTabLocked` to an 89% pixel match. **Keep `.navigationTitle("Scratchpad")` and do NOT add the toolbar-hiding modifier here.** Only `ScratchpadView`'s regular (iPad) branch needs it, in Step 2.
 
 ```swift
     var body: some View {
@@ -471,9 +473,7 @@ In `ScratchpadTabView.swift`, `ScratchpadUnlockView.body` opens with `Navigation
 
             // … rest of the existing content, de-indented one level
         }
-        // Host now always supplies a NavigationStack; this screen never had a
-        // visible bar. Pinned by ScratchpadViewSnapshotTests.
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle("Scratchpad")   // keep — the host stack renders it
     }
 ```
 
