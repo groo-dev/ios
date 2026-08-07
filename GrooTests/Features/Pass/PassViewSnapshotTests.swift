@@ -66,7 +66,7 @@ struct PassViewSnapshotTests {
         // .task fires checkVaultSetup against the stubbed key-info GET
         // (last-response-repeats); the async result lands post-draw.
         assertViewSnapshot(
-            of: PassView(passService: env.service, onSignOut: {}),
+            of: NavigationStack { PassView(passService: env.service, onSignOut: {}) },
             named: "locked")
     }
 
@@ -78,7 +78,7 @@ struct PassViewSnapshotTests {
         let env = try await Self.makeUnlockedEnv(items: try Self.allItems())
         defer { Self.cleanUp(env) }
         assertViewSnapshot(
-            of: PassView(passService: env.service, onSignOut: {}),
+            of: NavigationStack { PassView(passService: env.service, onSignOut: {}) },
             named: "unlocked", size: Self.tallListSize)
     }
 
