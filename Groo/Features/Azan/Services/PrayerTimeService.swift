@@ -117,22 +117,38 @@ class PrayerTimeService {
 
     // MARK: - Jumu'ah Reminder Time
 
+    /// The next Jumu'ah reminder that is still in the future.
+    ///
+    /// Scanning only to "the next Friday" is wrong when today IS Friday and its
+    /// Dhuhr has passed: it returns a time in the past, the scheduler's
+    /// `reminderTime > Date()` guard drops it, and no Jumu'ah reminder is
+    /// scheduled at all for the coming week. So keep walking until a Friday
+    /// whose reminder has not yet elapsed.
     func jumuahReminderTime(minutesBefore: Int) -> Date? {
         guard let coords = currentCoordinates, let params = currentParams else { return nil }
         let cal = Calendar.current
+        let reference = now()
 
-        // Find next Friday
-        var date = now()
-        while cal.component(.weekday, from: date) != 6 {
+        // Two weeks is more than enough to find the next un-elapsed Friday, and
+        // bounds the loop rather than trusting the calendar to terminate it.
+        var date = reference
+        for _ in 0..<15 {
+            if cal.component(.weekday, from: date) == 6 {
+                let components = cal.dateComponents([.year, .month, .day], from: date)
+                if let prayerTimes = PrayerTimes(
+                    coordinates: coords, date: components, calculationParameters: params
+                ) {
+                    let dhuhrTime = adjustedTime(for: .dhuhr, from: prayerTimes)
+                    if let reminder = cal.date(byAdding: .minute, value: -minutesBefore, to: dhuhrTime),
+                       reminder > reference {
+                        return reminder
+                    }
+                }
+            }
             guard let next = cal.date(byAdding: .day, value: 1, to: date) else { return nil }
             date = next
         }
-
-        let components = cal.dateComponents([.year, .month, .day], from: date)
-        guard let prayerTimes = PrayerTimes(coordinates: coords, date: components, calculationParameters: params) else { return nil }
-
-        let dhuhrTime = adjustedTime(for: .dhuhr, from: prayerTimes)
-        return cal.date(byAdding: .minute, value: -minutesBefore, to: dhuhrTime)
+        return nil
     }
 
     // MARK: - Suhoor Reminder Time

@@ -81,9 +81,18 @@ Pinned by `GrooTests/Features/Pass/AutoFillCapabilitiesTests.swift`.
 
 ## Test suite baseline
 
-As of 2026-08-07 the unit suite has 16 pre-existing failures — view snapshot
-tests plus one date-dependent `PrayerTimeServiceTests` case. Diff the failing
-set against a stashed baseline before blaming your own change:
+As of 2026-08-07 the unit suite has ~16 pre-existing failures: view snapshot
+tests, plus **date-dependent** cases whose count varies by when you run.
+
+The date-dependent ones are the trap — the baseline is not a fixed number:
+
+- `PrayerTimeServiceTests.afterIshaNextIsTomorrowsFajrAndIshaRunsUntilIt`
+- `AzanNotificationServiceTests.jumuahReminderScheduledWhenEnabled` — only
+  failed on a Friday after Dhuhr; fixed 2026-08-07, and `jumuahReminderTime`
+  now rolls past an elapsed Friday.
+
+So diff the failing *set*, never the count, and re-run a suspicious failure at a
+different time of day before blaming your change:
 
 ```bash
 scripts/test.sh --unit 2>&1 | sed -n '/^Failing tests:/,/^\*\* TEST/p'

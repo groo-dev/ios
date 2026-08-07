@@ -160,4 +160,37 @@ struct PrayerTimeServiceTests {
         #expect(service.ramadanInfo == nil)
         #expect(service.todayPrayers.allSatisfy { $0.ramadanLabel == nil })
     }
+
+    // MARK: - Jumu'ah reminder
+
+    // 2026-08-07 is a Friday. Dubai Dhuhr is ~12:23 local (≈08:23Z), so these
+    // two instants straddle it. Values computed, not guessed — an off-by-one-day
+    // constant makes the roll-forward test pass for the wrong reason.
+    static let fridayMorning = Date(timeIntervalSince1970: 1_786_068_000)  // 2026-08-07T02:00:00Z (Fri)
+    static let fridayEvening = Date(timeIntervalSince1970: 1_786_118_400)  // 2026-08-07T16:00:00Z (Fri)
+
+    @Test func jumuahReminderIsTodayWhenFridayDhuhrIsStillAhead() throws {
+        let service = Self.makeService(nowAt: Self.fridayMorning)
+
+        let reminder = try #require(service.jumuahReminderTime(minutesBefore: 30))
+
+        #expect(reminder > Self.fridayMorning)
+        #expect(Calendar.current.component(.weekday, from: reminder) == 6)
+        // Same day: this Friday's Jumu'ah has not happened yet.
+        #expect(reminder.timeIntervalSince(Self.fridayMorning) < 24 * 3600)
+    }
+
+    @Test func jumuahReminderRollsToNextFridayOnceTodaysHasPassed() throws {
+        let service = Self.makeService(nowAt: Self.fridayEvening)
+
+        let reminder = try #require(service.jumuahReminderTime(minutesBefore: 30))
+
+        // Returning today's elapsed Dhuhr would be dropped by the scheduler's
+        // `reminderTime > Date()` guard, leaving NO Jumu'ah reminder scheduled
+        // for the coming week — the bug this pins.
+        #expect(reminder > Self.fridayEvening)
+        #expect(Calendar.current.component(.weekday, from: reminder) == 6)
+        // Next Friday, i.e. within the following week.
+        #expect(reminder.timeIntervalSince(Self.fridayEvening) < 8 * 24 * 3600)
+    }
 }
