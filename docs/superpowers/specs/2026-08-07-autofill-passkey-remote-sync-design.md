@@ -15,6 +15,16 @@
 > and 4 — `SharedRawJSON`, `SharedVaultDocument`, `SharedCrypto.encryptVault`,
 > the whole-blob `PUT`, and the 409 retry.
 >
+> **Resolved (2026-08-07, later).** That design now exists:
+> `~/work/gr/pass/docs/superpowers/specs/2026-08-07-per-item-vault-records-design.md`,
+> with the iOS work planned in
+> `docs/superpowers/plans/2026-08-07-per-item-vault-records-ios.md`. Phases 2 and 4
+> below are **superseded — do not implement them.** The blob-based push is never
+> built: with per-item rows a passkey is one `POST /v1/vault/records` with a
+> brand-new id, so `SharedRawJSON`, `SharedVaultDocument`, the whole-blob `PUT`
+> and the 409 retry are all unnecessary. Phase 3 is absorbed into that plan as
+> Task 6, unchanged.
+>
 > What still stands regardless: the problem statement, **Phase 1** (app-side
 > drain, independent of storage model), **Phase 3** and every auth finding
 > (15-minute tokens, refresh rotation with family revocation,
