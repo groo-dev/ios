@@ -37,4 +37,37 @@ enum SharedConfig {
         static let passEncryptionKey = "pass_encryption_key"
         static let passSalt = "pass_salt"
     }
+
+    // MARK: - Pass API
+
+    /// Total budget for the AutoFill passkey push, covering every attempt.
+    ///
+    /// `PassAPIClient` sets `timeoutIntervalForRequest = 30`, which would hold
+    /// the AutoFill sheet open far too long. Overridable via the App Group
+    /// defaults, matching how the base URLs are overridden.
+    static var passkeyPushDeadlineSeconds: Double {
+        let defaults = UserDefaults(suiteName: appGroupIdentifier) ?? .standard
+        let override = defaults.double(forKey: "passkeyPushDeadlineSeconds")
+        return override > 0 ? override : 5
+    }
+
+    /// Pass API base URL, mirroring `Config.passAPIBaseURL` including its
+    /// UserDefaults override. Duplicated here rather than shared because
+    /// `Config` lives in the app target, which extensions cannot see.
+    ///
+    /// The override is read from the App Group defaults, not `.standard`: an
+    /// extension has its own defaults domain, so a dev override set by the app
+    /// would otherwise be invisible to it.
+    static var passAPIBaseURL: URL {
+        let defaults = UserDefaults(suiteName: appGroupIdentifier) ?? .standard
+        if let override = defaults.string(forKey: "passAPIBaseURL"),
+           let url = URL(string: override) {
+            return url
+        }
+        #if DEBUG
+        return URL(string: "http://universe.local:13650")!
+        #else
+        return URL(string: "https://pass.groo.dev")!
+        #endif
+    }
 }

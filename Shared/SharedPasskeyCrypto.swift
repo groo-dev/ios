@@ -28,6 +28,11 @@ enum PasskeyCryptoError: Error, LocalizedError {
 @available(iOS 17.0, *)
 enum SharedPasskeyCrypto {
 
+    /// BE (backup eligible, 0x08) + BS (backup state, 0x10). Groo passkeys live
+    /// in the synced vault, so every ceremony must advertise both. Apple treats
+    /// these as mandatory for credential provider extensions.
+    static let syncedCredentialFlags: UInt8 = 0x08 | 0x10
+
     /// Sign a WebAuthn assertion with ECDSA P-256
     /// - Parameters:
     ///   - privateKeyBase64: PKCS8-encoded private key (base64)
@@ -84,8 +89,13 @@ enum SharedPasskeyCrypto {
         // Hash RP ID with SHA-256 (32 bytes)
         let rpIdHash = SHA256.hash(data: Data(rpId.utf8))
 
-        // Flags byte: UP (bit 0) + UV (bit 2)
-        var flags: UInt8 = 0
+        // Flags byte: UP (bit 0) + UV (bit 2) + BE (bit 3) + BS (bit 4).
+        // BE/BS describe the credential, not the ceremony, so they are always
+        // set: Groo passkeys sync through the vault, and Apple *requires*
+        // third-party providers to report them — with BE/BS clear the relying
+        // party rejects the ceremony ("operation either timed out or was not
+        // allowed"). BE must also never change over a credential's lifetime.
+        var flags: UInt8 = Self.syncedCredentialFlags
         if userPresent { flags |= 0x01 }   // bit 0: User Present
         if userVerified { flags |= 0x04 }  // bit 2: User Verified
 
@@ -140,7 +150,8 @@ enum SharedPasskeyCrypto {
         // Authenticator data with attested credential data:
         // rpIdHash(32) + flags(UP|UV|AT) + signCount(4) + aaguid(16) + credIdLen(2) + credId + coseKey
         var authData = Data(SHA256.hash(data: Data(rpId.utf8)))
-        authData.append(0x45) // UP (0x01) + UV (0x04) + AT (0x40)
+        // UP (0x01) + UV (0x04) + BE (0x08) + BS (0x10) + AT (0x40) = 0x5d
+        authData.append(0x01 | 0x04 | Self.syncedCredentialFlags | 0x40)
         authData.append(contentsOf: [0x00, 0x00, 0x00, 0x00]) // sign count 0
         authData.append(Data(count: 16)) // zero AAGUID
         authData.append(contentsOf: [UInt8(credentialId.count >> 8), UInt8(credentialId.count & 0xff)])

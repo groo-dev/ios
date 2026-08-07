@@ -26,6 +26,7 @@ struct PassServiceIntegrationTests {
         let key: SymmetricKey
         let salt: Data
         let tempDir: URL
+        let pending: InMemoryPendingPasskeyStore
     }
 
     static let crypto = CryptoService()
@@ -34,7 +35,12 @@ struct PassServiceIntegrationTests {
 
     /// Build a PassService wired entirely to fakes, and stub key-info + vault
     /// GET endpoints so `unlock(password:)` succeeds with `items` inside.
-    static func makeEnv(items: [PassVaultItem], folders: [PassFolder] = [], vaultVersion: Int = 3) throws -> Env {
+    static func makeEnv(
+        items: [PassVaultItem],
+        folders: [PassFolder] = [],
+        vaultVersion: Int = 3,
+        pending: InMemoryPendingPasskeyStore = InMemoryPendingPasskeyStore()
+    ) throws -> Env {
         StubURLProtocol.reset()
 
         let salt = Data("integration-salt".utf8)
@@ -72,10 +78,11 @@ struct PassServiceIntegrationTests {
             crypto: crypto,
             keychain: keychain,
             vaultStore: PassVaultStore(directoryURL: tempDir),
-            credentialService: credentials)
+            credentialService: credentials,
+            pendingPasskeys: pending)
 
         return Env(service: service, keychain: keychain, credentials: credentials,
-                   key: key, salt: salt, tempDir: tempDir)
+                   key: key, salt: salt, tempDir: tempDir, pending: pending)
     }
 
     /// Stub the PUT /v1/vault response `saveVault()` expects after a mutation.
@@ -382,6 +389,50 @@ struct PassServiceIntegrationTests {
         #expect(env.service.getTrashItems().isEmpty)
         uploaded = try Self.decodeUploadedVault(key: env.key)
         #expect(uploaded.vault.items.allSatisfy { $0.deletedAt == nil })
+    }
+
+    // MARK: - AutoFill pending-passkey drain
+
+    static func makeSharedPasskey(
+        id: String = "pk-af-1",
+        credentialId: String = "Y3JlZC1hZg"
+    ) -> SharedPassPasskeyItem {
+        SharedPassPasskeyItem(
+            id: id, name: "example.com", rpId: "example.com", rpName: "example.com",
+            credentialId: credentialId, publicKey: "cHVi", privateKey: "cHJpdg==",
+            userHandle: "dXNlcg", userName: "user@example.com"
+        )
+    }
+
+    /// A passkey registered by the AutoFill extension while the app is already
+    /// unlocked must reach the server on the next sync. Before this, the merge
+    /// only ran on unlock paths, so it waited for a cold start.
+    @Test func syncDrainsPasskeysQueuedByAutoFill() async throws {
+        let env = try Self.makeEnv(items: [])
+        _ = try await env.service.unlock(password: Self.password)
+
+        // The extension registers a passkey *after* unlock — so the unlock-path
+        // merge has already run and cannot be what picks this up.
+        env.pending.items = [Self.makeSharedPasskey()]
+
+        // sync() re-fetches, then the drain PUTs the merged vault.
+        let vault = PassVault(version: 1, items: [], folders: [], lastModified: 1_700_000_000_000)
+        let combined = try Self.crypto.encryptData(try JSONEncoder().encode(vault), using: env.key)
+        StubURLProtocol.enqueue(
+            method: "GET", pathSuffix: "/v1/vault",
+            json: #"{"encryptedData":"\#(combined.dropFirst(12).base64EncodedString())","iv":"\#(combined.prefix(12).base64EncodedString())","version":4,"updatedAt":1700000002}"#)
+        Self.stubVaultPut(version: 5)
+
+        try await env.service.sync()
+
+        let uploaded = try Self.decodeUploadedVault(key: env.key)
+        let passkeys = uploaded.vault.items.compactMap { item -> PassPasskeyItem? in
+            guard case .passkey(let passkey) = item else { return nil }
+            return passkey
+        }
+        #expect(passkeys.map(\.credentialId) == ["Y3JlZC1hZg"])
+        #expect(env.pending.clearCount == 1)
+        #expect(env.pending.items.isEmpty)
     }
 }
 

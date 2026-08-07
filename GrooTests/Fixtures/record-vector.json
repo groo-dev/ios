@@ -1,0 +1,48 @@
+{
+  "_comment": "Canonical per-item record format vector. Source of truth for @pass/crypto and for gr/ios GrooTests/Fixtures/record-vector.json. Regenerate with scripts/generate-record-vector.mjs.",
+  "vaultKeyRaw": "73vRYTK0AwdYE4ytf+AlthK3tI1IA2UmA4Ijq+2mJ7w=",
+  "item": {
+    "record": {
+      "id": "vector-item",
+      "encryptedData": "E5LlOpALq/sHVq4AjdFQYWUVgFDvuKdQrTZttjeLlTPd/+8yUWAyO4mKD1OMXTy56BH2VLF1BuCEh8YXtEnMTsPIdcmb6rwV7k3lY59Fg74CnD3qepwXZD6b611ZCg7dwIdMWmPdu9OcqhD4FSgM7Q+cfsw/Gv5w9MnR5UTDXFjw67+oULSQth1UaWVKBr65P2amH8lmhj6eaJygn7VYdXxAoFo4I+THPpF5Sf7SHYVF82QBd9joPAPgC1XKypYdTfU5u1kn6aCQ9llBiRIDRWI5PE4w1JKnBvB5jLmBmntkUy+xm3ZKj9rqGdXqzXAnx7numFGKruu3KgqrTyr/6WQQGy9OicZkzVzSM0DTRUzho0BDdjG0as0xB6pxOmU=",
+      "iv": "SOo4/GI6lTfu+kQz",
+      "wrappedRecordKey": "5VzbnuU7zlU70vjYIfBuWQbsV9Z4375ofZp5wOBajISbsrYB1mHeT2OtV9ftPxlNJFfWENSv665Ai/A8",
+      "wrapIv": "Okb/eY3HgiM65wO6"
+    },
+    "expectedKind": "item",
+    "expectedPayload": {
+      "id": "vector-item",
+      "type": "password",
+      "name": "Record Vector",
+      "username": "interop@groo.dev",
+      "password": "s3cr3t-p@ssw0rd",
+      "urls": [
+        "https://example.com"
+      ],
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000001,
+      "futureField": {
+        "nested": [
+          1,
+          2,
+          3
+        ],
+        "flag": true
+      }
+    }
+  },
+  "folder": {
+    "record": {
+      "id": "vector-folder",
+      "encryptedData": "1WMpPhuRExuLUTYHu3iLJnYxQUq/sKjnhWe8NtL6eg2PI9XESy7o+2Ih4jCeNHlAbG91KmyoWeFUDxTGZA/EQp+xTfHo+fRnKwdSbp0=",
+      "iv": "HAoamBQ3XNwFr6ls",
+      "wrappedRecordKey": "v2kaE8FoltGvKmCIAu2M5YFhHcbVnGEbhuGKJq4PYtFMFTmErjZphSExVNkvVJ0VwrzcHJVNds+PHx9h",
+      "wrapIv": "N4bw2jF6WNGJaOC6"
+    },
+    "expectedKind": "folder",
+    "expectedPayload": {
+      "id": "vector-folder",
+      "name": "Work"
+    }
+  }
+}

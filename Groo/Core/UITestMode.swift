@@ -238,7 +238,10 @@ final class UITestVaultServer: @unchecked Sendable {
                 keySalt: UITestMode.keySalt.base64EncodedString(),
                 kdfIterations: UITestMode.kdfIterations,
                 wrappedVaultKey: wrappedVaultKey,
-                wrapIv: wrapIv
+                wrapIv: wrapIv,
+                // UI tests exercise the legacy blob path; the record path has
+                // its own unit coverage.
+                formatVersion: 1
             )))
         case ("GET", "/v1/vault"):
             return (200, encode(PassVaultResponse(

@@ -54,6 +54,7 @@ class PassService {
     private let keychain: any KeychainServicing
     private let vaultStore: PassVaultStore
     private let credentialService: any CredentialIdentityProviding
+    private let pendingPasskeys: any PendingPasskeyStoring
 
     // Encryption state
     private var encryptionKey: SymmetricKey?
@@ -63,6 +64,12 @@ class PassService {
     // Cached decrypted vault (in-memory only)
     private var vault: PassVault?
     private var serverVersion: Int = 0
+
+    /// Which storage the server says is authoritative: 1 = the legacy blob,
+    /// 2 = per-item records. iOS never converts — only the web app does — so
+    /// this is read and followed, never written.
+    private(set) var formatVersion: Int = 1
+    private var recordState: PassRecordState = .empty
 
     // State
     private(set) var hasVaultSetup = false
@@ -75,6 +82,7 @@ class PassService {
         keychain: any KeychainServicing = KeychainService(),
         vaultStore: PassVaultStore = PassVaultStore(),
         credentialService: any CredentialIdentityProviding = CredentialIdentityService(),
+        pendingPasskeys: any PendingPasskeyStoring = SharedPendingPasskeyStore(),
         tokenProvider: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
         forceRefresh: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized }
     ) {
@@ -83,6 +91,7 @@ class PassService {
         self.keychain = keychain
         self.vaultStore = vaultStore
         self.credentialService = credentialService
+        self.pendingPasskeys = pendingPasskeys
     }
 
     // MARK: - State Properties
@@ -147,29 +156,65 @@ class PassService {
             using: wrappingKey
         )
 
-        let vaultResponse: PassVaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
+        formatVersion = keyInfo.formatVersion ?? 1
 
-        guard let encryptedData = Data(base64Encoded: vaultResponse.encryptedData),
-              let iv = Data(base64Encoded: vaultResponse.iv) else {
-            throw PassError.invalidVaultData
-        }
-
-        let decryptedData = try decryptVaultData(encryptedData, iv: iv, using: key)
-
-        // Decryption succeeded, so a decode failure is a schema bug — not a wrong password
         let decryptedVault: PassVault
-        do {
-            decryptedVault = try JSONDecoder().decode(PassVault.self, from: decryptedData)
-        } catch {
-            Log.pass.error("Vault JSON decode failed after password unlock: \(String(describing: error), privacy: .public)")
-            throw PassError.invalidVaultData
-        }
+        if formatVersion == 2 {
+            // Records are authoritative; the blob endpoint 410s now.
+            encryptionKey = key
+            recordState = .empty
+            decryptedVault = try await loadFromRecords(using: key)
+        } else {
+            let vaultResponse: PassVaultResponse
+            do {
+                vaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
+            } catch APIError.httpError(let status, let code)
+                        where status == 410 || code == "FORMAT_MIGRATED" {
+                // The vault was converted on the web app between our key-info
+                // read and this fetch. This build speaks records, so recover by
+                // switching rather than surfacing an error — "update required"
+                // is for builds that predate record support, not this one.
+                Log.pass.info("Vault converted to per-item records; switching")
+                formatVersion = 2
+                encryptionKey = key
+                recordState = .empty
+                let assembled = try await loadFromRecords(using: key)
+                storeKeyInKeychain(key)
+                try? keychain.save(salt, for: KeychainService.Key.passSalt)
+                await credentialService.updateCredentialIdentities(from: assembled.items)
+                await mergePendingPasskeys()
+                return true
+            }
 
-        // Success - store key and vault
-        encryptionKey = key
-        vault = decryptedVault
-        serverVersion = vaultResponse.version
-        hasVaultSetup = true
+            guard let encryptedData = Data(base64Encoded: vaultResponse.encryptedData),
+                  let iv = Data(base64Encoded: vaultResponse.iv) else {
+                throw PassError.invalidVaultData
+            }
+
+            let decryptedData = try decryptVaultData(encryptedData, iv: iv, using: key)
+
+            // Decryption succeeded, so a decode failure is a schema bug — not a wrong password
+            do {
+                decryptedVault = try JSONDecoder().decode(PassVault.self, from: decryptedData)
+            } catch {
+                Log.pass.error("Vault JSON decode failed after password unlock: \(String(describing: error), privacy: .public)")
+                throw PassError.invalidVaultData
+            }
+
+            // Success - store key and vault
+            encryptionKey = key
+            vault = decryptedVault
+            serverVersion = vaultResponse.version
+            hasVaultSetup = true
+
+            let metadata = PassVaultMetadata(
+                version: vaultResponse.version,
+                iv: vaultResponse.iv,
+                updatedAt: vaultResponse.updatedAt,
+                lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
+            )
+            await saveVaultCache(encryptedData: encryptedData, metadata: metadata)
+        }
 
         // Store key in Keychain with biometric protection
         storeKeyInKeychain(key)
@@ -181,15 +226,6 @@ class PassService {
             // Biometric unlock will throw vaultNotSetup later without this salt
             Log.pass.error("Failed to store pass salt: \(String(describing: error), privacy: .public)")
         }
-
-        // Save encrypted vault locally
-        let metadata = PassVaultMetadata(
-            version: vaultResponse.version,
-            iv: vaultResponse.iv,
-            updatedAt: vaultResponse.updatedAt,
-            lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
-        )
-        await saveVaultCache(encryptedData: encryptedData, metadata: metadata)
 
         // Register AutoFill QuickType suggestions
         await credentialService.updateCredentialIdentities(from: decryptedVault.items)
@@ -275,7 +311,21 @@ class PassService {
             }
         }
 
-        // Fallback to server fetch
+        // Fallback to server fetch. Branch on the server's format first: the
+        // blob endpoint 410s once records are authoritative, and treating that
+        // as a network error would leave a stale enrolment quietly in place.
+        let fallbackKeyInfo: PassKeyInfo = try await api.get(PassAPIClient.Endpoint.keyInfo)
+        formatVersion = fallbackKeyInfo.formatVersion ?? 1
+
+        if formatVersion == 2 {
+            encryptionKey = key
+            recordState = .empty
+            let assembled = try await loadFromRecords(using: key)
+            await credentialService.updateCredentialIdentities(from: assembled.items)
+            await mergePendingPasskeys()
+            return true
+        }
+
         let vaultResponse: PassVaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
 
         guard let encryptedData = Data(base64Encoded: vaultResponse.encryptedData),
@@ -321,6 +371,9 @@ class PassService {
         encryptionKey = nil
         vault = nil
         serverVersion = 0
+        // Decrypted records are as sensitive as the key that opened them.
+        recordState = .empty
+        formatVersion = 1
     }
 
     /// Lock and clear stored key (full sign out)
@@ -734,12 +787,85 @@ class PassService {
         try await saveVault()
     }
 
+    // MARK: - Per-item records
+
+    /// Pull records, rebuild the in-memory vault, and refresh the AutoFill cache.
+    ///
+    /// Returns the assembled vault so callers can reuse it without re-reading
+    /// `self.vault`.
+    @discardableResult
+    private func loadFromRecords(using key: SymmetricKey) async throws -> PassVault {
+        recordState = try await PassRecordSync.pull(from: recordState, vaultKey: key) { since in
+            try await api.get(PassAPIClient.Endpoint.recordsSince(since))
+        }
+
+        // The sharing private key lives in its own column, not in a record.
+        // Absent is a normal state (an account that has never shared).
+        var rsaPrivateKey: String?
+        do {
+            let stored: SharedPrivateKeyResponse = try await api.get(
+                PassAPIClient.Endpoint.privateKey
+            )
+            if let ciphertext = Data(base64Encoded: stored.encryptedPrivateKey),
+               let iv = Data(base64Encoded: stored.privateKeyIv) {
+                rsaPrivateKey = String(
+                    data: try decryptVaultData(ciphertext, iv: iv, using: key),
+                    encoding: .utf8
+                )
+            }
+        } catch APIError.httpError(let status, _) where status == 404 {
+            rsaPrivateKey = nil
+        }
+
+        let assembled = try PassRecordSync.buildVault(from: recordState, rsaPrivateKey: rsaPrivateKey)
+        vault = assembled
+        // The cursor doubles as the version for freshness comparisons.
+        serverVersion = recordState.cursor
+        hasVaultSetup = true
+
+        await refreshVaultCache(assembled, using: key)
+        return assembled
+    }
+
+    /// Re-encrypt the assembled vault into the App Group cache.
+    ///
+    /// The cache deliberately stays a single blob even in records mode: it is a
+    /// local, read-only cache for AutoFill, not a sync artifact, so AutoFill's
+    /// read path needs no changes. Regenerating it is local-only work.
+    private func refreshVaultCache(_ vault: PassVault, using key: SymmetricKey) async {
+        do {
+            let encoded = try JSONEncoder().encode(vault)
+            let sealed = try crypto.encryptData(encoded, using: key)
+            let iv = sealed.prefix(12)
+            let ciphertext = sealed.dropFirst(12)
+            let metadata = PassVaultMetadata(
+                version: serverVersion,
+                iv: iv.base64EncodedString(),
+                updatedAt: Int(Date().timeIntervalSince1970 * 1000),
+                lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
+            )
+            try await vaultStore.saveVault(encryptedData: ciphertext, metadata: metadata)
+        } catch {
+            // A silent failure here means AutoFill serves stale credentials.
+            Log.pass.error("Failed to refresh vault cache from records: \(String(describing: error), privacy: .public)")
+        }
+    }
+
     // MARK: - Save Vault
 
-    /// Encrypt and save vault to server
+    /// Persist the current vault.
+    ///
+    /// At format 1 this is the whole-blob PUT it always was. At format 2 it
+    /// diffs the in-memory vault against the last synced records and writes only
+    /// what changed, so all eleven existing call sites keep working unchanged.
     private func saveVault() async throws {
         guard let key = encryptionKey, let vault = vault else {
             throw PassError.noEncryptionKey
+        }
+
+        if formatVersion == 2 {
+            try await saveChangedRecords(vault, using: key)
+            return
         }
 
         isLoading = true
@@ -781,6 +907,95 @@ class PassService {
         await credentialService.updateCredentialIdentities(from: vault.items)
     }
 
+
+    /// Write only the records whose payload actually changed.
+    ///
+    /// Trash is an update (the item keeps its record, with `deletedAt` set) —
+    /// the server must never learn what was thrown away. Only an item that has
+    /// left the vault entirely becomes a tombstone.
+    ///
+    /// Caveat, inherited rather than introduced: an item is re-encoded from its
+    /// typed model, so a field this build does not model is dropped from the
+    /// item it rewrites. The blob path already did this to *every* item on
+    /// every save; per-record writes narrow the blast radius to the items that
+    /// actually changed.
+    private func saveChangedRecords(_ vault: PassVault, using key: SymmetricKey) async throws {
+        isLoading = true
+        defer { isLoading = false }
+
+        var live = Set<String>()
+
+        for item in vault.items {
+            live.insert(item.id)
+            let payload = try JSONEncoder().encode(item)
+            try await writeRecordIfChanged(id: item.id, kind: .item, payload: payload, using: key)
+        }
+        for folder in vault.folders {
+            live.insert(folder.id)
+            let payload = try JSONEncoder().encode(folder)
+            try await writeRecordIfChanged(id: folder.id, kind: .folder, payload: payload, using: key)
+        }
+
+        // Anything the vault no longer holds was permanently deleted.
+        for id in recordState.records.keys where !live.contains(id) {
+            let _: SharedRecordDeleteResponse = try await api.delete(
+                PassAPIClient.Endpoint.record(id)
+            )
+            recordState.records.removeValue(forKey: id)
+        }
+
+        await credentialService.updateCredentialIdentities(from: vault.items)
+        await refreshVaultCache(vault, using: key)
+    }
+
+    private func writeRecordIfChanged(
+        id: String,
+        kind: SharedRecordKind,
+        payload: Data,
+        using key: SymmetricKey
+    ) async throws {
+        let existing = recordState.records[id]
+        if let existing, normalized(existing.data) == normalized(payload) {
+            return
+        }
+
+        let request = try SharedRecordCrypto.encryptRecord(
+            id: id, kind: kind, payload: payload, vaultKey: key
+        )
+
+        let response: SharedRecordWriteResponse
+        if let existing {
+            var update = request
+            update.expectedVersion = existing.version
+            do {
+                response = try await api.put(PassAPIClient.Endpoint.record(id), body: update)
+            } catch APIError.recordConflict(let current) {
+                // Someone else wrote this record first. Re-apply our payload on
+                // top of the server's version and retry exactly once; a second
+                // conflict surfaces rather than looping.
+                var retry = request
+                retry.expectedVersion = current.version
+                response = try await api.put(PassAPIClient.Endpoint.record(id), body: retry)
+            }
+        } else {
+            response = try await api.post(PassAPIClient.Endpoint.records, body: request)
+        }
+
+        recordState.records[id] = PassDecodedRecord(
+            id: id, kind: kind, data: payload,
+            version: response.version, seq: response.seq
+        )
+        recordState.cursor = max(recordState.cursor, response.seq)
+        serverVersion = recordState.cursor
+    }
+
+    /// Key-order-independent comparison, so a re-encode that only reorders keys
+    /// is not mistaken for a change and does not rewrite the whole vault.
+    private func normalized(_ data: Data) -> Data? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) else { return nil }
+        return try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    }
+
     // MARK: - Pending Passkeys (created by the AutoFill extension)
 
     /// Merge passkeys the AutoFill extension registered while the app wasn't running,
@@ -790,7 +1005,7 @@ class PassService {
 
         let pending: [SharedPassPasskeyItem]
         do {
-            pending = try SharedPendingItemsStore.load(key: key)
+            pending = try pendingPasskeys.load(key: key)
         } catch {
             // Never clear an unreadable queue; already logged by the store
             Log.pass.error("Cannot read pending passkey queue: \(String(describing: error), privacy: .public)")
@@ -832,7 +1047,7 @@ class PassService {
                 try await saveVault()
                 Log.pass.info("Merged \(pending.count) pending passkey(s) from AutoFill")
             }
-            SharedPendingItemsStore.clear()
+            pendingPasskeys.clear()
         } catch {
             // Keep the queue so the merge retries on the next unlock/sync —
             // but a persistent failure must be observable
@@ -851,8 +1066,29 @@ class PassService {
         isLoading = true
         defer { isLoading = false }
 
+        if formatVersion == 2 {
+            let assembled = try await loadFromRecords(using: key)
+            await credentialService.updateCredentialIdentities(from: assembled.items)
+            // Last, so the merge applies on top of what was just synced.
+            await mergePendingPasskeys()
+            return
+        }
+
         // Fetch latest from server
-        let vaultResponse: PassVaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
+        let vaultResponse: PassVaultResponse
+        do {
+            vaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
+        } catch APIError.httpError(let status, let code)
+                    where status == 410 || code == "FORMAT_MIGRATED" {
+            // Converted elsewhere while we were running; switch and resync.
+            Log.pass.info("Vault converted to per-item records; switching on sync")
+            formatVersion = 2
+            recordState = .empty
+            let assembled = try await loadFromRecords(using: key)
+            await credentialService.updateCredentialIdentities(from: assembled.items)
+            await mergePendingPasskeys()
+            return
+        }
 
         guard let encryptedData = Data(base64Encoded: vaultResponse.encryptedData),
               let iv = Data(base64Encoded: vaultResponse.iv) else {
@@ -884,6 +1120,13 @@ class PassService {
 
         // Update AutoFill credential identities
         await credentialService.updateCredentialIdentities(from: serverVault.items)
+
+        // Drain passkeys the AutoFill extension queued. Runs last so the merge
+        // applies on top of the vault/serverVersion just fetched, keeping its
+        // PUT's expectedVersion current. Without this the queue only drained on
+        // unlock, which — since the app never re-locks on background — meant a
+        // cold start.
+        await mergePendingPasskeys()
     }
 
     // MARK: - Private Helpers
@@ -917,138 +1160,6 @@ class PassService {
             if UIPasteboard.general.string == text {
                 UIPasteboard.general.string = ""
             }
-        }
-    }
-}
-
-// MARK: - PassAPIClient
-
-/// Dedicated API client for Pass service
-actor PassAPIClient {
-    private let baseURL: URL
-    private let session: URLSession
-    private let decoder: JSONDecoder
-    private let encoder: JSONEncoder
-    private let tokenProvider: @Sendable () async throws -> String
-    private let forceRefresh: @Sendable () async throws -> String
-
-    init(
-        tokenProvider: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
-        forceRefresh: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
-        sessionConfiguration: URLSessionConfiguration = .default
-    ) {
-        self.baseURL = Config.passAPIBaseURL
-        self.tokenProvider = tokenProvider
-        self.forceRefresh = forceRefresh
-        self.decoder = JSONDecoder()
-        self.encoder = JSONEncoder()
-
-        let config = sessionConfiguration
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 60
-        self.session = URLSession(configuration: config)
-    }
-
-    // MARK: - Request Building
-
-    private func buildRequest(
-        path: String,
-        method: String,
-        body: Data? = nil
-    ) async throws -> URLRequest {
-        guard let url = URL(string: path, relativeTo: baseURL) else {
-            throw APIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-
-        let token = try await tokenProvider()
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        request.httpBody = body
-        return request
-    }
-
-    /// Runs `operation` once; on `APIError.unauthorized` forces exactly one token
-    /// refresh and retries `operation` once more. A second `401` (or any other
-    /// error from the retry) propagates as-is — no further retries.
-    private func withUnauthorizedRetry<T>(_ operation: () async throws -> T) async throws -> T {
-        do {
-            return try await operation()
-        } catch APIError.unauthorized {
-            _ = try await forceRefresh()
-            return try await operation()
-        }
-    }
-
-    // MARK: - HTTP Methods
-
-    func get<T: Decodable>(_ path: String) async throws -> T {
-        try await withUnauthorizedRetry {
-            let request = try await buildRequest(path: path, method: "GET")
-            return try await perform(request)
-        }
-    }
-
-    func post<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
-        try await withUnauthorizedRetry {
-            let bodyData = try encoder.encode(body)
-            let request = try await buildRequest(path: path, method: "POST", body: bodyData)
-            return try await perform(request)
-        }
-    }
-
-    func put<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
-        try await withUnauthorizedRetry {
-            let bodyData = try encoder.encode(body)
-            let request = try await buildRequest(path: path, method: "PUT", body: bodyData)
-            return try await perform(request)
-        }
-    }
-
-    // MARK: - Request Execution
-
-    private func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
-        let (data, response) = try await session.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.networkError(URLError(.badServerResponse))
-        }
-
-        guard (200...299).contains(httpResponse.statusCode) else {
-            if httpResponse.statusCode == 401 {
-                throw APIError.unauthorized
-            }
-            if httpResponse.statusCode == 409 {
-                // Version conflict
-                throw APIError.httpError(statusCode: 409, message: "VERSION_CONFLICT")
-            }
-            let message = try? decoder.decode([String: String].self, from: data)["error"]
-            throw APIError.httpError(statusCode: httpResponse.statusCode, message: message)
-        }
-
-        do {
-            return try decoder.decode(T.self, from: data)
-        } catch {
-            throw APIError.decodingFailed(error)
-        }
-    }
-
-    // MARK: - Endpoints
-
-    enum Endpoint {
-        static let keyInfo = "/v1/vault/key-info"
-        static let vault = "/v1/vault"
-        static let vaultSetup = "/v1/vault/setup"
-        static let vaultVersion = "/v1/vault/version"
-        static let files = "/v1/files"
-        static let audit = "/v1/audit"
-
-        static func file(_ fileId: String) -> String {
-            "/v1/files/\(fileId)"
         }
     }
 }
