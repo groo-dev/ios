@@ -165,7 +165,26 @@ class PassService {
             recordState = .empty
             decryptedVault = try await loadFromRecords(using: key)
         } else {
-            let vaultResponse: PassVaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
+            let vaultResponse: PassVaultResponse
+            do {
+                vaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
+            } catch APIError.httpError(let status, let code)
+                        where status == 410 || code == "FORMAT_MIGRATED" {
+                // The vault was converted on the web app between our key-info
+                // read and this fetch. This build speaks records, so recover by
+                // switching rather than surfacing an error — "update required"
+                // is for builds that predate record support, not this one.
+                Log.pass.info("Vault converted to per-item records; switching")
+                formatVersion = 2
+                encryptionKey = key
+                recordState = .empty
+                let assembled = try await loadFromRecords(using: key)
+                storeKeyInKeychain(key)
+                try? keychain.save(salt, for: KeychainService.Key.passSalt)
+                await credentialService.updateCredentialIdentities(from: assembled.items)
+                await mergePendingPasskeys()
+                return true
+            }
 
             guard let encryptedData = Data(base64Encoded: vaultResponse.encryptedData),
                   let iv = Data(base64Encoded: vaultResponse.iv) else {
@@ -1056,7 +1075,20 @@ class PassService {
         }
 
         // Fetch latest from server
-        let vaultResponse: PassVaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
+        let vaultResponse: PassVaultResponse
+        do {
+            vaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
+        } catch APIError.httpError(let status, let code)
+                    where status == 410 || code == "FORMAT_MIGRATED" {
+            // Converted elsewhere while we were running; switch and resync.
+            Log.pass.info("Vault converted to per-item records; switching on sync")
+            formatVersion = 2
+            recordState = .empty
+            let assembled = try await loadFromRecords(using: key)
+            await credentialService.updateCredentialIdentities(from: assembled.items)
+            await mergePendingPasskeys()
+            return
+        }
 
         guard let encryptedData = Data(base64Encoded: vaultResponse.encryptedData),
               let iv = Data(base64Encoded: vaultResponse.iv) else {

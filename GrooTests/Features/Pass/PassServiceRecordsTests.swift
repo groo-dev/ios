@@ -241,6 +241,67 @@ struct PassServiceRecordsTests {
             SharedRecordWriteRequest.self, from: try #require(puts.last?.bodyData))
         #expect(retry.expectedVersion == 9)
     }
+
+    // MARK: - Recovering from a conversion that happened elsewhere
+
+    /// key-info still says 1 (stale), but the blob endpoint has already 410'd.
+    static func makeConvertedMidFlightEnv() throws -> Env {
+        StubURLProtocol.reset()
+
+        let salt = Data("records-salt".utf8)
+        let wrappingKey = try crypto.deriveKey(password: password, salt: salt, iterations: iterations)
+        let key = crypto.generateContentKey()
+        let wrapped = try crypto.wrapKey(key, using: wrappingKey)
+
+        StubURLProtocol.enqueue(
+            method: "GET", pathSuffix: "/v1/vault/key-info",
+            json: #"{"keySalt":"\#(salt.base64EncodedString())","kdfIterations":\#(iterations),"wrappedVaultKey":"\#(wrapped.ciphertext)","wrapIv":"\#(wrapped.iv)","formatVersion":1}"#)
+
+        StubURLProtocol.enqueue(
+            method: "GET", pathSuffix: "/v1/vault",
+            status: 410,
+            json: #"{"error":"This vault now uses per-item records; update your client","code":"FORMAT_MIGRATED"}"#)
+
+        let enc = try SharedRecordCrypto.encryptRecord(
+            id: "a", kind: .item,
+            payload: Data(passwordItem("a", name: "GitHub").utf8), vaultKey: key)
+        StubURLProtocol.enqueue(
+            method: "GET", pathSuffix: "/v1/vault/records",
+            json: #"{"records":[{"id":"a","encryptedData":"\#(enc.encryptedData)","iv":"\#(enc.iv)","wrappedRecordKey":"\#(enc.wrappedRecordKey)","wrapIv":"\#(enc.wrapIv)","version":1,"seq":1,"isDeleted":false,"createdAt":1,"updatedAt":1}],"nextSeq":1,"hasMore":false,"formatVersion":2}"#)
+        StubURLProtocol.enqueue(
+            method: "GET", pathSuffix: "/v1/vault/private-key",
+            status: 404, json: #"{"error":"none","code":"PRIVATE_KEY_NOT_SET"}"#)
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PassRecordsTests-\(UUID().uuidString)", isDirectory: true)
+
+        let service = PassService(
+            api: PassAPIClient(
+                tokenProvider: { "test-token" },
+                forceRefresh: { "test-token-2" },
+                sessionConfiguration: StubURLProtocol.stubbedConfiguration()),
+            crypto: crypto,
+            keychain: InMemoryKeychain(),
+            vaultStore: PassVaultStore(directoryURL: tempDir),
+            credentialService: RecordingCredentialService(),
+            pendingPasskeys: InMemoryPendingPasskeyStore())
+
+        return Env(service: service, key: key, tempDir: tempDir)
+    }
+
+    @Test func unlockRecoversWhenTheVaultConvertedMidFlight() async throws {
+        let env = try Self.makeConvertedMidFlightEnv()
+        defer { try? FileManager.default.removeItem(at: env.tempDir) }
+
+        // A 410 here means the web app converted between our key-info read and
+        // this fetch. This build speaks records, so it must switch rather than
+        // fail — "update required" is for builds that predate record support.
+        let unlocked = try await env.service.unlock(password: Self.password)
+
+        #expect(unlocked)
+        #expect(env.service.formatVersion == 2)
+        #expect(env.service.getItems().map(\.id) == ["a"])
+    }
 }
 
 }
