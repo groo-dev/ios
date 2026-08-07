@@ -21,7 +21,7 @@
 - New files under `Groo/` and `GrooTests/` are picked up automatically (filesystem-synchronized groups). **Do not edit `project.pbxproj`.**
 - `Shared/` is NOT touched by this plan. No `scripts/register_shared_file.rb` runs, no extension changes.
 - **iPad must stay pixel-identical.** The existing snapshot suites are the gate: `PadViewSnapshotTests`, `PassViewSnapshotTests`, `AzanViewSnapshotTests`, `ScratchpadViewSnapshotTests`, `StocksViewSnapshotTests`, `CryptoViewSnapshotTests`, `RootViewSnapshotTests`.
-- `SettingsView.swift` gets exactly one change in this whole plan (Task 15, one destination line). Nothing else in it moves.
+- `SettingsView.swift` gets exactly one change in this whole plan (Task 12, one destination line). Nothing else in it moves.
 - Sheet-local `NavigationStack`s are never touched. Only *root* stacks move.
 - Swift Testing, not XCTest, for unit tests. XCUITest files stay XCTest.
 - Never construct `UserDefaults.standard` in a unit test — use a suite-named instance and `removePersistentDomain` in a `defer`, matching `GrooTests/Core/ConfigTests.swift`.
@@ -2144,9 +2144,11 @@ final class TabNavigationUITests: XCTestCase {
 
         XCTAssertTrue(app.switches["tabeditor.home.toggle"].waitForExistence(timeout: UITest.timeout),
                       "the iPhone editor did not open")
-        XCTAssertTrue(app.otherElements["tabeditor.row.azan"].exists
-                        || app.buttons["tabeditor.row.azan"].exists
-                        || app.staticTexts["Azan"].exists,
+        // Match the identifier wherever SwiftUI surfaces it in the hierarchy —
+        // never fall back to a bare title like "Azan", which the tab bar also
+        // carries and which would let this assertion pass with no editor.
+        let orderRow = app.descendants(matching: .any)["tabeditor.row.azan"].firstMatch
+        XCTAssertTrue(orderRow.waitForExistence(timeout: UITest.timeout),
                       "the draggable order section did not render")
     }
 }
