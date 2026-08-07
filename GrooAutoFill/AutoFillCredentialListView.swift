@@ -94,6 +94,13 @@ struct AutoFillCredentialListView: View {
                     credentialsList
                 }
             }
+            // Non-blocking: the list is already usable from cache, so this only
+            // reports that fresher data is on the way.
+            .safeAreaInset(edge: .top) { refreshBanner }
+            .task(id: service.isUnlocked) {
+                guard service.isUnlocked else { return }
+                service.refreshInBackground()
+            }
             .navigationTitle("Groo Pass")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -103,6 +110,39 @@ struct AutoFillCredentialListView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Refresh Banner
+
+    /// Shown while a background refresh runs, and if one fails. Never covers or
+    /// disables the list: cached credentials stay fully usable either way.
+    @ViewBuilder
+    private var refreshBanner: some View {
+        if service.isRefreshing {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Checking for updates…")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(.bar)
+        } else if let refreshError = service.refreshError {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(refreshError)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Retry") { service.refreshInBackground() }
+                    .font(.footnote)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.bar)
         }
     }
 

@@ -85,3 +85,12 @@ struct SharedRecordDeleteResponse: Codable {
     let id: String
     let seq: Int
 }
+
+/// Just the format flag from `GET /v1/vault/key-info`.
+///
+/// Decoded instead of `PassKeyInfo` because that type lives in the app target,
+/// which extensions cannot see. Optional so an older server, which omits the
+/// field, reads as format 1.
+struct SharedFormatProbe: Decodable {
+    let formatVersion: Int?
+}

@@ -40,6 +40,13 @@ class AutoFillService: ObservableObject {
     @Published var passkeys: [SharedPassPasskeyItem] = []
     @Published var error: String?
 
+    /// A background refresh is in flight. The credential list stays usable
+    /// throughout — this only drives a spinner.
+    @Published var isRefreshing = false
+    /// Set when a refresh fails. Never blocks AutoFill: the cached credentials
+    /// remain fully usable, so this is informational, not fatal.
+    @Published var refreshError: String?
+
     private var encryptionKey: SymmetricKey?
 
     // MARK: - Vault Status
@@ -150,6 +157,106 @@ class AutoFillService: ObservableObject {
     }
 
     // MARK: - Passkey Registration
+
+    // MARK: - Background refresh
+
+    /// Pull anything created or changed elsewhere since the last sync.
+    ///
+    /// Deliberately non-blocking: the sheet renders from cache immediately and
+    /// this updates it when it lands. AutoFill must keep working with no network
+    /// at all, so every failure here leaves the cached credentials untouched.
+    func refreshInBackground() {
+        guard let key = encryptionKey, !isRefreshing else { return }
+        isRefreshing = true
+        refreshError = nil
+
+        Task { [weak self] in
+            defer { Task { @MainActor in self?.isRefreshing = false } }
+            do {
+                try await self?.performRefresh(using: key)
+            } catch {
+                await MainActor.run {
+                    // Surfaced, never thrown: a failed refresh must not take
+                    // away credentials the user already has.
+                    self?.refreshError = Self.describeRefreshFailure(error)
+                }
+                Log.autofill.error(
+                    "Background refresh failed: \(String(describing: error), privacy: .public)"
+                )
+            }
+        }
+    }
+
+    static func describeRefreshFailure(_ error: any Error) -> String {
+        switch error {
+        case APIError.unauthorized:
+            return "Sign in to the Groo app to refresh"
+        case APIError.networkError:
+            return "Couldn't reach the server — showing saved items"
+        default:
+            return "Couldn't refresh — showing saved items"
+        }
+    }
+
+    private func performRefresh(using key: SymmetricKey) async throws {
+        let session = GrooAuthFactory.makeTokenOnlySession()
+        let api = PassAPIClient(
+            tokenProvider: { try await session.accessToken() },
+            forceRefresh: { throw APIError.unauthorized }
+        )
+
+        // Records only. At format 1 the blob is authoritative and owned by the
+        // app, so there is nothing safe for the extension to refresh.
+        let keyInfo: SharedFormatProbe = try await api.get(PassAPIClient.Endpoint.keyInfo)
+        guard (keyInfo.formatVersion ?? 1) == 2 else { return }
+
+        // A cache that exists but cannot be read must not silently reset the
+        // cursor — that would refetch every record on every sheet.
+        var cached = try SharedRecordStore.load(key: key) ?? .empty
+
+        while true {
+            let page: SharedRecordsResponse = try await api.get(
+                PassAPIClient.Endpoint.recordsSince(cached.cursor)
+            )
+            cached = SharedRecordStore.apply(cached, page: page)
+            if !page.hasMore { break }
+        }
+
+        try SharedRecordStore.save(cached, key: key)
+
+        let decoded = Self.decodeItems(cached.records, key: key)
+        await MainActor.run {
+            self.credentials = decoded.passwords
+            self.passkeys = SharedCredentialMatcher.mergingPendingPasskeys(
+                vault: decoded.passkeys,
+                pending: (try? SharedPendingItemsStore.load(key: key)) ?? []
+            )
+        }
+    }
+
+    /// Decode records for display only. The lossy `SharedPassVaultItem` is safe
+    /// here precisely because AutoFill never writes these back.
+    static func decodeItems(
+        _ records: [SharedServerRecord],
+        key: SymmetricKey
+    ) -> (passwords: [SharedPassPasswordItem], passkeys: [SharedPassPasskeyItem]) {
+        var passwords: [SharedPassPasswordItem] = []
+        var passkeys: [SharedPassPasskeyItem] = []
+
+        for record in records {
+            guard
+                let decrypted = try? SharedRecordCrypto.decryptRecord(record, vaultKey: key),
+                decrypted.kind == .item,
+                let item = try? JSONDecoder().decode(SharedPassVaultItem.self, from: decrypted.data)
+            else {
+                // One unreadable row must not cost the user every other credential.
+                continue
+            }
+            if let password = item.passwordItem, !password.isDeleted { passwords.append(password) }
+            if let passkey = item.passkeyItem, !passkey.isDeleted { passkeys.append(passkey) }
+        }
+        return (passwords, passkeys)
+    }
 
     /// Persist a newly registered passkey to the pending queue for the main app to sync
     func savePendingPasskey(_ item: SharedPassPasskeyItem) throws {
