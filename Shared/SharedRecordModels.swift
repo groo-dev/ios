@@ -64,3 +64,24 @@ struct SharedRecordWriteRequest: Codable, Equatable {
         self.expectedVersion = expectedVersion
     }
 }
+
+/// `GET /v1/vault/private-key`. The RSA private key for sharing, encrypted
+/// under the vault key. Stored in its own column rather than as a record: it
+/// must never be shareable, trashable, or carried by the sync cursor.
+struct SharedPrivateKeyResponse: Codable {
+    let encryptedPrivateKey: String
+    let privateKeyIv: String
+}
+
+/// Response to a single-record create or update.
+struct SharedRecordWriteResponse: Codable {
+    let id: String
+    let seq: Int
+    let version: Int
+}
+
+/// Response to a record delete. No `version`: the row is a tombstone now.
+struct SharedRecordDeleteResponse: Codable {
+    let id: String
+    let seq: Int
+}
