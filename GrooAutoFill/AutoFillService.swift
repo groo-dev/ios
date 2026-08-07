@@ -63,7 +63,11 @@ class AutoFillService: ObservableObject {
 
         // Load encryption key with biometric auth
         do {
-            encryptionKey = try SharedKeychain.loadEncryptionKey(prompt: "Authenticate to access passwords")
+            // Off the main thread: the biometric read blocks, and blocking the
+            // main thread prevents the UI this prompt needs from ever appearing
+            encryptionKey = try await SharedKeychain.loadEncryptionKeyOffMainThread(
+                prompt: "Authenticate to access passwords"
+            )
         } catch SharedKeychainError.itemNotFound {
             // Key was never shared to the app group — setup issue, not a locked vault
             Log.autofill.error("Encryption key not found in shared keychain")

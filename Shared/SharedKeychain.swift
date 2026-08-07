@@ -18,9 +18,30 @@ enum SharedKeychainError: Error {
 }
 
 enum SharedKeychain {
+    /// Load the biometric-protected encryption key off the main thread.
+    ///
+    /// `SecItemCopyMatching` on a biometry-gated item BLOCKS until the Face ID
+    /// prompt resolves. On the main thread that block also stops UIKit from
+    /// running the appearance callbacks that make a view visible — so the
+    /// Security Server sees a process with no presentable UI and fails the
+    /// read with errSecInteractionNotAllowed (-25308) instead of prompting.
+    /// Callers on the main actor MUST use this, not the synchronous variant.
+    static func loadEncryptionKeyOffMainThread(
+        prompt: String = "Authenticate to access passwords"
+    ) async throws -> SymmetricKey {
+        let keyData = try await Task.detached(priority: .userInitiated) {
+            try loadEncryptionKeyData(prompt: prompt)
+        }.value
+        return SymmetricKey(data: keyData)
+    }
+
     /// Load biometric-protected encryption key
     /// Will trigger Face ID/Touch ID prompt
     static func loadEncryptionKey(prompt: String = "Authenticate to access passwords") throws -> SymmetricKey {
+        SymmetricKey(data: try loadEncryptionKeyData(prompt: prompt))
+    }
+
+    private static func loadEncryptionKeyData(prompt: String) throws -> Data {
         let context = LAContext()
         context.localizedReason = prompt
 
@@ -46,7 +67,7 @@ enum SharedKeychain {
             throw SharedKeychainError.loadFailed(status)
         }
 
-        return SymmetricKey(data: keyData)
+        return keyData
     }
 
     /// Check if encryption key exists (without triggering auth)

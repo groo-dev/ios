@@ -7,6 +7,7 @@
 //
 
 import AuthenticationServices
+import Combine
 import CryptoKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -20,12 +21,74 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
     private var passkeyRequestParameters: Any? // ASPasskeyCredentialRequestParameters (iOS 17+)
     private var pendingRegistrationRequest: Any? // ASPasskeyCredentialRequest (iOS 17+)
 
+    /// The single credential iOS asked us to fill, held until the vault opens.
+    /// Dropping it is what forces the user to hunt through the list by hand.
+    private var pendingPasswordIdentity: ASPasswordCredentialIdentity?
+    private var pendingAssertionRequest: Any? // ASPasskeyCredentialRequest (iOS 17+)
+
+    /// Biometrics can only be presented once our UI is on screen, so every
+    /// entry point defers its unlock to `viewDidAppear` instead of running it
+    /// inline. See `SharedKeychain.loadEncryptionKeyOffMainThread`.
+    private var wantsUnlockOnAppear = false
+    private var didUnlockOnAppear = false
+
+    private var unlockObserver: AnyCancellable?
+
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
         super.viewDidLoad()
         if hostingController == nil {
             setupUI(rootView: AnyView(makeCredentialListView(serviceIdentifiers: currentServiceIdentifiers)))
+        }
+
+        // Fires for both the automatic unlock and the user tapping Unlock, so a
+        // fallback unlock still completes the request iOS actually made.
+        unlockObserver = service.$isUnlocked
+            .filter { $0 }
+            .first()
+            .sink { [weak self] _ in
+                self?.completePendingRequest()
+            }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+
+        guard wantsUnlockOnAppear, !didUnlockOnAppear else { return }
+        didUnlockOnAppear = true
+        Task { await attemptUnlock() }
+    }
+
+    /// Unlock now that the view is visible and biometrics can be presented.
+    private func attemptUnlock() async {
+        guard service.hasVault else { return }
+        do {
+            try await service.unlock()
+        } catch {
+            // Leave the user on the unlock screen with the actual cause
+            Log.autofill.error("Auto-unlock failed: \(String(describing: error), privacy: .public)")
+            service.error = error.localizedDescription
+        }
+    }
+
+    /// Finish whatever iOS originally asked for, once the vault is open.
+    private func completePendingRequest() {
+        if let identity = pendingPasswordIdentity {
+            pendingPasswordIdentity = nil
+            if let credential = service.credentials.first(where: { $0.id == identity.recordIdentifier }) {
+                selectCredential(credential)
+            } else {
+                // Vault and QuickType have drifted apart — fall back to the list
+                Log.autofill.error("Credential \(identity.recordIdentifier ?? "?", privacy: .public) not found in vault; showing list")
+                updateServiceIdentifiers([identity.serviceIdentifier])
+            }
+            return
+        }
+
+        if #available(iOS 17.0, *), let request = pendingAssertionRequest as? ASPasskeyCredentialRequest {
+            pendingAssertionRequest = nil
+            completePasskeyAssertion(request)
         }
     }
 
@@ -111,27 +174,18 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
 
     /// Called when UI is needed to authenticate before providing credential
     override func prepareInterfaceToProvideCredential(for credentialIdentity: ASPasswordCredentialIdentity) {
-        // The credential identity contains the record identifier we stored
-        // We need to find and return this credential after biometric auth
-        handlePasswordRequest(credentialIdentity)
+        // Hold the requested credential; the unlock runs once we're on screen
+        // and `completePendingRequest()` fills it without further taps.
+        pendingPasswordIdentity = credentialIdentity
+        wantsUnlockOnAppear = true
+        updateServiceIdentifiers([credentialIdentity.serviceIdentifier])
     }
 
     /// Called to prepare UI for credential selection
     /// The serviceIdentifiers describe the service the user is logging into
     override func prepareCredentialList(for serviceIdentifiers: [ASCredentialServiceIdentifier]) {
         updateServiceIdentifiers(serviceIdentifiers)
-
-        // Auto-unlock if possible
-        if service.hasVault {
-            Task {
-                do {
-                    try await service.unlock()
-                } catch {
-                    // User can still tap the unlock button; keep the cause visible
-                    Log.autofill.error("Auto-unlock failed: \(String(describing: error), privacy: .public)")
-                }
-            }
-        }
+        wantsUnlockOnAppear = true
     }
 
     /// Called to prepare UI for passkey credential selection (iOS 17+)
@@ -142,18 +196,7 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
     ) {
         self.passkeyRequestParameters = requestParameters
         updateServiceIdentifiers(serviceIdentifiers)
-
-        // Auto-unlock if possible
-        if service.hasVault {
-            Task {
-                do {
-                    try await service.unlock()
-                } catch {
-                    // User can still tap the unlock button; keep the cause visible
-                    Log.autofill.error("Auto-unlock failed: \(String(describing: error), privacy: .public)")
-                }
-            }
-        }
+        wantsUnlockOnAppear = true
     }
 
     // MARK: - iOS 17+ Passkey Methods
@@ -174,43 +217,24 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
     @available(iOS 17.0, *)
     override func prepareInterfaceToProvideCredential(for credentialRequest: ASCredentialRequest) {
         if let passkeyRequest = credentialRequest as? ASPasskeyCredentialRequest {
-            handlePasskeyAssertion(passkeyRequest)
+            // Same deferral as passwords — biometrics need our UI on screen
+            pendingAssertionRequest = passkeyRequest
+            wantsUnlockOnAppear = true
         } else if let passwordRequest = credentialRequest as? ASPasswordCredentialRequest,
                   let passwordIdentity = passwordRequest.credentialIdentity as? ASPasswordCredentialIdentity {
-            // Delegate to existing password handling
-            handlePasswordRequest(passwordIdentity)
-        }
-    }
-
-    /// Handle password credential request
-    private func handlePasswordRequest(_ credentialIdentity: ASPasswordCredentialIdentity) {
-        Task {
-            do {
-                try await service.unlock()
-
-                // Find the credential by ID
-                if let credential = service.credentials.first(where: { $0.id == credentialIdentity.recordIdentifier }) {
-                    selectCredential(credential)
-                } else {
-                    Log.autofill.error("Credential \(credentialIdentity.recordIdentifier ?? "?", privacy: .public) not found in vault; showing list")
-                    updateServiceIdentifiers([credentialIdentity.serviceIdentifier])
-                }
-            } catch {
-                // Leave the user on the unlock screen with the actual cause
-                Log.autofill.error("Unlock for QuickType request failed: \(String(describing: error), privacy: .public)")
-                service.error = error.localizedDescription
-                updateServiceIdentifiers([credentialIdentity.serviceIdentifier])
-            }
+            pendingPasswordIdentity = passwordIdentity
+            wantsUnlockOnAppear = true
+            updateServiceIdentifiers([passwordIdentity.serviceIdentifier])
         }
     }
 
     /// Handle passkey assertion request (iOS 17+)
     @available(iOS 17.0, *)
-    private func handlePasskeyAssertion(_ request: ASPasskeyCredentialRequest) {
+    /// Sign the assertion for an already-unlocked vault. The unlock itself is
+    /// deferred to `viewDidAppear`; this runs from `completePendingRequest()`.
+    private func completePasskeyAssertion(_ request: ASPasskeyCredentialRequest) {
         Task {
             do {
-                try await service.unlock()
-
                 // Find the passkey by credential ID
                 guard let passkeyIdentity = request.credentialIdentity as? ASPasskeyCredentialIdentity,
                       let passkey = service.findPasskey(credentialId: passkeyIdentity.credentialID) else {
