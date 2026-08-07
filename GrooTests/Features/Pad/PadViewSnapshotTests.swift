@@ -95,6 +95,25 @@ struct PadViewSnapshotTests {
             named: "locked")
     }
 
+    // unlockedView's FAB overlay + .tint (moved off the removed NavigationStack
+    // and onto PadListView's content directly when Pad's stack was hoisted to
+    // the host) are never exercised by padViewLockedShell above, nor by
+    // padListPopulated/padItemRowVariants below, which construct PadListView
+    // directly inside their own ad-hoc NavigationStack and bypass
+    // PadView.unlockedView entirely. Wrapped in NavigationStack to mirror the
+    // host stack MainTabView always supplies now. Render-only: PadListView's
+    // `.task { await syncService.sync() }` makes pixel content timing-
+    // sensitive, same as padListPopulated/padListEmpty below, but this test
+    // only needs to prove the FAB/tint layer renders — no reference image.
+    @Test func padViewUnlockedShell() async throws {
+        StubURLProtocol.reset()
+        let env = try PadServiceTests.makeUnlockedEnv()
+        await ViewRender.assertSettledRenders(
+            NavigationStack {
+                PadView(padService: env.service, syncService: Self.offlineSync(store: env.store), onSignOut: {})
+            })
+    }
+
     // MARK: - List
 
     @Test func padListPopulated() async throws {
