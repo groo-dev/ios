@@ -1,7 +1,25 @@
 # AutoFill passkey remote sync — design
 
 **Date:** 2026-08-07
-**Status:** approved, not yet implemented
+**Status:** approved. Phase 1 implemented; Phases 2 and 4 partially superseded — see below.
+
+> **Supersede note (2026-08-07).** After approval we established that
+> `vaults.encrypted_data` is a single AES-GCM blob (`pass` `db/schema.ts:5-18`),
+> so *every* client — including the existing app — must re-encrypt the whole
+> vault to add one item. A separate design is being explored to migrate the
+> personal vault to **per-item rows**, mirroring the `shared_items` table and its
+> `/v1/shared-folders/:folderId/items` endpoints, which would remove whole-vault
+> re-encryption for all clients.
+>
+> What that would change here: only the vault-mutation mechanism in Phases 2
+> and 4 — `SharedRawJSON`, `SharedVaultDocument`, `SharedCrypto.encryptVault`,
+> the whole-blob `PUT`, and the 409 retry.
+>
+> What still stands regardless: the problem statement, **Phase 1** (app-side
+> drain, independent of storage model), **Phase 3** and every auth finding
+> (15-minute tokens, refresh rotation with family revocation,
+> `NonDestructiveTokenStore`, no `forceRefresh`, the 120s replay window), the
+> lossy-`Shared`-models constraint, and the tooling traps.
 
 ## Problem
 
