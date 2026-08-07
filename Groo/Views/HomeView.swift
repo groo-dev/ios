@@ -38,32 +38,30 @@ struct HomeView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: Theme.Spacing.lg) {
-                    stocksCard
-                    cryptoCard
-                    prayerCard
-                    padCard
-                }
-                .padding(Theme.Spacing.lg)
+        ScrollView {
+            VStack(spacing: Theme.Spacing.lg) {
+                stocksCard
+                cryptoCard
+                prayerCard
+                padCard
             }
-            .onScrollGeometryChange(for: CGFloat.self) { geo in
-                -geo.contentOffset.y - geo.contentInsets.top
-            } action: { _, new in
-                scrollOffset = new
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Image(.grooLogo)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(height: 30)
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
-                        .scaleEffect(logoScale, anchor: .top)
-                }
+            .padding(Theme.Spacing.lg)
+        }
+        .onScrollGeometryChange(for: CGFloat.self) { geo in
+            -geo.contentOffset.y - geo.contentInsets.top
+        } action: { _, new in
+            scrollOffset = new
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Image(.grooLogo)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: 30)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .scaleEffect(logoScale, anchor: .top)
             }
         }
         .toast(isPresented: $toastState.isPresented, message: toastState.message, style: toastState.style)

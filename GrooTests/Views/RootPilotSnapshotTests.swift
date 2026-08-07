@@ -16,11 +16,11 @@ import Testing
 @Suite(.snapshots(record: .missing))
 struct RootPilotSnapshotTests {
     @Test func drivePlaceholder() {
-        assertViewSnapshot(of: DrivePlaceholderView(), named: "default")
+        assertViewSnapshot(of: NavigationStack { DrivePlaceholderView() }, named: "default")
     }
 
     @Test func drivePlaceholderDark() {
-        assertViewSnapshot(of: DrivePlaceholderView(), named: "dark", appearance: .dark)
+        assertViewSnapshot(of: NavigationStack { DrivePlaceholderView() }, named: "dark", appearance: .dark)
     }
 
     @Test func sparklineVariants() {

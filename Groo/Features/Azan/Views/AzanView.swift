@@ -28,95 +28,93 @@ struct AzanView: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: Theme.Spacing.lg) {
-                    // Location failure (distinct from "no location configured yet")
-                    if let locationError = locationService.error, !locationService.hasLocation {
-                        locationErrorBanner(locationError)
-                    }
-
-                    // Notification permission denied
-                    if notificationService.authorizationDenied {
-                        notificationDeniedBanner
-                    }
-
-                    // Next prayer hero
-                    if let countdown = prayerService.nextPrayer {
-                        nextPrayerCard(countdown)
-                    }
-
-                    // Ramadan banner
-                    if let ramadan = prayerService.ramadanInfo {
-                        ramadanCard(ramadan)
-                    }
-
-                    // Tracker summary
-                    TrackerSummaryCard(trackingService: trackingService)
-
-                    // Today's prayer times
-                    prayerTimesCard
-
-                    // Prayer reference
-                    referenceCard
-
-                    // Audio playback (shown when playing)
-                    if audioService.isPlaying {
-                        audioCard
-                    }
-
-                    // Location info
-                    if !locationService.locationName.isEmpty {
-                        locationCard
-                    }
+        ScrollView {
+            VStack(spacing: Theme.Spacing.lg) {
+                // Location failure (distinct from "no location configured yet")
+                if let locationError = locationService.error, !locationService.hasLocation {
+                    locationErrorBanner(locationError)
                 }
-                .padding(Theme.Spacing.lg)
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Azan")
-                        .font(.headline)
+
+                // Notification permission denied
+                if notificationService.authorizationDenied {
+                    notificationDeniedBanner
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gear")
-                    }
+
+                // Next prayer hero
+                if let countdown = prayerService.nextPrayer {
+                    nextPrayerCard(countdown)
+                }
+
+                // Ramadan banner
+                if let ramadan = prayerService.ramadanInfo {
+                    ramadanCard(ramadan)
+                }
+
+                // Tracker summary
+                TrackerSummaryCard(trackingService: trackingService)
+
+                // Today's prayer times
+                prayerTimesCard
+
+                // Prayer reference
+                referenceCard
+
+                // Audio playback (shown when playing)
+                if audioService.isPlaying {
+                    audioCard
+                }
+
+                // Location info
+                if !locationService.locationName.isEmpty {
+                    locationCard
                 }
             }
-            .sheet(isPresented: $showSettings) {
-                NavigationStack {
-                    AzanSettingsView(
-                        preferences: preferences ?? LocalAzanPreferences(),
-                        locationService: locationService,
-                        onSave: { updatedPrefs in
-                            savePreferences(updatedPrefs)
-                        }
-                    )
+            .padding(Theme.Spacing.lg)
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Azan")
+                    .font(.headline)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gear")
                 }
             }
-            .sheet(isPresented: $showLocationSearch) {
-                NavigationStack {
-                    LocationSearchView { lat, lon, name in
-                        setManualLocation(latitude: lat, longitude: lon, name: name)
+        }
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                AzanSettingsView(
+                    preferences: preferences ?? LocalAzanPreferences(),
+                    locationService: locationService,
+                    onSave: { updatedPrefs in
+                        savePreferences(updatedPrefs)
                     }
+                )
+            }
+        }
+        .sheet(isPresented: $showLocationSearch) {
+            NavigationStack {
+                LocationSearchView { lat, lon, name in
+                    setManualLocation(latitude: lat, longitude: lon, name: name)
                 }
             }
-            .sheet(item: $selectedPrayer) { prayer in
-                PrayerDetailView(prayer: prayer)
-            }
-            .sheet(isPresented: $showRecitations) {
-                EssentialRecitationsSheet()
-            }
-            .sheet(isPresented: $showSurahs) {
-                ShortSurahsSheet()
-            }
-            .sheet(isPresented: $showDuas) {
-                DailyDuasSheet()
-            }
+        }
+        .sheet(item: $selectedPrayer) { prayer in
+            PrayerDetailView(prayer: prayer)
+        }
+        .sheet(isPresented: $showRecitations) {
+            EssentialRecitationsSheet()
+        }
+        .sheet(isPresented: $showSurahs) {
+            ShortSurahsSheet()
+        }
+        .sheet(isPresented: $showDuas) {
+            DailyDuasSheet()
         }
         .onAppear {
             loadAndConfigure()

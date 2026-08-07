@@ -57,98 +57,79 @@ struct MainTabView: View {
         }
     }
 
-    @ViewBuilder
-    private func tabContent(for tab: TabID) -> some View {
-        switch tab {
-        case .home:
-            HomeView(padService: padService, syncService: syncService, passService: passService)
-        case .pad:
-            PadView(padService: padService, syncService: syncService, onSignOut: onSignOut)
-        case .pass:
-            PassView(passService: passService, onSignOut: onSignOut)
-        case .scratchpad:
-            ScratchpadTabView(padService: padService, syncService: syncService)
-        case .drive:
-            DrivePlaceholderView()
-        case .crypto:
-            CryptoView(passService: passService)
-        case .azan:
-            AzanView()
-        case .stocks:
-            StocksView()
-        case .settings:
-            SettingsView(
-                padService: padService,
-                passService: passService,
-                onSignOut: onSignOut,
-                onLock: {
-                    padService.lock()
-                    passService.lock()
-                }
-            )
-        }
+    private var content: FeatureContent {
+        FeatureContent(
+            padService: padService,
+            syncService: syncService,
+            passService: passService,
+            onSignOut: onSignOut,
+            onLock: {
+                padService.lock()
+                passService.lock()
+            }
+        )
     }
 
     var body: some View {
         TabView(selection: $selectedTab) {
             Tab(value: TabID.home) {
-                tabContent(for: .home)
+                NavigationStack { content.view(for: .home) }
             } label: {
                 tabLabel(for: .home)
             }
             .customizationID(TabID.home.rawValue)
 
             Tab(value: TabID.stocks) {
-                tabContent(for: .stocks)
+                NavigationStack { content.view(for: .stocks) }
             } label: {
                 tabLabel(for: .stocks)
             }
             .customizationID(TabID.stocks.rawValue)
 
             Tab(value: TabID.crypto) {
-                tabContent(for: .crypto)
+                NavigationStack { content.view(for: .crypto) }
             } label: {
                 tabLabel(for: .crypto)
             }
             .customizationID(TabID.crypto.rawValue)
 
             Tab(value: TabID.azan) {
-                tabContent(for: .azan)
+                NavigationStack { content.view(for: .azan) }
             } label: {
                 tabLabel(for: .azan)
             }
             .customizationID(TabID.azan.rawValue)
 
             Tab(value: TabID.pad) {
-                tabContent(for: .pad)
+                NavigationStack { content.view(for: .pad) }
             } label: {
                 tabLabel(for: .pad)
             }
             .customizationID(TabID.pad.rawValue)
 
             Tab(value: TabID.pass) {
-                tabContent(for: .pass)
+                NavigationStack { content.view(for: .pass) }
             } label: {
                 tabLabel(for: .pass)
             }
             .customizationID(TabID.pass.rawValue)
 
             Tab(value: TabID.drive) {
-                tabContent(for: .drive)
+                NavigationStack { content.view(for: .drive) }
             } label: {
                 tabLabel(for: .drive)
             }
             .customizationID(TabID.drive.rawValue)
 
             Tab(value: TabID.scratchpad) {
-                tabContent(for: .scratchpad)
+                NavigationStack { content.view(for: .scratchpad) }
             } label: {
                 tabLabel(for: .scratchpad)
             }
             .customizationID(TabID.scratchpad.rawValue)
 
             Tab(value: TabID.settings) {
-                tabContent(for: .settings)
+                NavigationStack { content.view(for: .settings) }
             } label: {
                 tabLabel(for: .settings)
             }
