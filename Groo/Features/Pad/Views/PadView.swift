@@ -37,27 +37,25 @@ struct PadView: View {
     }
 
     private var unlockedView: some View {
-        NavigationStack {
-            PadListView(
-                padService: padService,
-                syncService: syncService,
-                refreshTrigger: listRefreshTrigger
-            )
-            .navigationTitle("Pad")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showAddItem = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
+        PadListView(
+            padService: padService,
+            syncService: syncService,
+            refreshTrigger: listRefreshTrigger
+        )
+        .navigationTitle("Pad")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showAddItem = true
+                } label: {
+                    Image(systemName: "plus")
                 }
             }
-            .sheet(isPresented: $showAddItem, onDismiss: {
-                listRefreshTrigger = UUID()
-            }) {
-                AddItemSheet(padService: padService, syncService: syncService)
-            }
+        }
+        .sheet(isPresented: $showAddItem, onDismiss: {
+            listRefreshTrigger = UUID()
+        }) {
+            AddItemSheet(padService: padService, syncService: syncService)
         }
         .overlay(alignment: .bottomTrailing) {
             PasteFAB(
@@ -71,10 +69,12 @@ struct PadView: View {
 }
 
 #Preview {
-    PadView(
-        padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
-        syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL)),
-        onSignOut: {}
-    )
-    .environment(AuthService())
+    NavigationStack {
+        PadView(
+            padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
+            syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL)),
+            onSignOut: {}
+        )
+        .environment(AuthService())
+    }
 }

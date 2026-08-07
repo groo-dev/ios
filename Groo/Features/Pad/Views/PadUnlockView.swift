@@ -125,6 +125,10 @@ struct PadUnlockView: View {
                 isPasswordFocused = true
             }
         }
+        // Hosts always supply a NavigationStack now (FeatureContent is
+        // stack-free). This screen never had one, so hide the bar it would
+        // otherwise inherit — pinned by PadViewSnapshotTests.
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var passwordSection: some View {
@@ -293,10 +297,12 @@ struct PadUnlockView: View {
 }
 
 #Preview("With Biometric") {
-    PadUnlockView(
-        padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
-        syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL)),
-        onUnlock: {},
-        onSignOut: {}
-    )
+    NavigationStack {
+        PadUnlockView(
+            padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
+            syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL)),
+            onUnlock: {},
+            onSignOut: {}
+        )
+    }
 }
