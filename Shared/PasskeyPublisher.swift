@@ -42,6 +42,43 @@ struct PasskeyPublisher {
     let pusher: any PasskeyRecordPushing
     let queue: any PendingPasskeyRemoving
     let vaultKey: SymmetricKey
+    /// Epoch milliseconds. Injected so the payload's timestamps are assertable.
+    var now: @Sendable () -> Int = { Int(Date().timeIntervalSince1970 * 1000) }
+
+    /// Build the record payload.
+    ///
+    /// `SharedPassPasskeyItem` does NOT model `createdAt`/`updatedAt` — encoding
+    /// it directly produces a record that every real client fails to decode
+    /// ("Key 'createdAt' not found"), because `PassPasskeyItem` requires both.
+    /// The payload must match that encoded shape exactly, so it is built here
+    /// rather than delegated to the lossy model.
+    ///
+    /// This is the one place the extension AUTHORS an item. Per-item records
+    /// remove the risk of a client corrupting items it merely rewrites; they do
+    /// not remove it here.
+    func payload(for item: SharedPassPasskeyItem) throws -> Data {
+        let timestamp = now()
+        var object: [String: Any] = [
+            "id": item.id,
+            // The stored discriminator other clients switch on.
+            "type": "passkey",
+            "name": item.name,
+            "rpId": item.rpId,
+            "rpName": item.rpName,
+            "credentialId": item.credentialId,
+            "publicKey": item.publicKey,
+            "privateKey": item.privateKey,
+            "userHandle": item.userHandle,
+            "userName": item.userName,
+            "signCount": item.signCount,
+            "createdAt": timestamp,
+            "updatedAt": timestamp,
+        ]
+        // Optional fields are omitted rather than sent null, matching how the
+        // web app encodes an item that has none.
+        if let deletedAt = item.deletedAt { object["deletedAt"] = deletedAt }
+        return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    }
 
     /// Push, then remove from the queue.
     ///
@@ -60,9 +97,8 @@ struct PasskeyPublisher {
                 return .queued(reason: "format \(format)")
             }
 
-            let payload = try JSONEncoder().encode(item)
             let request = try SharedRecordCrypto.encryptRecord(
-                id: item.id, kind: .item, payload: payload, vaultKey: vaultKey
+                id: item.id, kind: .item, payload: try payload(for: item), vaultKey: vaultKey
             )
 
             _ = try await pusher.createRecord(request)

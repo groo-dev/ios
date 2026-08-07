@@ -66,6 +66,66 @@ struct PasskeyPublisherTests {
         )
     }
 
+    // The guard that would have caught the shipped bug: the payload must decode
+    // as the app's REAL passkey model, not the lossy Shared one it came from.
+    @Test("payload decodes as PassPasskeyItem, the shape every client expects")
+    func payloadMatchesTheAppModel() throws {
+        let (publisher, _, _, _) = makePublisher()
+
+        let data = try publisher.payload(for: passkey())
+        let decoded = try JSONDecoder().decode(PassPasskeyItem.self, from: data)
+
+        #expect(decoded.id == "pk-cred-1")
+        #expect(decoded.credentialId == "cred-1")
+        #expect(decoded.type == .passkey)
+        #expect(decoded.signCount == 0)
+    }
+
+    @Test("payload carries createdAt and updatedAt")
+    func payloadHasTimestamps() throws {
+        let key = SymmetricKey(size: .bits256)
+        let publisher = PasskeyPublisher(
+            pusher: SpyPusher(), queue: SpyQueue(), vaultKey: key, now: { 1_700_000_000_123 }
+        )
+
+        let object = try JSONSerialization.jsonObject(
+            with: try publisher.payload(for: passkey())
+        ) as? [String: Any]
+
+        // Their absence is exactly what made the record undecodable on every
+        // client, and crashed the web detail view on `new Date(undefined)`.
+        #expect(object?["createdAt"] as? Int == 1_700_000_000_123)
+        #expect(object?["updatedAt"] as? Int == 1_700_000_000_123)
+    }
+
+    @Test("payload omits deletedAt rather than sending null")
+    func payloadOmitsAbsentOptionals() throws {
+        let (publisher, _, _, _) = makePublisher()
+
+        let object = try JSONSerialization.jsonObject(
+            with: try publisher.payload(for: passkey())
+        ) as? [String: Any]
+
+        #expect(object?["deletedAt"] == nil)
+    }
+
+    @Test("the pushed record decrypts to something PassPasskeyItem can decode")
+    func pushedRecordIsDecodableEndToEnd() async throws {
+        let (publisher, pusher, _, key) = makePublisher()
+
+        _ = await publisher.publish(passkey())
+
+        let sent = try #require(pusher.created.first)
+        let decoded = try SharedRecordCrypto.decryptRecord(
+            encryptedData: sent.encryptedData, iv: sent.iv,
+            wrappedRecordKey: sent.wrappedRecordKey, wrapIv: sent.wrapIv,
+            vaultKey: key
+        )
+        // Full round trip: what actually lands on the server must be readable
+        // by the app, the web client and the extension.
+        _ = try JSONDecoder().decode(PassPasskeyItem.self, from: decoded.data)
+    }
+
     @Test("pushes one record and removes only that credential")
     func happyPath() async throws {
         let (publisher, pusher, queue, key) = makePublisher()
