@@ -386,6 +386,11 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
                 )
                 try service.savePendingPasskey(item)
 
+                // Queue first, then push: the passkey must be durable before
+                // the relying party is told the credential exists. The push
+                // never throws — a failure just leaves it queued for the app.
+                await service.publishPasskey(item)
+
                 // Make the new passkey show up in QuickType immediately
                 let passkeyIdentity = ASPasskeyCredentialIdentity(
                     relyingPartyIdentifier: rpId,

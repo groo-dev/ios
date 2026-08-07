@@ -89,3 +89,33 @@ struct PasskeyPublisher {
         }
     }
 }
+
+// MARK: - Concrete adapters
+
+/// Backs `PasskeyRecordPushing` with the real Pass API.
+struct APIPasskeyPusher: PasskeyRecordPushing {
+    let api: PassAPIClient
+
+    /// Only the format flag is needed here, so this decodes a minimal shape
+    /// rather than `PassKeyInfo` — that type lives in the app target, which
+    /// extensions cannot see.
+    private struct FormatProbe: Decodable {
+        let formatVersion: Int?
+    }
+
+    func formatVersion() async throws -> Int {
+        let probe: FormatProbe = try await api.get(PassAPIClient.Endpoint.keyInfo)
+        return probe.formatVersion ?? 1
+    }
+
+    func createRecord(_ request: SharedRecordWriteRequest) async throws -> SharedRecordWriteResponse {
+        try await api.post(PassAPIClient.Endpoint.records, body: request)
+    }
+}
+
+/// Backs `PendingPasskeyRemoving` with the App Group queue.
+struct AppGroupPendingPasskeyRemover: PendingPasskeyRemoving {
+    func remove(credentialId: String, key: SymmetricKey) throws {
+        try SharedPendingItemsStore.remove(credentialId: credentialId, key: key)
+    }
+}

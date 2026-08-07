@@ -40,6 +40,17 @@ enum SharedConfig {
 
     // MARK: - Pass API
 
+    /// Total budget for the AutoFill passkey push, covering every attempt.
+    ///
+    /// `PassAPIClient` sets `timeoutIntervalForRequest = 30`, which would hold
+    /// the AutoFill sheet open far too long. Overridable via the App Group
+    /// defaults, matching how the base URLs are overridden.
+    static var passkeyPushDeadlineSeconds: Double {
+        let defaults = UserDefaults(suiteName: appGroupIdentifier) ?? .standard
+        let override = defaults.double(forKey: "passkeyPushDeadlineSeconds")
+        return override > 0 ? override : 5
+    }
+
     /// Pass API base URL, mirroring `Config.passAPIBaseURL` including its
     /// UserDefaults override. Duplicated here rather than shared because
     /// `Config` lives in the app target, which extensions cannot see.

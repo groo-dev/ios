@@ -9,6 +9,7 @@ import AuthenticationServices
 import Combine
 import CryptoKit
 import Foundation
+import GrooAuth
 import os
 
 enum AutoFillError: Error, LocalizedError {
@@ -157,6 +158,46 @@ class AutoFillService: ObservableObject {
         }
         try SharedPendingItemsStore.append(item, key: key)
         passkeys.append(item)
+    }
+
+    /// Push a freshly registered passkey to the server, bounded by a deadline.
+    ///
+    /// Never throws: the registration ceremony must complete regardless of what
+    /// happens here. A failure leaves the passkey in the pending queue, which
+    /// the app drains on its next sync or foreground.
+    func publishPasskey(_ item: SharedPassPasskeyItem) async {
+        guard let key = encryptionKey else {
+            Log.autofill.error("Cannot push passkey: vault is locked")
+            return
+        }
+
+        let session = GrooAuthFactory.makeTokenOnlySession()
+        let api = PassAPIClient(
+            tokenProvider: { try await session.accessToken() },
+            // No force-refresh: one refresh attempt only. Combined with the
+            // deadline below this makes a late refresh replay — which would
+            // revoke the token family and sign the user out everywhere —
+            // structurally impossible.
+            forceRefresh: { throw APIError.unauthorized }
+        )
+
+        let publisher = PasskeyPublisher(
+            pusher: APIPasskeyPusher(api: api),
+            queue: AppGroupPendingPasskeyRemover(),
+            vaultKey: key
+        )
+
+        let push = Task { await publisher.publish(item) }
+        let deadline = Task {
+            try? await Task.sleep(for: .seconds(SharedConfig.passkeyPushDeadlineSeconds))
+            push.cancel()
+        }
+        let outcome = await push.value
+        deadline.cancel()
+
+        if case .queued(let reason) = outcome {
+            Log.autofill.error("Passkey left queued: \(reason, privacy: .public)")
+        }
     }
 
     // MARK: - Search
