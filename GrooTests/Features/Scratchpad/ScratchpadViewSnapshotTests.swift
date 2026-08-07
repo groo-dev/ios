@@ -47,10 +47,19 @@ struct ScratchpadViewSnapshotTests {
     @Test func scratchpadTabLocked() throws {
         StubURLProtocol.reset()
         let (service, store) = try PadViewSnapshotTests.lockedPadService()
+        // ScratchpadUnlockView (rendered here, service is locked) lost its own
+        // NavigationStack when Scratchpad's stack was hoisted to the host, but
+        // (unlike PadUnlockView) it did show a visible bar — its
+        // navigationTitle("Scratchpad") — which now needs an ancestor stack
+        // to render through. Wrapped here to mirror the host stack
+        // MainTabView always supplies now, matching PadViewSnapshotTests'
+        // convention for call sites that depended on a screen's own stack.
         assertViewSnapshot(
-            of: ScratchpadTabView(padService: service,
+            of: NavigationStack {
+                ScratchpadTabView(padService: service,
                                   syncService: PadViewSnapshotTests.offlineSync(store: store))
-                .environment(AuthService()),
+            }
+            .environment(AuthService()),
             named: "locked")
     }
 

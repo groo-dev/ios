@@ -44,57 +44,62 @@ private struct ScratchpadUnlockView: View {
     @State private var error: String?
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
+        VStack(spacing: 24) {
+            Spacer()
 
-                Image(systemName: "note.text")
-                    .font(.system(size: 64))
-                    .foregroundStyle(Theme.Brand.primary)
+            Image(systemName: "note.text")
+                .font(.system(size: 64))
+                .foregroundStyle(Theme.Brand.primary)
 
-                Text("Scratchpad Locked")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+            Text("Scratchpad Locked")
+                .font(.title2)
+                .fontWeight(.semibold)
 
-                Text("Enter your encryption password to access your scratchpads")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+            Text("Enter your encryption password to access your scratchpads")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+
+            VStack(spacing: 16) {
+                SecureField("Encryption Password", text: $password)
+                    .textFieldStyle(.roundedBorder)
+                    .textContentType(.password)
+                    .submitLabel(.go)
+                    .onSubmit(unlock)
                     .padding(.horizontal, 32)
 
-                VStack(spacing: 16) {
-                    SecureField("Encryption Password", text: $password)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.password)
-                        .submitLabel(.go)
-                        .onSubmit(unlock)
-                        .padding(.horizontal, 32)
-
-                    if let error = error {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    Button(action: unlock) {
-                        if isUnlocking {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Text("Unlock")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(password.isEmpty || isUnlocking)
-                    .padding(.horizontal, 32)
+                if let error = error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
 
-                Spacer()
-                Spacer()
+                Button(action: unlock) {
+                    if isUnlocking {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Text("Unlock")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(password.isEmpty || isUnlocking)
+                .padding(.horizontal, 32)
             }
-            .navigationTitle("Scratchpad")
+
+            Spacer()
+            Spacer()
         }
+        // Unlike PadUnlockView, this screen DID show a visible bar before the
+        // hoist (its own NavigationStack carried navigationTitle below). The
+        // host now supplies the single NavigationStack instead of a second,
+        // redundant one — the title renders through it unchanged. Do not add
+        // .toolbar(.hidden, for: .navigationBar) here: that would silently
+        // drop the title, which ScratchpadViewSnapshotTests.scratchpadTabLocked
+        // pins pixel-for-pixel.
+        .navigationTitle("Scratchpad")
         .tint(Theme.Brand.primary)
     }
 
@@ -122,8 +127,10 @@ private struct ScratchpadUnlockView: View {
 }
 
 #Preview {
-    ScratchpadTabView(
-        padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
-        syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL))
-    )
+    NavigationStack {
+        ScratchpadTabView(
+            padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
+            syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL))
+        )
+    }
 }

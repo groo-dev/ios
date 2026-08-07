@@ -165,22 +165,24 @@ private struct ScratchpadContentView: View {
                     noSelectionView
                 }
             }
+            // This branch never had a NavigationStack of its own; the host
+            // supplies one now, so suppress the bar it would inherit.
+            .toolbar(.hidden, for: .navigationBar)
         } else {
-            // iPhone: Navigation-based layout
-            NavigationStack {
-                ScratchpadListView(
-                    pads: store.allPads,
-                    selectedId: store.selectedPad?.id,
-                    onSelect: store.selectPad,
-                    onDelete: confirmDelete,
-                    onCreate: { Task { await store.createPad() } }
-                )
-                .navigationTitle("Scratchpads")
-                .navigationDestination(item: $store.selectedPad) { pad in
-                    editorView(pad)
-                        .navigationTitle(pad.title)
-                        .navigationBarTitleDisplayMode(.inline)
-                }
+            // iPhone: Navigation-based layout. The stack is the host's; the
+            // destination registers against it.
+            ScratchpadListView(
+                pads: store.allPads,
+                selectedId: store.selectedPad?.id,
+                onSelect: store.selectPad,
+                onDelete: confirmDelete,
+                onCreate: { Task { await store.createPad() } }
+            )
+            .navigationTitle("Scratchpads")
+            .navigationDestination(item: $store.selectedPad) { pad in
+                editorView(pad)
+                    .navigationTitle(pad.title)
+                    .navigationBarTitleDisplayMode(.inline)
             }
         }
     }
@@ -477,9 +479,11 @@ extension DecryptedScratchpad: Hashable {
 }
 
 #Preview {
-    ScratchpadView(
-        padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
-        syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL))
-    )
+    NavigationStack {
+        ScratchpadView(
+            padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
+            syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL))
+        )
+    }
     .environment(AuthService())
 }
