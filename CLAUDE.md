@@ -64,6 +64,15 @@ the UI the prompt requires, and the read fails with
 view is actually on screen (`viewDidAppear`) before prompting. See
 `SharedKeychain.loadEncryptionKeyOffMainThread`.
 
+**Passkey authenticator data must set BE and BS.** Apple requires the BE
+(backup eligible, `0x08`) and BS (backup state, `0x10`) flags from third-party
+credential providers — without them the relying party rejects the ceremony with
+a generic WebAuthn `NotAllowedError` that names no cause. Registration uses
+`0x5d` (UP|UV|BE|BS|AT), assertions `0x1d` (UP|UV|BE|BS). See
+`SharedPasskeyCrypto.syncedCredentialFlags`. Note the `pass` browser extension
+emits `0x45`/`0x05` and works anyway, because browsers do not enforce this — it
+is **not** a valid reference for what Apple accepts.
+
 **AutoFill capability keys live under `NSExtensionAttributes`.**
 `ASCredentialProviderExtensionCapabilities` must be nested at `NSExtension >
 NSExtensionAttributes`. Declared one level up it is silently ignored: password
