@@ -100,7 +100,14 @@ Expected: compile failure — the types do not exist.
 
 - [ ] **Step 3: Implement the models and crypto**
 
-`SharedRecordCrypto` mirrors the TypeScript exactly: generate a random 256-bit record key, AES-GCM the envelope `{"kind":…,"data":…}` under it, then wrap the raw key bytes under the vault key using the **same byte layout as `CryptoService.encryptData`** (IV ‖ ciphertext ‖ tag), base64 each field.
+`SharedRecordCrypto` mirrors the TypeScript exactly: generate a random 256-bit record key, AES-GCM the envelope `{"kind":…,"data":…}` under it, then wrap that key under the vault key.
+
+**Two format traps, both confirmed against `@pass/crypto` — get these wrong and every test passes on both sides while a real device cannot open a real vault:**
+
+1. **The wrap is the base64 *string* of the raw key bytes, encrypted as UTF-8** — not the raw bytes. This is exactly what `CryptoService.wrapKey` already does; reuse it rather than reimplementing. A correct `wrappedRecordKey` is **80 base64 chars** (32 key bytes → 44-char base64 → 44 UTF-8 bytes + 16-byte GCM tag = 60 bytes → 80 chars).
+2. **`iv` and `ciphertext+tag` are separate base64 fields**, matching `CryptoService.encrypt(_ plaintext: String)` / `EncryptedPayload`. Do **not** use `CryptoService.encryptData`, whose combined `IV ‖ ciphertext ‖ tag` layout is for file blobs only.
+
+So `SharedRecordCrypto` should be a thin layer over the existing `CryptoService.encrypt`/`decrypt`/`wrapKey`/`unwrapKey`, not new crypto.
 
 Build `data` by embedding the caller's JSON bytes verbatim rather than re-encoding a typed model — that is what keeps unknown fields alive.
 
@@ -117,19 +124,23 @@ xcodebuild -project Groo.xcodeproj -scheme Groo -destination 'platform=iOS Simul
 Run: `scripts/test.sh --unit 2>&1 | grep SharedRecordCrypto`
 Expected: 3 passing.
 
-- [ ] **Step 6: Cross-client interop check**
+- [ ] **Step 6: Cross-client interop check — already generated, do not skip**
 
-This is the check that matters most and the one a Swift-only test cannot make. Produce a record with the web implementation and open it with the Swift one:
+`GrooTests/Fixtures/record-vector.json` is committed and is the canonical
+record format vector, produced by `@pass/crypto` itself
+(`packages/crypto/scripts/generate-record-vector.mjs`). It follows the same
+pattern as the existing `wrap-vector.json`, which `CryptoServiceWrapTests`
+already consumes — mirror that test's structure, including the
+`bundle.url(forResource:)` guard that fails with "not a member of the GrooTests
+target" when the file has not been added to the target.
 
-```bash
-cd ~/work/gr/pass/packages/crypto
-node -e '
-const { webcrypto } = require("crypto"); globalThis.crypto = webcrypto;
-// encrypt a known payload under a known key, print base64 fields + key
-' > /tmp/record-fixture.json
-```
+Add `GrooTests/Shared/SharedRecordVectorTests.swift` asserting that
+`SharedRecordCrypto` can decrypt **both** the item and folder vectors under
+`vaultKeyRaw`, that the payloads match exactly, and that `futureField` survives.
 
-Commit the fixture to `GrooTests/Fixtures/web-record.json` and add a test that decrypts it with `SharedRecordCrypto` and asserts the payload. A byte-format drift between the two implementations is otherwise invisible until a real device cannot open a real vault.
+This is the check that matters most and the one no Swift-only test can make: it
+proves the Swift implementation agrees with the bytes the other two clients
+actually produce.
 
 - [ ] **Step 7: Commit**
 
