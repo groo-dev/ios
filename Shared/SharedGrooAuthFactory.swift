@@ -1,12 +1,15 @@
 //
-//  GrooAuthConfig+iOS.swift
+//  SharedGrooAuthFactory.swift
 //  Groo
 //
-//  Wires the GrooAuth OAuth package to this app's concrete OAuth client,
-//  redirect URIs, and Keychain configuration.
+//  Moved from Groo/Core/Auth/GrooAuthConfig+iOS.swift so the AutoFill extension
+//  can obtain a token. `GrooAuthFactory` keeps its name and `makeConfig()` /
+//  `makeSession()` API so existing app call sites compile unchanged.
 //
 
+import AuthenticationServices
 import Foundation
+import os
 import GrooAuth
 
 enum GrooAuthFactory {
@@ -58,5 +61,36 @@ enum GrooAuthFactory {
             transport: URLSessionTransport(),
             webAuthenticator: ASWebAuthenticator()
         )
+    }
+
+    /// A session for extensions: reads and refreshes tokens, but can neither
+    /// present sign-in UI nor sign the user out.
+    ///
+    /// The web authenticator throws unconditionally — an AutoFill sheet must
+    /// never sprout an OAuth browser — and the token store suppresses `clear()`
+    /// so an extension-side refresh rejection cannot sign the user out of the
+    /// whole app.
+    static func makeTokenOnlySession() -> GrooAuthSession {
+        let config = makeConfig()
+        return GrooAuthSession(
+            config: config,
+            tokenStore: NonDestructiveTokenStore(
+                wrapping: KeychainTokenStore(service: config.keychainService, accessGroup: nil)
+            ),
+            transport: URLSessionTransport(),
+            webAuthenticator: UnavailableWebAuthenticator()
+        )
+    }
+}
+
+/// Refuses to present sign-in UI. Extensions must never do this.
+struct UnavailableWebAuthenticator: WebAuthenticating {
+    func authenticate(
+        url: URL,
+        callbackScheme: String,
+        anchor: ASPresentationAnchor
+    ) async throws -> URL {
+        Log.pass.error("An extension attempted to present sign-in UI; refusing")
+        throw GrooAuthError.signedOut
     }
 }
