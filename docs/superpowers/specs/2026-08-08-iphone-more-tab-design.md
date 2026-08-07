@@ -85,32 +85,53 @@ With Home enabled More holds five rows; with Home disabled, four.
 
 ### Stack hoisting
 
-Every feature screen currently owns one root `NavigationStack` at the top of
-its `body`:
+Stack ownership today is less uniform than a first pass suggests. Verified
+inventory:
 
-| Screen | Root stack |
-|---|---|
-| Home | `HomeView` |
-| Stocks | `StockPortfolioView:21` / `StockOnboardingView:17` — one per branch |
-| Wallet | `PortfolioView:51` / `WalletOnboardingView:27` — one per branch |
-| Azan | `AzanView:31` |
-| Pad | `PadView:40` |
-| Pass | `PassView:23` |
-| Scratchpad | `ScratchpadTabView:47` |
-| Drive | `DrivePlaceholderView` |
-| Settings | `SettingsView` |
+| Screen | Root stack today | Notes |
+|---|---|---|
+| Home | `HomeView:41` | single stack at body root |
+| Stocks | `StockPortfolioView:21` / `StockOnboardingView:17` | one per branch |
+| Wallet | `PortfolioView:51` / `WalletOnboardingView:27` | one per branch |
+| Azan | `AzanView:31` | single stack at body root |
+| Pass | `PassView:23` | single stack wrapping both locked and unlocked |
+| Pad | `PadView:40` (`unlockedView` only) | `PadUnlockView` has **none** |
+| Scratchpad | `ScratchpadUnlockView:47`; `ScratchpadView:170` | see below |
+| Drive | `DrivePlaceholderView:12` | single stack at body root |
+| Settings | **none** | already stack-free — see below |
 
-**All of these root stacks move up to the host.** Screens become
+**`SettingsView` needs no change at all.** Its body is `List { … }
+.navigationTitle("Settings")` with no stack of its own (the only
+`NavigationStack` in the file, at `:316`, is inside `#Preview`). This is
+precisely *why* the title is lost today: the stack it relies on is the system
+More's UIKit navigation controller, which discards it. Pushing Settings from an
+app-owned stack fixes the title with zero edits to the file.
+
+**`ScratchpadView` branches on size class internally** (`:146`): the regular
+branch is a side-by-side `HStack` with **no** stack, the compact branch builds
+its own `NavigationStack` with a `navigationDestination(item:)` (`:170-183`).
+Hoisting means deleting the compact branch's stack and letting its
+`navigationDestination` bind to the host's.
+
+**Two branches today render with no ancestor stack at all** — `PadUnlockView`
+and `ScratchpadView`'s regular branch. Once the host always supplies a stack,
+both would gain an empty navigation bar on iPad. Each gets
+`.toolbar(.hidden, for: .navigationBar)` to keep iPad pixel-identical. The
+existing snapshot suites (`PadViewSnapshotTests`, `ScratchpadViewSnapshotTests`)
+are what prove it.
+
+**Every remaining root stack moves up to the host.** Screens become
 unconditionally stack-free, keeping their `.navigationTitle`, `.toolbar` and
 `.navigationDestination` in place — those modifiers seek an ancestor stack and
 are inert without one, so a stack-free screen is self-describing and renders
 correctly in either host with no knowledge of its context.
 
 ```swift
-// PadView today                    // PadView after
-NavigationStack {                   List { … }
-    List { … }                          .navigationTitle("Pad")
-        .navigationTitle("Pad")         .sheet(…) { … }
+// PadView.unlockedView today       // after
+NavigationStack {                   PadListView(…)
+    PadListView(…)                      .navigationTitle("Pad")
+        .navigationTitle("Pad")         .toolbar { … }
+        .toolbar { … }                  .sheet(…) { … }
         .sheet(…) { … }
 }
 ```
@@ -198,7 +219,10 @@ and buys one code path and a clean boundary.
 
 ### Tab bar editor
 
-A pushed page — not a sheet — reached from More → Customize Tabs. Three zones:
+A pushed page — not a sheet — reached from More → Settings → Customize Tabs.
+That entry point already exists (`SettingsView:59-63`); only its destination
+changes, via a small `CustomizeTabsEntry` view whose sole job is the idiom
+branch. Three zones:
 
 1. **Home** — a toggle row at the top, outside the draggable region.
 2. **Order** — the seven reorderable features, dragged freely. A labelled
