@@ -20,12 +20,8 @@ protocol PasskeyRecordPushing: Sendable {
     func formatVersion() async throws -> Int
 }
 
-protocol PendingPasskeyRemoving: Sendable {
-    func remove(credentialId: String, key: SymmetricKey) throws
-}
-
 enum PasskeyPublishOutcome: Equatable {
-    /// Pushed and removed from the queue.
+    /// Pushed to the server. Still queued until the app merges it.
     case published
     /// Left queued for the app to drain. Never an error the ceremony sees.
     case queued(reason: String)
@@ -40,7 +36,6 @@ enum PasskeyPublishOutcome: Equatable {
 /// vault through models that silently drop item types.
 struct PasskeyPublisher {
     let pusher: any PasskeyRecordPushing
-    let queue: any PendingPasskeyRemoving
     let vaultKey: SymmetricKey
     /// Epoch milliseconds. Injected so the payload's timestamps are assertable.
     var now: @Sendable () -> Int = { Int(Date().timeIntervalSince1970 * 1000) }
@@ -80,7 +75,7 @@ struct PasskeyPublisher {
         return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
     }
 
-    /// Push, then remove from the queue.
+    /// Push the passkey to the server.
     ///
     /// Never throws: the caller must complete the registration ceremony
     /// regardless. Every failure path leaves the passkey queued for the
@@ -103,17 +98,18 @@ struct PasskeyPublisher {
 
             _ = try await pusher.createRecord(request)
 
-            // Remove only this credential: another passkey may be queued
-            // alongside it, holding a private key that exists nowhere else.
-            do {
-                try queue.remove(credentialId: item.credentialId, key: vaultKey)
-            } catch {
-                // Harmless — the app's merge dedupes on credentialId, so a
-                // failed removal produces a no-op rather than a duplicate.
-                Log.autofill.error(
-                    "Pushed passkey but could not remove it from the queue: \(String(describing: error), privacy: .public)"
-                )
-            }
+            // Deliberately NOT removed from the pending queue.
+            //
+            // AutoFill builds its passkey list from the App Group vault cache
+            // PLUS the pending queue, and only the main app's sync refreshes
+            // that cache. Dropping the item here left it in neither, so the very
+            // next assertion failed with credentialIdentityNotFound until the
+            // user opened the app.
+            //
+            // The queue means "not yet in the cache the extension reads", so it
+            // is the app that clears it — after merging AND refreshing the
+            // cache. Its merge dedupes on credentialId, so an item already
+            // pushed here is skipped rather than duplicated.
 
             Log.autofill.info("Pushed passkey \(item.credentialId, privacy: .public) to the server")
             return .published
@@ -149,9 +145,3 @@ struct APIPasskeyPusher: PasskeyRecordPushing {
     }
 }
 
-/// Backs `PendingPasskeyRemoving` with the App Group queue.
-struct AppGroupPendingPasskeyRemover: PendingPasskeyRemoving {
-    func remove(credentialId: String, key: SymmetricKey) throws {
-        try SharedPendingItemsStore.remove(credentialId: credentialId, key: key)
-    }
-}

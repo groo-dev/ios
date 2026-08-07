@@ -183,7 +183,6 @@ class AutoFillService: ObservableObject {
 
         let publisher = PasskeyPublisher(
             pusher: APIPasskeyPusher(api: api),
-            queue: AppGroupPendingPasskeyRemover(),
             vaultKey: key
         )
 

@@ -28,14 +28,10 @@ struct PasskeyPublisherTests {
         }
     }
 
-    final class SpyQueue: PendingPasskeyRemoving, @unchecked Sendable {
+    /// Records whether anything tried to touch the pending queue. Nothing
+    /// should: the app owns that lifecycle.
+    final class SpyQueue: @unchecked Sendable {
         var removed: [String] = []
-        var removeError: (any Error)?
-
-        func remove(credentialId: String, key: SymmetricKey) throws {
-            if let removeError { throw removeError }
-            removed.append(credentialId)
-        }
     }
 
     struct Boom: Error {}
@@ -61,7 +57,7 @@ struct PasskeyPublisherTests {
     ) -> (PasskeyPublisher, SpyPusher, SpyQueue, SymmetricKey) {
         let key = SymmetricKey(size: .bits256)
         return (
-            PasskeyPublisher(pusher: pusher, queue: queue, vaultKey: key),
+            PasskeyPublisher(pusher: pusher, vaultKey: key),
             pusher, queue, key
         )
     }
@@ -85,7 +81,7 @@ struct PasskeyPublisherTests {
     func payloadHasTimestamps() throws {
         let key = SymmetricKey(size: .bits256)
         let publisher = PasskeyPublisher(
-            pusher: SpyPusher(), queue: SpyQueue(), vaultKey: key, now: { 1_700_000_000_123 }
+            pusher: SpyPusher(), vaultKey: key, now: { 1_700_000_000_123 }
         )
 
         let object = try JSONSerialization.jsonObject(
@@ -126,15 +122,31 @@ struct PasskeyPublisherTests {
         _ = try JSONDecoder().decode(PassPasskeyItem.self, from: decoded.data)
     }
 
-    @Test("pushes one record and removes only that credential")
+    @Test("leaves the passkey queued so a fresh extension process can serve it")
+    func stillQueuedAfterPush() async {
+        let (publisher, _, queue, _) = makePublisher()
+
+        _ = await publisher.publish(passkey())
+
+        // AutoFill builds its passkey list from the App Group vault CACHE plus
+        // the pending queue. The push does not update that cache — only the
+        // app's sync does — so dropping the item from the queue here leaves it
+        // in neither, and the very next assertion fails with
+        // credentialIdentityNotFound until the user opens the main app.
+        //
+        // The queue means "not yet in the cache the extension reads", so the
+        // app clears it when it merges AND refreshes the cache.
+        #expect(queue.removed.isEmpty)
+    }
+
+    @Test("pushes exactly one record")
     func happyPath() async throws {
-        let (publisher, pusher, queue, key) = makePublisher()
+        let (publisher, pusher, _, key) = makePublisher()
 
         let outcome = await publisher.publish(passkey())
 
         #expect(outcome == .published)
         #expect(pusher.created.count == 1)
-        #expect(queue.removed == ["cred-1"])
 
         // What reaches the server must be ciphertext that opens to the passkey.
         let sent = try #require(pusher.created.first)
@@ -210,19 +222,6 @@ struct PasskeyPublisherTests {
         #expect(queue.removed.isEmpty)
     }
 
-    @Test("a failed queue removal is harmless — the push already succeeded")
-    func removalFailureStillCountsAsPublished() async {
-        let queue = SpyQueue()
-        queue.removeError = Boom()
-        let (publisher, pusher, _, _) = makePublisher(queue: queue)
-
-        let outcome = await publisher.publish(passkey())
-
-        // The app's merge dedupes on credentialId, so a leftover queue entry is
-        // a no-op rather than a duplicate.
-        #expect(outcome == .published)
-        #expect(pusher.created.count == 1)
-    }
 }
 
 struct SharedPendingItemsStoreRemovalTests {
