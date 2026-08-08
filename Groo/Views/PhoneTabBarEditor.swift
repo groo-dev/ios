@@ -68,7 +68,7 @@ struct PhoneTabBarEditor: View {
             } header: {
                 Text("Order")
             } footer: {
-                Text("The first \(TabConfiguration.barSlots) entries appear in the tab bar. Everything below moves into More.")
+                Text("The first \(draggableBarSlots) entries appear in the tab bar. Everything below moves into More.")
             }
 
             Section {

@@ -93,8 +93,18 @@ final class AppRouter {
     /// Called after the user edits the tab bar. The pushed destination may no
     /// longer belong inside More, and the selection may name a tab that is no
     /// longer on screen.
+    ///
+    /// Filters rather than clears: the editor itself is reached by pushing
+    /// .settings onto this path, then a further view-based NavigationLink
+    /// (Customize Tabs) on top of that, which the path array does not
+    /// represent. Every drag or toggle inside the editor writes
+    /// store.configuration, which calls this. Assigning morePath = [] would
+    /// pop the whole stack — Customize Tabs included — back to More's root
+    /// on every single edit. Assigning an array that is elementwise equal to
+    /// the current one is a no-op for the stack, so filtering to the same
+    /// value leaves the editor (and anything pushed above it) alone.
     func configurationDidChange() {
-        morePath = []
+        morePath = morePath.filter { $0 == .settings || store.configuration.moreTabs.contains($0) }
         phoneSelection = Self.resolve(phoneSelection, in: store.configuration)
     }
 

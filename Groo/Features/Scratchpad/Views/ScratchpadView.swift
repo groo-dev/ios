@@ -61,6 +61,21 @@ private struct ScratchpadContentView: View {
 
     // For iPad split view
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.isPushedDestination) private var isPushedDestination
+
+    /// The regular-width branch never had a NavigationStack of its own; the
+    /// host supplies one now, so it suppresses the bar it would inherit —
+    /// but only when rendering as a tab root. Applied here, at the level
+    /// that composes all four body states (loading/error/empty/content),
+    /// not just the loaded contentView branch: isLoading defaults to true,
+    /// so every iPad visit hits loadingView first, and an empty or
+    /// permanently failed load never reaches contentView at all. Gated by
+    /// horizontalSizeClass rather than idiom, so also skipped when pushed
+    /// from More — a Max-size iPhone in landscape reports .regular too, and
+    /// a pushed screen needs its back button visible.
+    private var suppressesNavigationBar: Bool {
+        horizontalSizeClass == .regular && !isPushedDestination
+    }
 
     var body: some View {
         Group {
@@ -74,6 +89,7 @@ private struct ScratchpadContentView: View {
                 contentView
             }
         }
+        .toolbar(suppressesNavigationBar ? .hidden : .visible, for: .navigationBar)
         .task {
             store.setEditorContent = { [bind = $webView] content in
                 bind.wrappedValue?.evaluateJavaScript(EditorCommand.setContent(content).jsCall) { _, error in
@@ -165,9 +181,6 @@ private struct ScratchpadContentView: View {
                     noSelectionView
                 }
             }
-            // This branch never had a NavigationStack of its own; the host
-            // supplies one now, so suppress the bar it would inherit.
-            .toolbar(.hidden, for: .navigationBar)
         } else {
             // iPhone: Navigation-based layout. The stack is the host's; the
             // destination registers against it.

@@ -121,6 +121,60 @@ struct AppRouterTests {
         #expect(router.phoneSelection == .feature(.home))
     }
 
+    // MARK: - Editor survival (More -> Settings -> Customize Tabs)
+    //
+    // The editor is reached by pushing .settings onto morePath, then a
+    // view-based NavigationLink (Customize Tabs) on top of that — a push the
+    // path array does not represent. Every drag or toggle in the editor
+    // writes store.configuration, which fires configurationDidChange()
+    // through PhoneTabView's onChange. Clearing morePath wholesale pops the
+    // entire stack (Customize Tabs included) back to More's root; filtering
+    // it to an equal array must not.
+
+    @Test func configurationChangeWhileOnSettingsPreservesThePath() throws {
+        let (router, store, defaults, suite) = try makeEnv()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        router.morePath = [.settings]
+
+        // Any edit reachable from the editor: toggling Home off and back on.
+        var config = store.configuration
+        config.setShowsHome(false)
+        store.configuration = config
+        router.configurationDidChange()
+
+        #expect(router.morePath == [.settings])
+    }
+
+    @Test func configurationChangePreservesAPathEntryThatIsStillPastTheCut() throws {
+        let (router, store, defaults, suite) = try makeEnv()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        router.morePath = [.stocks]   // stocks is past the cut by default
+
+        // Reorder drive/scratchpad against each other — stocks stays put.
+        var config = store.configuration
+        config.move(fromOffsets: IndexSet(integer: 6), toOffset: 5)
+        #expect(config.moreTabs.contains(.stocks))
+        store.configuration = config
+        router.configurationDidChange()
+
+        #expect(router.morePath == [.stocks])
+    }
+
+    @Test func configurationChangeDropsAPathEntryPromotedIntoTheBar() throws {
+        let (router, store, defaults, suite) = try makeEnv()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        router.morePath = [.stocks]   // stocks is past the cut by default
+
+        // Drag stocks to the front — it is now a bar tab, not a More push.
+        var config = store.configuration
+        config.move(fromOffsets: IndexSet(integer: 3), toOffset: 0)
+        #expect(config.barTabs.contains(.stocks))
+        store.configuration = config
+        router.configurationDidChange()
+
+        #expect(router.morePath.isEmpty)
+    }
+
     @Test func selectionIsPersistedOnWrite() throws {
         let (router, _, defaults, suite) = try makeEnv()
         defer { defaults.removePersistentDomain(forName: suite) }

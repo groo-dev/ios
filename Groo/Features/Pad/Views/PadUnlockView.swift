@@ -24,6 +24,7 @@ struct PadUnlockView: View {
     @State private var biometricType: LABiometryType = .none
     @State private var showPasswordField = false
     @FocusState private var isPasswordFocused: Bool
+    @Environment(\.isPushedDestination) private var isPushedDestination
 
     private var canUseBiometric: Bool {
         padService.canUnlockWithBiometric && biometricType != .none
@@ -127,8 +128,11 @@ struct PadUnlockView: View {
         }
         // Hosts always supply a NavigationStack now (FeatureContent is
         // stack-free). This screen never had one, so hide the bar it would
-        // otherwise inherit — pinned by PadViewSnapshotTests.
-        .toolbar(.hidden, for: .navigationBar)
+        // otherwise inherit — pinned by PadViewSnapshotTests. But when Pad
+        // is dragged past the cut and pushed from More while locked, hiding
+        // the bar also hides the only visible back-button affordance
+        // (edge-swipe still works) — so skip the suppression when pushed.
+        .toolbar(isPushedDestination ? .visible : .hidden, for: .navigationBar)
     }
 
     private var passwordSection: some View {

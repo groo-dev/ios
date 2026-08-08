@@ -43,6 +43,48 @@ enum ViewRender {
         return window
     }
 
+    /// Locates the UINavigationController a SwiftUI `NavigationStack` creates
+    /// internally, so a test can assert real UIKit navigation-bar state
+    /// (`isNavigationBarHidden`) instead of relying on a pixel diff. A
+    /// titleless, back-button-less bar renders identically whether shown or
+    /// hidden, so a snapshot alone cannot pin that case — this can.
+    static func navigationController(hosting view: some View, size: CGSize = deviceSize) -> UINavigationController? {
+        let window = makeWindow(hosting: view, size: size)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        return findNavigationController(in: window)
+    }
+
+    /// Settled variant: a single synchronous frame is not enough to tell
+    /// "explicitly hidden" apart from "default, not yet settled" — both
+    /// report `isNavigationBarHidden == true` immediately after
+    /// `makeWindow`. Yielding first (matching `settledImage`) lets
+    /// UIKit's navigation controller finish its own layout pass, so a
+    /// screen that never suppressed the bar shows its true (visible)
+    /// steady state instead of a coincidentally-hidden transient one.
+    static func settledNavigationController(
+        hosting view: some View,
+        yields: Int = 8,
+        size: CGSize = deviceSize
+    ) async -> UINavigationController? {
+        let window = makeWindow(hosting: view, size: size)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        for _ in 0..<yields { await Task.yield() }
+        window.layoutIfNeeded()
+        return findNavigationController(in: window)
+    }
+
+    private static func findNavigationController(in window: UIWindow) -> UINavigationController? {
+        func find(_ vc: UIViewController) -> UINavigationController? {
+            if let nav = vc as? UINavigationController { return nav }
+            for child in vc.children {
+                if let found = find(child) { return found }
+            }
+            return nil
+        }
+        guard let root = window.rootViewController else { return nil }
+        return find(root)
+    }
+
     static func draw(_ window: UIWindow) -> UIImage {
         // NB: window.drawHierarchy(afterScreenUpdates:) only captures real
         // pixels for a window the window server actually composites — an

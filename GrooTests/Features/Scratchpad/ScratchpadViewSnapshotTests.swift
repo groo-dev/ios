@@ -173,6 +173,58 @@ struct ScratchpadViewSnapshotTests {
                 .environment(\.horizontalSizeClass, .regular))
     }
 
+    // Fix-wave finding 2: at the merge base, none of loading/error/empty/
+    // content had a navigation bar on iPad — the whole regular-width host
+    // never wrapped a NavigationStack around any of them. Now that
+    // FeatureContent hosts always supply one, the suppression that used to
+    // live only inside contentView's regular branch must cover every state,
+    // not just the loaded one, since isLoading defaults to true and every
+    // iPad visit hits loadingView first. Exercises the *loading* branch
+    // specifically, via assertViewSnapshot's synchronous single-frame render
+    // (the .task that would flip isLoading never runs).
+    //
+    // No structural (isNavigationBarHidden) counterpart here, unlike finding
+    // 3 below: verified empirically (both in this harness, settled with
+    // yields, and on a real iPad simulator with a throwaway QA build) that a
+    // NavigationStack with no navigationTitle anywhere in its tree — true of
+    // every one of this screen's four iPad states, loaded included — settles
+    // isNavigationBarHidden to true on its own, with or without an explicit
+    // .toolbar(.hidden,...). That default happens to mask the bug in
+    // isolation, so a structural assertion here would pass identically
+    // against the pre-fix code and prove nothing. The pixel snapshot is kept
+    // as the regression net finding 2 asks for (and as documentation of the
+    // correct state); the explicit suppression is still the right fix
+    // because it does not rely on that undocumented default holding across
+    // OS versions, dynamic type, or ambient navigation state elsewhere in
+    // the same stack — which is exactly what finding 3's pushed case below
+    // demonstrates going the other way.
+    @Test func scratchpadViewIPadLoadingHidesNavigationBar() throws {
+        let env = try ScratchpadStoreTests.makeEnv()
+        assertViewSnapshot(
+            of: NavigationStack {
+                ScratchpadView(padService: env.pad.service, syncService: env.sync, store: env.store)
+                    .environment(AuthService())
+                    .environment(\.horizontalSizeClass, .regular)
+            },
+            named: "ipadLoading")
+    }
+
+    // Fix-wave finding 3: the same suppression must not fire when this
+    // screen is pushed from More (isPushedDestination) even though it still
+    // reports horizontalSizeClass == .regular — the case that hits on a
+    // Max-size iPhone in landscape. Structural for the same reason as above.
+    @Test func scratchpadViewPushedKeepsNavigationBarEvenAtRegularWidth() async throws {
+        let env = try ScratchpadStoreTests.makeEnv()
+        let nav = await ViewRender.settledNavigationController(
+            hosting: NavigationStack {
+                ScratchpadView(padService: env.pad.service, syncService: env.sync, store: env.store)
+                    .environment(AuthService())
+                    .environment(\.horizontalSizeClass, .regular)
+                    .environment(\.isPushedDestination, true)
+            })
+        #expect(nav?.isNavigationBarHidden == false)
+    }
+
     // Gap-menu follow-on (P7 Task 9): the safeAreaInset loadWarning banner —
     // a decrypt failure alongside a good pad (mirrors
     // ScratchpadStoreTests.decryptFailureCountsIntoLoadWarning).

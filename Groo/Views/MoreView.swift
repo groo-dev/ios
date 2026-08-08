@@ -33,6 +33,7 @@ struct MoreView: View {
             .navigationTitle("More")
             .navigationDestination(for: TabID.self) { tab in
                 content.view(for: tab)
+                    .environment(\.isPushedDestination, true)
             }
         }
     }
