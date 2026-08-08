@@ -181,10 +181,27 @@ iPhone selection gets its own type:
 enum PhoneSelection: Hashable { case feature(TabID), more }
 ```
 
-Persistence stays on the existing `selectedTab` `@AppStorage` key, encoding
-`.feature(x)` as `x.rawValue` and `.more` as `"more"`. One key, backward
-compatible with anything already persisted, and `UITest.launchApp(selectedTab:
-"more")` works without a new launch argument.
+The two selections persist to **separate keys**:
+
+- `padSelection` keeps the existing `selectedTab` key, encoded as `TabID`'s raw
+  value. iPad's semantics and backward compatibility are untouched.
+- `phoneSelection` gets its own `phoneSelectedTab` key, encoding `.feature(x)`
+  as `x.rawValue` and `.more` as `"more"`.
+
+`UITest.launchApp(selectedTab:)` emits **both** launch arguments, so every
+existing UI test keeps working unchanged and a phone test can still seed
+`"more"`.
+
+> **Corrected during execution — the original design here was wrong.** This
+> section first specified a *single* shared `selectedTab` key, reasoning that
+> "only one of the two is ever bound to a live `TabView` in a given process, so
+> they cannot fight." They do fight. Both properties persist on `didSet`, and
+> `open(_:)` writes `padSelection` first and `phoneSelection` second, so for any
+> feature past the phone's 4-slot cut the second write persists the literal
+> string `"more"`. `TabID` has no `more` case, so iPad's restore parses `nil`
+> and silently falls back to `.home` — losing cross-launch tab restoration for
+> five of nine tabs on the platform this branch promises not to touch. Separate
+> keys remove the interaction entirely.
 
 ### Routing
 
