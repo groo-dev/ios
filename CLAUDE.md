@@ -141,7 +141,7 @@ tests, plus **date-dependent** cases whose count varies by when you run.
 AzanViewSnapshotTests.prayerTimeRowVariants()
 PadViewSnapshotTests.padListPopulated()
 PadViewSnapshotTests.padItemRowVariants()
-PassViewSnapshotTests.itemDetailEveryType()   (x7 lines, 1 test name — parameterized)
+PassViewSnapshotTests.itemDetailEveryType()   (x7 lines, 1 test name — manual loop)
 PassViewSnapshotTests.itemDetailCorrupted()
 PassViewSnapshotTests.itemDetailExtraStates()
 RootViewSnapshotTests.globalLockView()
@@ -153,12 +153,12 @@ PrayerTimeServiceTests.afterIshaNextIsTomorrowsFajrAndIshaRunsUntilIt()
 ```
 
 **The failing-set line count is not the number of failing tests.**
-`PassViewSnapshotTests.itemDetailEveryType` is a parameterized test and
-contributes 7 lines under one test name — one line per parameter case, all
-sharing the same failure. Comparing line counts across runs (18 vs. 17 vs.
-16) looks like a regression or a fix when it's actually noise from which
-parameterized tests happened to run; compare the *set of unique test names*,
-or the full multiset of lines against a previous multiset, never a bare count.
+`PassViewSnapshotTests.itemDetailEveryType` is a single test function with a manual
+`for` loop over vault item types, calling `assertViewSnapshot` once per type, all
+sharing the same test name — it contributes 7 lines under one test name. Comparing
+line counts across runs (18 vs. 17 vs. 16) looks like a regression or a fix when
+it's actually noise; compare the *set of unique test names*, or the full multiset
+of lines against a previous multiset, never a bare count.
 
 The date-dependent ones are the other trap — the baseline is not a fixed set
 either:
