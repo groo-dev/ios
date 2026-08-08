@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @Environment(AuthService.self) private var authService
@@ -16,6 +17,8 @@ struct ContentView: View {
     @State private var padService: PadService?
     @State private var syncService: SyncService?
     @State private var passService: PassService?
+    @State private var configStore: TabConfigurationStore?
+    @State private var router: AppRouter?
     @State private var isGloballyUnlocked = false
     @State private var needsGlobalUnlock = false
 
@@ -40,15 +43,26 @@ struct ContentView: View {
                             signOut()
                         }
                     )
-                } else {
-                    MainTabView(
-                        padService: padService,
-                        syncService: syncService,
-                        passService: passService,
-                        onSignOut: {
-                            signOut()
+                } else if let configStore, let router {
+                    Group {
+                        if UIDevice.current.userInterfaceIdiom == .pad {
+                            MainTabView(
+                                padService: padService,
+                                syncService: syncService,
+                                passService: passService,
+                                onSignOut: { signOut() }
+                            )
+                        } else {
+                            PhoneTabView(
+                                padService: padService,
+                                syncService: syncService,
+                                passService: passService,
+                                onSignOut: { signOut() }
+                            )
                         }
-                    )
+                    }
+                    .environment(configStore)
+                    .environment(router)
                 }
             }
         }
@@ -83,6 +97,10 @@ struct ContentView: View {
             padService = PadService(api: api, keychain: UITestMode.keychain)
             syncService = SyncService(api: api, monitorsNetwork: false)
             passService = UITestMode.makePassService()
+
+            let configuration = TabConfigurationStore()
+            configStore = configuration
+            router = AppRouter(store: configuration)
             return
         }
 
@@ -105,6 +123,10 @@ struct ContentView: View {
                 await sync?.sync()
             }
         }
+
+        let configuration = TabConfigurationStore()
+        configStore = configuration
+        router = AppRouter(store: configuration)
     }
 
     private func updateState() {

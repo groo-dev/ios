@@ -144,7 +144,7 @@ struct MainTabView: View {
     }
 }
 
-private struct TabBarMinimizeOnScrollModifier: ViewModifier {
+struct TabBarMinimizeOnScrollModifier: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26, *) {
             content.tabBarMinimizeBehavior(.onScrollDown)
