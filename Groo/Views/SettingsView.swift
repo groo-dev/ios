@@ -57,7 +57,7 @@ struct SettingsView: View {
 
             Section {
                 NavigationLink {
-                    CustomizeTabsView()
+                    CustomizeTabsEntry()
                 } label: {
                     Label("Customize Tabs", systemImage: "slider.horizontal.3")
                 }
