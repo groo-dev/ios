@@ -23,7 +23,7 @@ final class PassUnlockUITests: XCTestCase {
         // Wrong key ⇒ AES-GCM open fails ⇒ error surfaces, vault stays locked
         XCTAssertTrue(app.staticTexts["pass.unlock.error"].waitForExistence(timeout: UITest.timeout))
         XCTAssertTrue(app.staticTexts["Pass is Locked"].exists)
-        XCTAssertFalse(app.buttons["pass.add"].exists)
+        XCTAssertFalse(app.buttons["pass.menu"].exists)
     }
 
     func testUnlockThenLockVaultRelocks() {
@@ -41,6 +41,6 @@ final class PassUnlockUITests: XCTestCase {
         // Locked again: unlock screen back, list gone
         XCTAssertTrue(app.staticTexts["Pass is Locked"].waitForExistence(timeout: UITest.timeout))
         XCTAssertTrue(app.secureTextFields["pass.unlock.password"].waitForExistence(timeout: UITest.timeout))
-        XCTAssertFalse(app.buttons["pass.add"].exists)
+        XCTAssertFalse(app.buttons["pass.menu"].exists)
     }
 }

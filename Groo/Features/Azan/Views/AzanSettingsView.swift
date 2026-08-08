@@ -228,9 +228,6 @@ struct AzanSettingsView: View {
         .navigationTitle("Prayer Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Cancel") { dismiss() }
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Save") {
                     onSave(preferences)

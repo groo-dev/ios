@@ -34,7 +34,7 @@ final class PasswordGeneratorUITests: XCTestCase {
         UITest.unlockPass(app)
 
         // Open the form, then the generator
-        app.buttons["pass.add"].tap()
+        UITest.openAddItem(app)
         let nameField = app.textFields["pass.form.name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: UITest.timeout))
         nameField.tap()

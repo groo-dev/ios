@@ -11,7 +11,6 @@ import os
 struct PassItemListView: View {
     let passService: PassService
     let onSelectItem: (PassVaultItem) -> Void
-    let onAddItem: () -> Void
     let onEditItem: (PassVaultItem) -> Void
 
     @State private var searchText = ""
@@ -93,7 +92,7 @@ struct PassItemListView: View {
         .listStyle(.plain)
         .searchable(text: $searchText, prompt: "Search passwords...")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
                         selectedType = nil
@@ -111,18 +110,9 @@ struct PassItemListView: View {
                         }
                     }
                 } label: {
-                    Image(systemName: selectedType?.icon ?? "line.3.horizontal.decrease.circle")
+                    Image(systemName: selectedType?.icon ?? "line.3.horizontal.decrease")
                         .foregroundStyle(selectedType != nil ? Theme.Brand.primary : .secondary)
                 }
-            }
-
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    onAddItem()
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .accessibilityIdentifier("pass.add")
             }
         }
         .overlay {
@@ -297,7 +287,6 @@ struct PassItemListView: View {
         PassItemListView(
             passService: PassService(),
             onSelectItem: { _ in },
-            onAddItem: {},
             onEditItem: { _ in }
         )
         .navigationTitle("Pass")

@@ -27,17 +27,23 @@ struct PassView: View {
                     onSelectItem: { item in
                         selectedItem = item
                     },
-                    onAddItem: {
-                        showingAddItem = true
-                    },
                     onEditItem: { item in
                         editingItem = item
                     }
                 )
                 .navigationTitle("Pass")
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
+                    ToolbarItem(placement: .topBarTrailing) {
                         Menu {
+                            Button {
+                                showingAddItem = true
+                            } label: {
+                                Label("Add Item", systemImage: "plus")
+                            }
+                            .accessibilityIdentifier("pass.add")
+
+                            Divider()
+
                             Button {
                                 showingFolders = true
                             } label: {
@@ -65,7 +71,7 @@ struct PassView: View {
                                 Label("Lock Vault", systemImage: "lock.fill")
                             }
                         } label: {
-                            Image(systemName: "ellipsis.circle")
+                            Image(systemName: "ellipsis")
                         }
                         .accessibilityIdentifier("pass.menu")
                     }

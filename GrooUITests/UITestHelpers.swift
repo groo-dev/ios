@@ -59,7 +59,19 @@ enum UITest {
         field.tap()
         field.typeText(masterPassword)
         app.buttons["pass.unlock.submit"].tap()
-        XCTAssertTrue(app.buttons["pass.add"].waitForExistence(timeout: timeout), "vault did not unlock into the item list", file: file, line: line)
+        // `pass.menu` is the unlocked list's own toolbar affordance — `pass.add`
+        // now lives inside that menu and does not exist until it is opened.
+        XCTAssertTrue(app.buttons["pass.menu"].waitForExistence(timeout: timeout), "vault did not unlock into the item list", file: file, line: line)
+    }
+
+    /// Open the "Add Item" form. Add moved out of the toolbar and under the
+    /// vault's overflow menu, so reaching it is two taps — keep that detail
+    /// here rather than in every test that creates an item.
+    static func openAddItem(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        app.buttons["pass.menu"].tap()
+        let add = app.buttons["pass.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: timeout), "Add Item missing from the vault menu", file: file, line: line)
+        add.tap()
     }
 
     /// Select a tab by title, falling back to the app-owned More screen.

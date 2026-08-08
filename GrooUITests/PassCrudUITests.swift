@@ -16,7 +16,7 @@ final class PassCrudUITests: XCTestCase {
         UITest.unlockPass(app)
 
         // ---- Create ----
-        app.buttons["pass.add"].tap()
+        UITest.openAddItem(app)
         let nameField = app.textFields["pass.form.name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: UITest.timeout))
         nameField.tap()

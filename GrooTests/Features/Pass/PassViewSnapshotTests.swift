@@ -104,7 +104,7 @@ struct PassViewSnapshotTests {
         defer { Self.cleanUp(env) }
         let view = NavigationStack {
             PassItemListView(passService: env.service, onSelectItem: { _ in },
-                             onAddItem: {}, onEditItem: { _ in })
+                             onEditItem: { _ in })
         }
         assertViewSnapshot(of: view, named: "populated", size: Self.tallListSize)
     }
@@ -114,7 +114,7 @@ struct PassViewSnapshotTests {
         defer { Self.cleanUp(env) }
         let view = NavigationStack {
             PassItemListView(passService: env.service, onSelectItem: { _ in },
-                             onAddItem: {}, onEditItem: { _ in })
+                             onEditItem: { _ in })
         }
         assertViewSnapshot(of: view, named: "dark", size: Self.tallListSize, appearance: .dark)
         assertViewSnapshot(
@@ -128,7 +128,7 @@ struct PassViewSnapshotTests {
         assertViewSnapshot(
             of: NavigationStack {
                 PassItemListView(passService: env.service, onSelectItem: { _ in },
-                                 onAddItem: {}, onEditItem: { _ in })
+                                 onEditItem: { _ in })
             },
             named: "empty")
     }
