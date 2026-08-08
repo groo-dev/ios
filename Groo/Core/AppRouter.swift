@@ -41,15 +41,22 @@ enum PhoneSelection: Hashable {
 @Observable
 @MainActor
 final class AppRouter {
-    /// Shares the key the app has always used, so a persisted selection from
-    /// before this feature — and UITest's `-selectedTab` override — still work.
+    /// The key the app has always used for iPad's selection, so a persisted
+    /// value from before this feature — and UITest's `-selectedTab` override
+    /// — still work.
     static let selectionKey = "selectedTab"
+
+    /// iPhone's selection gets its own key. It encodes `PhoneSelection`
+    /// (including the synthetic `"more"` case, which is not a `TabID`), so it
+    /// cannot share `selectionKey` with `padSelection` without one clobbering
+    /// the other on every write.
+    static let phoneSelectionKey = "phoneSelectedTab"
 
     private let store: TabConfigurationStore
     private let defaults: UserDefaults
 
     var phoneSelection: PhoneSelection {
-        didSet { defaults.set(phoneSelection.storageValue, forKey: Self.selectionKey) }
+        didSet { defaults.set(phoneSelection.storageValue, forKey: Self.phoneSelectionKey) }
     }
 
     var padSelection: TabID {
@@ -62,10 +69,12 @@ final class AppRouter {
         self.store = store
         self.defaults = defaults
 
-        let stored = defaults.string(forKey: Self.selectionKey)
-        let restored = stored.flatMap(PhoneSelection.init(storageValue:))
+        let storedPhone = defaults.string(forKey: Self.phoneSelectionKey)
+        let restored = storedPhone.flatMap(PhoneSelection.init(storageValue:))
         self.phoneSelection = Self.resolve(restored, in: store.configuration)
-        self.padSelection = stored.flatMap(TabID.init(rawValue:)) ?? .home
+
+        let storedPad = defaults.string(forKey: Self.selectionKey)
+        self.padSelection = storedPad.flatMap(TabID.init(rawValue:)) ?? .home
     }
 
     /// Navigate to a feature, wherever it currently lives.

@@ -65,7 +65,7 @@ struct AppRouterTests {
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         // Stocks is past the cut in the default configuration.
-        defaults.set("stocks", forKey: AppRouter.selectionKey)
+        defaults.set("stocks", forKey: AppRouter.phoneSelectionKey)
 
         let router = AppRouter(store: TabConfigurationStore(defaults: defaults), defaults: defaults)
 
@@ -78,7 +78,7 @@ struct AppRouterTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(#"{"order":["azan","pass","pad","stocks","crypto","drive","scratchpad"],"showsHome":false}"#,
                      forKey: TabConfigurationStore.defaultsKey)
-        defaults.set("home", forKey: AppRouter.selectionKey)
+        defaults.set("home", forKey: AppRouter.phoneSelectionKey)
 
         let router = AppRouter(store: TabConfigurationStore(defaults: defaults), defaults: defaults)
 
@@ -89,7 +89,7 @@ struct AppRouterTests {
         let suiteName = "approuter-tests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set("more", forKey: AppRouter.selectionKey)
+        defaults.set("more", forKey: AppRouter.phoneSelectionKey)
 
         let router = AppRouter(store: TabConfigurationStore(defaults: defaults), defaults: defaults)
 
@@ -100,7 +100,7 @@ struct AppRouterTests {
         let suiteName = "approuter-tests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set("settings", forKey: AppRouter.selectionKey)
+        defaults.set("settings", forKey: AppRouter.phoneSelectionKey)
 
         let router = AppRouter(store: TabConfigurationStore(defaults: defaults), defaults: defaults)
 
@@ -127,7 +127,30 @@ struct AppRouterTests {
 
         router.open(.stocks)
 
-        #expect(defaults.string(forKey: AppRouter.selectionKey) == "more")
+        #expect(defaults.string(forKey: AppRouter.phoneSelectionKey) == "more")
+    }
+
+    @Test func padSelectionRestoresFromItsOwnKey() throws {
+        let suiteName = "approuter-tests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("stocks", forKey: AppRouter.selectionKey)
+
+        let router = AppRouter(store: TabConfigurationStore(defaults: defaults), defaults: defaults)
+
+        #expect(router.padSelection == .stocks)
+    }
+
+    @Test func padSelectionSurvivesAFreshRouterAfterOpeningAFeaturePastTheCut() throws {
+        let (router, _, defaults, suite) = try makeEnv()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        router.open(.stocks)   // stocks is past the phone's 4-slot cut
+
+        let restored = AppRouter(store: TabConfigurationStore(defaults: defaults), defaults: defaults)
+
+        #expect(restored.padSelection == .stocks)
+        #expect(restored.phoneSelection == .more)
     }
 
     @Test func phoneSelectionStorageValueRoundTrips() {
