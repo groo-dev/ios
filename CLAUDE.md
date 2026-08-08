@@ -79,17 +79,98 @@ NSExtensionAttributes`. Declared one level up it is silently ignored: password
 AutoFill keeps working (it is the default) while passkeys are never offered.
 Pinned by `GrooTests/Features/Pass/AutoFillCapabilitiesTests.swift`.
 
+**Feature screens own no root `NavigationStack`.** `FeatureContent.view(for:)`
+returns stack-free content; the host supplies the stack — `MainTabView` and
+`PhoneTabView` per tab, `MoreView` once for every pushed destination. Adding a
+root stack back to a feature screen produces a doubled navigation bar the
+moment that feature is dragged into More. `.navigationTitle`, `.toolbar` and
+`.navigationDestination` all seek an ancestor stack, so they belong on the
+screen, not the host. Two screens deliberately hide the inherited bar because
+they never had one — `PadUnlockView` and `ScratchpadView`'s regular (iPad)
+branch. `ScratchpadUnlockView` (the locked state inside `ScratchpadTabView`)
+does **not** hide it — it carries a real `.navigationTitle("Scratchpad")` and
+relies on the host's stack to render it.
+
+**iPhone vs iPad roots branch on device idiom, once, in `ContentView`.** Never
+convert this to `horizontalSizeClass`: size class flips at runtime (rotation,
+Slide Over, Stage Manager), and each flip would restructure the `TabView` and
+reset tab selection and per-tab state. Be precise about "once" — `body`
+re-executes on every render like any SwiftUI view, so the branch is evaluated
+repeatedly, not a single time. What's actually true is that
+`UIDevice.current.userInterfaceIdiom` is a runtime constant, so every
+re-evaluation takes the same branch and SwiftUI never tears down or rebuilds
+the chosen tab view as a result.
+
+**`NSArgumentDomain` silently drops any launch-argument value starting with
+`{`.** Foundation tries to parse such a value as old-style plist syntax; when
+that fails (a JSON payload never matches it) the argument is discarded
+outright rather than falling back to a plain string — even
+`UserDefaults.object(forKey:)` comes back `nil`. This is why
+`UITestMode.seedPhoneTabBarIfProvided()` parses `argv` directly instead of
+relying on `-phoneTabBar <json>` reaching `UserDefaults` through the ordinary
+launch-argument seam. Plain values like `-selectedTab home` or
+`-phoneSelectedTab more` are unaffected — they never start with `{`.
+
+**Debug and Release install under different bundle IDs**
+(`dev.groo.ios.debug` vs `dev.groo.ios`), and `UITestMode.isActive` is
+`#if DEBUG`-gated, so a Release build silently ignores `--uitest` — it just
+runs as an ordinary, unseamed launch. Combined with the already-documented
+"Xcode Run installs Release" gotcha above, this makes manual simulator
+verification easy to get wrong: you can spend a long time inspecting an app
+that isn't the one you just built, or an app that ignores your launch
+arguments entirely. Check the installed bundle ID (or just rebuild with
+`xcodebuild ... build` and reinstall) before trusting what you see.
+
+**`withPinnedDefaults` mutates `UserDefaults.standard` in place.** It saves
+and restores the previous value around the body block, but the mutation is
+real and global for the duration of that block, so any test suite calling it
+must sit under the `NetworkStubbedSuites(.serialized)` umbrella
+(`extension NetworkStubbedSuites { @Suite(.serialized) struct … }`) or it
+races sibling suites touching the same defaults. All current callers
+(`AzanViewSnapshotTests`, `CryptoViewSnapshotTests`, `StockPortfolioManagerTests`,
+`StocksViewSnapshotTests`, `PhoneTabSnapshotTests`, `RootViewSnapshotTests`) do
+this — keep new callers under the same umbrella.
+
 ## Test suite baseline
 
-As of 2026-08-07 the unit suite has ~16 pre-existing failures: view snapshot
+As of 2026-08-08 the unit suite has 12 unique pre-existing failures (18
+failing-test *lines* — see the parameterized-test trap below): view snapshot
 tests, plus **date-dependent** cases whose count varies by when you run.
 
-The date-dependent ones are the trap — the baseline is not a fixed number:
+```
+AzanViewSnapshotTests.prayerTimeRowVariants()
+PadViewSnapshotTests.padListPopulated()
+PadViewSnapshotTests.padItemRowVariants()
+PassViewSnapshotTests.itemDetailEveryType()   (x7 lines, 1 test name — parameterized)
+PassViewSnapshotTests.itemDetailCorrupted()
+PassViewSnapshotTests.itemDetailExtraStates()
+RootViewSnapshotTests.globalLockView()
+RootViewSnapshotTests.settingsView()
+RootViewSnapshotTests.settingsViewWithBackupDate()
+ScratchpadViewSnapshotTests.scratchpadListStates()
+StocksViewSnapshotTests.stockPriceChartVariants()
+PrayerTimeServiceTests.afterIshaNextIsTomorrowsFajrAndIshaRunsUntilIt()
+```
+
+**The failing-set line count is not the number of failing tests.**
+`PassViewSnapshotTests.itemDetailEveryType` is a parameterized test and
+contributes 7 lines under one test name — one line per parameter case, all
+sharing the same failure. Comparing line counts across runs (18 vs. 17 vs.
+16) looks like a regression or a fix when it's actually noise from which
+parameterized tests happened to run; compare the *set of unique test names*,
+or the full multiset of lines against a previous multiset, never a bare count.
+
+The date-dependent ones are the other trap — the baseline is not a fixed set
+either:
 
 - `PrayerTimeServiceTests.afterIshaNextIsTomorrowsFajrAndIshaRunsUntilIt`
 - `AzanNotificationServiceTests.jumuahReminderScheduledWhenEnabled` — only
   failed on a Friday after Dhuhr; fixed 2026-08-07, and `jumuahReminderTime`
   now rolls past an elapsed Friday.
+
+For the UI suite, expect exactly one pre-existing failure —
+`PassUnlockUITests.testUnlockThenLockVaultRelocks` — confirmed pre-existing
+against the merge base, unrelated to this branch's work.
 
 So diff the failing *set*, never the count, and re-run a suspicious failure at a
 different time of day before blaming your change:
