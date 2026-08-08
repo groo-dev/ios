@@ -79,4 +79,40 @@ struct TabConfigurationTests {
         let decoded = try JSONDecoder().decode(TabConfiguration.self, from: data)
         #expect(decoded == config)
     }
+
+    // MARK: - move(fromOffsets:toOffset:) shapes
+    //
+    // Array's built-in move(fromOffsets:toOffset:) is a SwiftUI extension,
+    // out of bounds for this plain data model, so TabConfiguration
+    // reimplements its IndexSet semantics with Foundation only. That
+    // reimplementation needs its own coverage independent of the framework's.
+
+    @Test func moveDownwardShiftsElementRight() {
+        var config = TabConfiguration.default   // [azan, pass, pad, stocks, crypto, drive, scratchpad]
+        config.move(fromOffsets: IndexSet(integer: 0), toOffset: 4)   // azan past stocks
+        #expect(config.order == [.pass, .pad, .stocks, .azan, .crypto, .drive, .scratchpad])
+    }
+
+    @Test func moveMultipleIndicesPreservesTheirRelativeOrder() {
+        var config = TabConfiguration.default   // [azan, pass, pad, stocks, crypto, drive, scratchpad]
+        config.move(fromOffsets: IndexSet([0, 2]), toOffset: 6)   // azan and pad, downward together
+        #expect(config.order == [.pass, .stocks, .crypto, .drive, .azan, .pad, .scratchpad])
+    }
+
+    @Test func moveToOwnPositionIsANoOp() {
+        var config = TabConfiguration.default   // [azan, pass, pad, stocks, crypto, drive, scratchpad]
+        config.move(fromOffsets: IndexSet(integer: 3), toOffset: 3)   // stocks to itself
+        #expect(config.order == TabConfiguration.reorderable)
+    }
+
+    @Test func moveToTheEndAppends() {
+        // Pins the exact scenario AppRouterTests (Task 8) depends on:
+        // configurationChangeClearsThePathAndRevalidatesSelection moves
+        // .pass to the very end and requires this exact bar composition.
+        // If this test ever breaks, Task 8 breaks with it.
+        var config = TabConfiguration.default   // [azan, pass, pad, stocks, crypto, drive, scratchpad]
+        config.move(fromOffsets: IndexSet(integer: 1), toOffset: 7)   // pass to the end
+        #expect(config.order == [.azan, .pad, .stocks, .crypto, .drive, .scratchpad, .pass])
+        #expect(config.barTabs == [.home, .azan, .pad, .stocks])
+    }
 }
