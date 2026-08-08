@@ -156,9 +156,15 @@ struct StocksViewSnapshotTests {
     @Test func stockOnboarding() throws {
         StubURLProtocol.reset()
         let store = try InMemoryLocalStore.make()
+        // StockOnboardingView lost its own NavigationStack when Stocks was
+        // hoisted to the host — wrapped here to mirror the host stack
+        // MainTabView always supplies now (its navigationTitle("Stocks")
+        // needs an ancestor stack to render through).
         assertViewSnapshot(
-            of: StockOnboardingView(portfolioManager: StockPortfolioManager(store: store),
-                                    yahooService: Self.stubbedYahoo()),
+            of: NavigationStack {
+                StockOnboardingView(portfolioManager: StockPortfolioManager(store: store),
+                                    yahooService: Self.stubbedYahoo())
+            },
             named: "empty")
     }
 

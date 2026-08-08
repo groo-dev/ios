@@ -135,8 +135,14 @@ struct CryptoViewSnapshotTests {
         StubURLProtocol.reset()
         let setup = try await Self.makeWalletSetup(items: [], addresses: [])
         defer { Self.tearDown(setup) }
+        // WalletOnboardingView lost its own NavigationStack when Wallet was
+        // hoisted to the host — wrapped here to mirror the host stack
+        // MainTabView always supplies now (its navigationTitle("Wallet")
+        // needs an ancestor stack to render through).
         assertViewSnapshot(
-            of: WalletOnboardingView(walletManager: setup.manager, passService: setup.env.service),
+            of: NavigationStack {
+                WalletOnboardingView(walletManager: setup.manager, passService: setup.env.service)
+            },
             named: "main")
     }
 
@@ -175,9 +181,14 @@ struct CryptoViewSnapshotTests {
         let previousActive = UserDefaults.standard.object(forKey: "activeWalletAddress")
         UserDefaults.standard.removeObject(forKey: "activeWalletAddress")
         defer { if let previousActive { UserDefaults.standard.set(previousActive, forKey: "activeWalletAddress") } }
+        // CryptoView renders WalletOnboardingView's onboarding branch here,
+        // which lost its own NavigationStack when Wallet was hoisted to the
+        // host — wrapped to mirror the host stack MainTabView always
+        // supplies now (its navigationTitle("Wallet") needs an ancestor
+        // stack to render through).
         await withPinnedDefaults(["walletAddresses": [String]()]) {
             await assertSettledViewSnapshot(
-                of: CryptoView(passService: env.service), named: "onboarding")
+                of: NavigationStack { CryptoView(passService: env.service) }, named: "onboarding")
         }
     }
 

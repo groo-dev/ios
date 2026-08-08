@@ -48,94 +48,121 @@ struct PortfolioView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                // Portfolio header
-                Section {
-                    VStack(spacing: Theme.Spacing.xs) {
-                        if let address = walletManager.activeAddress {
-                            Button {
-                                showWalletList = true
-                            } label: {
-                                HStack(spacing: Theme.Spacing.xs) {
-                                    Text("\(address.prefix(6))...\(address.suffix(4))")
-                                        .font(.caption.monospaced())
-                                    Image(systemName: "chevron.down")
-                                        .font(.caption2)
-                                }
-                                .foregroundStyle(.secondary)
-                                .contentShape(Rectangle())
+        List {
+            // Portfolio header
+            Section {
+                VStack(spacing: Theme.Spacing.xs) {
+                    if let address = walletManager.activeAddress {
+                        Button {
+                            showWalletList = true
+                        } label: {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                Text("\(address.prefix(6))...\(address.suffix(4))")
+                                    .font(.caption.monospaced())
+                                Image(systemName: "chevron.down")
+                                    .font(.caption2)
                             }
-                            .buttonStyle(.plain)
-                        }
-
-                        Text(formatCurrency(totalValue))
-                            .font(.system(size: 34, weight: .bold, design: .rounded))
-                            .contentTransition(.numericText())
-
-                        Text("Total Balance")
-                            .font(.caption)
                             .foregroundStyle(.secondary)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
 
-                        if isRefreshing {
+                    Text(formatCurrency(totalValue))
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .contentTransition(.numericText())
+
+                    Text("Total Balance")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if isRefreshing {
+                        HStack(spacing: Theme.Spacing.xs) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Updating prices...")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .transition(.opacity)
+                    } else if isOffline {
+                        HStack(spacing: Theme.Spacing.xs) {
+                            Image(systemName: "wifi.slash")
+                                .font(.caption2)
+                            Text("You're offline")
+                                .font(.caption2)
+                        }
+                        .foregroundStyle(.orange)
+                        .transition(.opacity)
+                    } else if staleReason != nil {
+                        Button {
+                            showStaleReason = true
+                        } label: {
                             HStack(spacing: Theme.Spacing.xs) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Updating prices...")
+                                Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .transition(.opacity)
-                        } else if isOffline {
-                            HStack(spacing: Theme.Spacing.xs) {
-                                Image(systemName: "wifi.slash")
-                                    .font(.caption2)
-                                Text("You're offline")
+                                Text("Prices may be outdated")
                                     .font(.caption2)
                             }
                             .foregroundStyle(.orange)
-                            .transition(.opacity)
-                        } else if staleReason != nil {
-                            Button {
-                                showStaleReason = true
-                            } label: {
-                                HStack(spacing: Theme.Spacing.xs) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .font(.caption2)
-                                    Text("Prices may be outdated")
-                                        .font(.caption2)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .transition(.opacity)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.md)
+                .listRowBackground(Color.clear)
+                .animation(.default, value: isRefreshing)
+                .animation(.default, value: isOffline)
+                .animation(.default, value: staleReason)
+            }
+
+            // Tracked assets
+            Section("Assets") {
+                if isLoading && assets.isEmpty {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                    .padding()
+                } else if trackedAssets.isEmpty {
+                    Text("No assets found")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                } else {
+                    ForEach(trackedAssets) { asset in
+                        Button {
+                            selectedAsset = asset
+                        } label: {
+                            assetRow(asset)
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing) {
+                            if asset.contractAddress != nil {
+                                Button {
+                                    untrackAsset(asset)
+                                } label: {
+                                    Label("Untrack", systemImage: "eye.slash")
                                 }
-                                .foregroundStyle(.orange)
-                                .contentShape(Rectangle())
+                                .tint(.orange)
                             }
-                            .buttonStyle(.plain)
-                            .transition(.opacity)
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.md)
-                    .listRowBackground(Color.clear)
-                    .animation(.default, value: isRefreshing)
-                    .animation(.default, value: isOffline)
-                    .animation(.default, value: staleReason)
                 }
+            }
 
-                // Tracked assets
-                Section("Assets") {
-                    if isLoading && assets.isEmpty {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                            Spacer()
-                        }
-                        .padding()
-                    } else if trackedAssets.isEmpty {
-                        Text("No assets found")
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                    } else {
-                        ForEach(trackedAssets) { asset in
+            // Other (untracked) tokens
+            if !otherAssets.isEmpty {
+                Section {
+                    DisclosureGroup(
+                        "Other Tokens (\(otherAssets.count))",
+                        isExpanded: $otherTokensExpanded
+                    ) {
+                        ForEach(otherAssets) { asset in
                             Button {
                                 selectedAsset = asset
                             } label: {
@@ -143,126 +170,99 @@ struct PortfolioView: View {
                             }
                             .buttonStyle(.plain)
                             .swipeActions(edge: .trailing) {
-                                if asset.contractAddress != nil {
-                                    Button {
-                                        untrackAsset(asset)
-                                    } label: {
-                                        Label("Untrack", systemImage: "eye.slash")
-                                    }
-                                    .tint(.orange)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Other (untracked) tokens
-                if !otherAssets.isEmpty {
-                    Section {
-                        DisclosureGroup(
-                            "Other Tokens (\(otherAssets.count))",
-                            isExpanded: $otherTokensExpanded
-                        ) {
-                            ForEach(otherAssets) { asset in
                                 Button {
-                                    selectedAsset = asset
+                                    trackAsset(asset)
                                 } label: {
-                                    assetRow(asset)
+                                    Label("Track", systemImage: "eye")
                                 }
-                                .buttonStyle(.plain)
-                                .swipeActions(edge: .trailing) {
-                                    Button {
-                                        trackAsset(asset)
-                                    } label: {
-                                        Label("Track", systemImage: "eye")
-                                    }
-                                    .tint(.green)
-                                }
+                                .tint(.green)
                             }
                         }
                     }
                 }
             }
-            .accessibilityIdentifier("wallet.portfolio")
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .refreshable {
-                await loadPortfolio(forceRefresh: true)
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showWalletList = true
-                    } label: {
-                        Image(systemName: "wallet.bifold")
-                    }
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        showReceive = true
-                    } label: {
-                        Image(systemName: "qrcode")
-                    }
-                    Button {
-                        showAddWallet = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
+        }
+        .accessibilityIdentifier("wallet.portfolio")
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable {
+            await loadPortfolio(forceRefresh: true)
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showWalletList = true
+                } label: {
+                    Image(systemName: "wallet.bifold")
                 }
             }
-            .sheet(item: $selectedAsset) { asset in
-                NavigationStack {
-                    AssetDetailView(
-                        asset: asset,
-                        walletManager: walletManager,
-                        ethereumService: ethereumService,
-                        coinGeckoService: coinGeckoService,
-                        passService: passService
-                    )
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    showReceive = true
+                } label: {
+                    Image(systemName: "qrcode")
+                }
+                Button {
+                    showAddWallet = true
+                } label: {
+                    Image(systemName: "plus")
                 }
             }
-            .sheet(isPresented: $showAddWallet) {
+        }
+        .sheet(item: $selectedAsset) { asset in
+            NavigationStack {
+                AssetDetailView(
+                    asset: asset,
+                    walletManager: walletManager,
+                    ethereumService: ethereumService,
+                    coinGeckoService: coinGeckoService,
+                    passService: passService
+                )
+            }
+        }
+        .sheet(isPresented: $showAddWallet) {
+            NavigationStack {
                 WalletOnboardingView(
                     walletManager: walletManager,
                     passService: passService
                 )
             }
-            .sheet(isPresented: $showWalletList) {
+        }
+        .sheet(isPresented: $showWalletList) {
+            NavigationStack {
+                WalletListView(
+                    walletManager: walletManager,
+                    passService: passService
+                )
+            }
+        }
+        .sheet(isPresented: $showReceive) {
+            if let address = walletManager.activeAddress {
                 NavigationStack {
-                    WalletListView(
-                        walletManager: walletManager,
-                        passService: passService
-                    )
+                    ReceiveView(address: address)
                 }
             }
-            .sheet(isPresented: $showReceive) {
-                if let address = walletManager.activeAddress {
-                    NavigationStack {
-                        ReceiveView(address: address)
-                    }
-                }
-            }
-            .task {
-                loadCachedPortfolio()
-                await loadPortfolio()
-            }
-            .onChange(of: walletManager.activeAddress) {
-                loadCachedPortfolio()
-                Task { await loadPortfolio() }
-            }
-            .alert("Error", isPresented: .init(
-                get: { error != nil },
-                set: { if !$0 { error = nil } }
-            )) {
-                Button("OK") { error = nil }
-            } message: {
-                Text(error ?? "")
-            }
-            .alert("Prices may be outdated", isPresented: $showStaleReason) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(staleReason ?? "")
-            }
+        }
+        .task {
+            loadCachedPortfolio()
+            await loadPortfolio()
+        }
+        .onChange(of: walletManager.activeAddress) {
+            loadCachedPortfolio()
+            Task { await loadPortfolio() }
+        }
+        .alert("Error", isPresented: .init(
+            get: { error != nil },
+            set: { if !$0 { error = nil } }
+        )) {
+            Button("OK") { error = nil }
+        } message: {
+            Text(error ?? "")
+        }
+        .alert("Prices may be outdated", isPresented: $showStaleReason) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(staleReason ?? "")
         }
     }
 

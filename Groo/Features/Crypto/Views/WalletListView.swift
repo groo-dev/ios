@@ -102,10 +102,12 @@ struct WalletListView: View {
             }
         }
         .sheet(isPresented: $showAddWallet) {
-            WalletOnboardingView(
-                walletManager: walletManager,
-                passService: passService
-            )
+            NavigationStack {
+                WalletOnboardingView(
+                    walletManager: walletManager,
+                    passService: passService
+                )
+            }
         }
         .alert("Delete Wallet", isPresented: $showDeleteConfirm) {
             Button("Cancel", role: .cancel) {

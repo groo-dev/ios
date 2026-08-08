@@ -18,165 +18,163 @@ struct StockPortfolioView: View {
     @State private var showCurrencyPicker = false
 
     var body: some View {
-        NavigationStack {
-            List {
-                // Portfolio header
-                Section {
-                    VStack(spacing: Theme.Spacing.xs) {
-                        if portfolioManager.hasAnyTransactions {
-                            Text(CurrencyFormatter.format(portfolioManager.totalValue, currencyCode: displayCurrency))
-                                .font(.system(size: 34, weight: .bold, design: .rounded))
-                                .contentTransition(.numericText())
+        List {
+            // Portfolio header
+            Section {
+                VStack(spacing: Theme.Spacing.xs) {
+                    if portfolioManager.hasAnyTransactions {
+                        Text(CurrencyFormatter.format(portfolioManager.totalValue, currencyCode: displayCurrency))
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .contentTransition(.numericText())
 
-                            Button {
-                                showCurrencyPicker = true
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text("Portfolio Value")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    Text(displayCurrency)
-                                        .font(.caption2)
-                                        .fontWeight(.medium)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Color(.tertiarySystemFill))
-                                        .clipShape(Capsule())
-                                }
-                            }
-                            .buttonStyle(.plain)
-
-                            // Gain/loss summary
-                            if portfolioManager.totalCostBasis > 0 {
-                                HStack(spacing: Theme.Spacing.xs) {
-                                    Image(systemName: portfolioManager.totalGainLoss >= 0 ? "arrow.up.right" : "arrow.down.right")
-                                        .font(.caption2)
-                                    Text("\(CurrencyFormatter.format(abs(portfolioManager.totalGainLoss), currencyCode: displayCurrency)) (\(formatPercent(portfolioManager.totalGainLossPercent)))")
-                                        .font(.caption)
-                                }
-                                .foregroundStyle(portfolioManager.totalGainLoss >= 0 ? .green : .red)
-                            }
-
-                            // Day gain/loss
-                            if portfolioManager.totalDayGainLoss != 0 {
-                                Text("Today: \(CurrencyFormatter.format(portfolioManager.totalDayGainLoss, currencyCode: displayCurrency, showSign: true))")
+                        Button {
+                            showCurrencyPicker = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("Portfolio Value")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(displayCurrency)
                                     .font(.caption2)
-                                    .foregroundStyle(portfolioManager.totalDayGainLoss >= 0 ? .green : .red)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color(.tertiarySystemFill))
+                                    .clipShape(Capsule())
                             }
-                        } else {
-                            Text("Watchlist")
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                        }
+                        .buttonStyle(.plain)
 
-                            Text("\(portfolioManager.holdings.count) stocks")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        // Gain/loss summary
+                        if portfolioManager.totalCostBasis > 0 {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                Image(systemName: portfolioManager.totalGainLoss >= 0 ? "arrow.up.right" : "arrow.down.right")
+                                    .font(.caption2)
+                                Text("\(CurrencyFormatter.format(abs(portfolioManager.totalGainLoss), currencyCode: displayCurrency)) (\(formatPercent(portfolioManager.totalGainLossPercent)))")
+                                    .font(.caption)
+                            }
+                            .foregroundStyle(portfolioManager.totalGainLoss >= 0 ? .green : .red)
                         }
 
-                        // Status indicators
-                        if portfolioManager.isRefreshing {
+                        // Day gain/loss
+                        if portfolioManager.totalDayGainLoss != 0 {
+                            Text("Today: \(CurrencyFormatter.format(portfolioManager.totalDayGainLoss, currencyCode: displayCurrency, showSign: true))")
+                                .font(.caption2)
+                                .foregroundStyle(portfolioManager.totalDayGainLoss >= 0 ? .green : .red)
+                        }
+                    } else {
+                        Text("Watchlist")
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+
+                        Text("\(portfolioManager.holdings.count) stocks")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // Status indicators
+                    if portfolioManager.isRefreshing {
+                        HStack(spacing: Theme.Spacing.xs) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Updating prices...")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .transition(.opacity)
+                    } else if portfolioManager.isOffline {
+                        HStack(spacing: Theme.Spacing.xs) {
+                            Image(systemName: "wifi.slash")
+                                .font(.caption2)
+                            Text("You're offline")
+                                .font(.caption2)
+                        }
+                        .foregroundStyle(.orange)
+                        .transition(.opacity)
+                    } else if portfolioManager.staleReason != nil {
+                        Button {
+                            showStaleReason = true
+                        } label: {
                             HStack(spacing: Theme.Spacing.xs) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Updating prices...")
+                                Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .transition(.opacity)
-                        } else if portfolioManager.isOffline {
-                            HStack(spacing: Theme.Spacing.xs) {
-                                Image(systemName: "wifi.slash")
-                                    .font(.caption2)
-                                Text("You're offline")
+                                Text("Prices may be outdated")
                                     .font(.caption2)
                             }
                             .foregroundStyle(.orange)
-                            .transition(.opacity)
-                        } else if portfolioManager.staleReason != nil {
-                            Button {
-                                showStaleReason = true
-                            } label: {
-                                HStack(spacing: Theme.Spacing.xs) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .font(.caption2)
-                                    Text("Prices may be outdated")
-                                        .font(.caption2)
-                                }
-                                .foregroundStyle(.orange)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .transition(.opacity)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.md)
-                    .listRowBackground(Color.clear)
-                    .animation(.default, value: portfolioManager.isRefreshing)
-                    .animation(.default, value: portfolioManager.isOffline)
-                    .animation(.default, value: portfolioManager.staleReason)
-                }
-
-                // Holdings
-                Section("Stocks") {
-                    ForEach(portfolioManager.holdings) { holding in
-                        Button {
-                            selectedHolding = holding
-                        } label: {
-                            holdingRow(holding)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                portfolioManager.deleteHolding(symbol: holding.symbol)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
+                        .transition(.opacity)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.md)
+                .listRowBackground(Color.clear)
+                .animation(.default, value: portfolioManager.isRefreshing)
+                .animation(.default, value: portfolioManager.isOffline)
+                .animation(.default, value: portfolioManager.staleReason)
+            }
+
+            // Holdings
+            Section("Stocks") {
+                ForEach(portfolioManager.holdings) { holding in
+                    Button {
+                        selectedHolding = holding
+                    } label: {
+                        holdingRow(holding)
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            portfolioManager.deleteHolding(symbol: holding.symbol)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                         }
                     }
                 }
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .refreshable {
-                await portfolioManager.refreshPrices(using: yahooService, forceRefresh: true)
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSearch = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable {
+            await portfolioManager.refreshPrices(using: yahooService, forceRefresh: true)
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showSearch = true
+                } label: {
+                    Image(systemName: "plus")
                 }
             }
-            .sheet(isPresented: $showSearch) {
-                StockSearchView(
+        }
+        .sheet(isPresented: $showSearch) {
+            StockSearchView(
+                portfolioManager: portfolioManager,
+                yahooService: yahooService
+            )
+        }
+        .sheet(item: $selectedHolding) { holding in
+            NavigationStack {
+                StockDetailView(
+                    holding: holding,
                     portfolioManager: portfolioManager,
                     yahooService: yahooService
                 )
             }
-            .sheet(item: $selectedHolding) { holding in
-                NavigationStack {
-                    StockDetailView(
-                        holding: holding,
-                        portfolioManager: portfolioManager,
-                        yahooService: yahooService
-                    )
-                }
-            }
-            .alert("Prices may be outdated", isPresented: $showStaleReason) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(portfolioManager.staleReason ?? "")
-            }
-            .onChange(of: displayCurrency) {
-                portfolioManager.displayCurrency = displayCurrency
-                Task { await portfolioManager.refreshExchangeRates(using: yahooService) }
-            }
-            .sheet(isPresented: $showCurrencyPicker) {
-                NavigationStack {
-                    CurrencyPickerView(selectedCurrency: $displayCurrency)
-                }
+        }
+        .alert("Prices may be outdated", isPresented: $showStaleReason) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(portfolioManager.staleReason ?? "")
+        }
+        .onChange(of: displayCurrency) {
+            portfolioManager.displayCurrency = displayCurrency
+            Task { await portfolioManager.refreshExchangeRates(using: yahooService) }
+        }
+        .sheet(isPresented: $showCurrencyPicker) {
+            NavigationStack {
+                CurrencyPickerView(selectedCurrency: $displayCurrency)
             }
         }
     }

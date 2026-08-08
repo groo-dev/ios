@@ -24,100 +24,98 @@ struct WalletOnboardingView: View {
     @State private var showUnlockPrompt = false
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: Theme.Spacing.xl) {
-                Spacer()
+        VStack(spacing: Theme.Spacing.xl) {
+            Spacer()
 
-                Image(systemName: "wallet.bifold")
-                    .font(.system(size: Theme.Size.iconHero))
-                    .foregroundStyle(Theme.Brand.primary.opacity(0.7))
+            Image(systemName: "wallet.bifold")
+                .font(.system(size: Theme.Size.iconHero))
+                .foregroundStyle(Theme.Brand.primary.opacity(0.7))
 
-                Text("Ethereum Wallet")
-                    .font(.title)
-                    .fontWeight(.bold)
+            Text("Ethereum Wallet")
+                .font(.title)
+                .fontWeight(.bold)
 
-                Text("Create a new wallet or import an existing one")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, Theme.Spacing.xxl)
+            Text("Create a new wallet or import an existing one")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Theme.Spacing.xxl)
 
-                Spacer()
+            Spacer()
 
-                VStack(spacing: Theme.Spacing.md) {
-                    Button {
-                        if passService.isUnlocked {
-                            showCreateFlow = true
-                        } else {
-                            showUnlockPrompt = true
-                        }
-                    } label: {
-                        Label("Create New Wallet", systemImage: "plus.circle.fill")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Theme.Brand.primary)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+            VStack(spacing: Theme.Spacing.md) {
+                Button {
+                    if passService.isUnlocked {
+                        showCreateFlow = true
+                    } else {
+                        showUnlockPrompt = true
                     }
-                    .accessibilityIdentifier("wallet.create")
-
-                    Button {
-                        if passService.isUnlocked {
-                            showImportFlow = true
-                        } else {
-                            showUnlockPrompt = true
-                        }
-                    } label: {
-                        Label("Import Wallet", systemImage: "arrow.down.circle.fill")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color(.secondarySystemBackground))
-                            .foregroundStyle(Theme.Brand.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
-                    }
-                    .accessibilityIdentifier("wallet.import")
+                } label: {
+                    Label("Create New Wallet", systemImage: "plus.circle.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Theme.Brand.primary)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                 }
-                .padding(.horizontal, Theme.Spacing.xl)
-                .padding(.bottom, Theme.Spacing.xxl)
+                .accessibilityIdentifier("wallet.create")
+
+                Button {
+                    if passService.isUnlocked {
+                        showImportFlow = true
+                    } else {
+                        showUnlockPrompt = true
+                    }
+                } label: {
+                    Label("Import Wallet", systemImage: "arrow.down.circle.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color(.secondarySystemBackground))
+                        .foregroundStyle(Theme.Brand.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+                }
+                .accessibilityIdentifier("wallet.import")
             }
-            .navigationTitle("Wallet")
-            .alert("Unlock Pass", isPresented: $showUnlockPrompt) {
-                Button("Cancel", role: .cancel) {}
-                Button("Unlock") {
-                    Task {
-                        do {
-                            _ = try await passService.unlockWithBiometric()
-                        } catch KeychainError.loadFailed(errSecUserCanceled) {
-                            // User cancelled the biometric prompt — nothing to surface
-                        } catch {
-                            Log.wallet.error("Biometric unlock failed: \(String(describing: error))")
-                            self.error = error.localizedDescription
-                        }
+            .padding(.horizontal, Theme.Spacing.xl)
+            .padding(.bottom, Theme.Spacing.xxl)
+        }
+        .navigationTitle("Wallet")
+        .alert("Unlock Pass", isPresented: $showUnlockPrompt) {
+            Button("Cancel", role: .cancel) {}
+            Button("Unlock") {
+                Task {
+                    do {
+                        _ = try await passService.unlockWithBiometric()
+                    } catch KeychainError.loadFailed(errSecUserCanceled) {
+                        // User cancelled the biometric prompt — nothing to surface
+                    } catch {
+                        Log.wallet.error("Biometric unlock failed: \(String(describing: error))")
+                        self.error = error.localizedDescription
                     }
                 }
-            } message: {
-                Text("Pass vault must be unlocked to create or import wallets.")
             }
-            .alert("Error", isPresented: .init(
-                get: { error != nil && !showCreateFlow && !showImportFlow },
-                set: { if !$0 { error = nil } }
-            )) {
-                Button("OK") { error = nil }
-            } message: {
-                Text(error ?? "")
-            }
-            .sheet(isPresented: $showCreateFlow, onDismiss: {
-                // Single choke point for confirm, cancel, and swipe-down:
-                // the reveal is over, CryptoView may advance to the portfolio.
-                walletManager.completeRecoveryPhraseReveal()
-            }) {
-                createWalletSheet
-            }
-            .sheet(isPresented: $showImportFlow) {
-                importWalletSheet
-            }
+        } message: {
+            Text("Pass vault must be unlocked to create or import wallets.")
+        }
+        .alert("Error", isPresented: .init(
+            get: { error != nil && !showCreateFlow && !showImportFlow },
+            set: { if !$0 { error = nil } }
+        )) {
+            Button("OK") { error = nil }
+        } message: {
+            Text(error ?? "")
+        }
+        .sheet(isPresented: $showCreateFlow, onDismiss: {
+            // Single choke point for confirm, cancel, and swipe-down:
+            // the reveal is over, CryptoView may advance to the portfolio.
+            walletManager.completeRecoveryPhraseReveal()
+        }) {
+            createWalletSheet
+        }
+        .sheet(isPresented: $showImportFlow) {
+            importWalletSheet
         }
     }
 
