@@ -71,6 +71,26 @@ enum UITestMode {
             "blockscoutBaseURL": dead,
             "coinGeckoBaseURL": dead,
         ])
+
+        seedPhoneTabBarIfProvided()
+    }
+
+    /// `-phoneTabBar` cannot be seeded through NSArgumentDomain like
+    /// `-selectedTab`: any command-line value beginning with "{" is parsed by
+    /// Foundation as an attempt at old-style property-list syntax, and since
+    /// our payload is JSON (not that syntax) the parse fails — Foundation
+    /// then drops the argument entirely rather than falling back to storing
+    /// it as a plain string (verified: even `UserDefaults.object(forKey:)`
+    /// comes back nil). `-selectedTab`/`-phoneSelectedTab` are unaffected —
+    /// their values ("home", "more", …) never start with "{" — so only this
+    /// key needs the manual seam. Parsed directly out of argv, order-
+    /// independent, and a no-op if the flag isn't present.
+    private static func seedPhoneTabBarIfProvided() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flagIndex = arguments.firstIndex(of: "-phoneTabBar"),
+              arguments.indices.contains(flagIndex + 1)
+        else { return }
+        UserDefaults.standard.set(arguments[flagIndex + 1], forKey: TabConfigurationStore.defaultsKey)
     }
 
     /// In-memory SwiftData container; LocalStore.shared wraps this under
