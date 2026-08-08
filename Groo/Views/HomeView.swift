@@ -13,7 +13,7 @@ struct HomeView: View {
     let syncService: SyncService
     let passService: PassService
 
-    @AppStorage("selectedTab") private var selectedTab: TabID = .home
+    @Environment(AppRouter.self) private var router
     @AppStorage("displayCurrency") private var displayCurrency: String = "USD"
 
     @State private var stockManager = StockPortfolioManager()
@@ -72,7 +72,7 @@ struct HomeView: View {
     // MARK: - Stocks Card
 
     private var stocksCard: some View {
-        Button { selectedTab = .stocks } label: {
+        Button { router.open(.stocks) } label: {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 cardHeader(title: "Stocks", icon: TabID.stocks.icon)
 
@@ -124,7 +124,7 @@ struct HomeView: View {
     // MARK: - Crypto Card
 
     private var cryptoCard: some View {
-        Button { selectedTab = .crypto } label: {
+        Button { router.open(.crypto) } label: {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 cardHeader(title: "Wallet", icon: TabID.crypto.icon)
 
@@ -171,7 +171,7 @@ struct HomeView: View {
 
     private var padCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Button { selectedTab = .pad } label: {
+            Button { router.open(.pad) } label: {
                 cardHeader(title: "Pad", icon: TabID.pad.icon)
             }
             .buttonStyle(.plain)
@@ -219,7 +219,7 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .disabled(isPasting)
             } else {
-                Button { selectedTab = .pad } label: {
+                Button { router.open(.pad) } label: {
                     Label("Unlock Pad", systemImage: "lock")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -233,7 +233,7 @@ struct HomeView: View {
     // MARK: - Prayer Card
 
     private var prayerCard: some View {
-        Button { selectedTab = .azan } label: {
+        Button { router.open(.azan) } label: {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 cardHeader(title: "Prayer Times", icon: TabID.azan.icon)
 

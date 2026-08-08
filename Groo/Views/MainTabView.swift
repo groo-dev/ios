@@ -45,7 +45,7 @@ struct MainTabView: View {
     let passService: PassService
     let onSignOut: () -> Void
 
-    @AppStorage("selectedTab") private var selectedTab: TabID = .home
+    @Environment(AppRouter.self) private var router
     @State private var customization = TabViewCustomization()
 
     private func tabLabel(for tab: TabID) -> some View {
@@ -71,7 +71,9 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        @Bindable var router = router
+
+        return TabView(selection: $router.padSelection) {
             Tab(value: TabID.home) {
                 NavigationStack { content.view(for: .home) }
             } label: {
@@ -153,10 +155,13 @@ private struct TabBarMinimizeOnScrollModifier: ViewModifier {
 }
 
 #Preview {
+    let configStore = TabConfigurationStore()
     MainTabView(
         padService: PadService(api: APIClient(baseURL: Config.padAPIBaseURL)),
         syncService: SyncService(api: APIClient(baseURL: Config.padAPIBaseURL)),
         passService: PassService(),
         onSignOut: {}
     )
+    .environment(configStore)
+    .environment(AppRouter(store: configStore))
 }

@@ -103,12 +103,18 @@ struct RootViewSnapshotTests {
         let (padService, store) = try PadViewSnapshotTests.lockedPadService()
         let passEnv = try PassServiceIntegrationTests.makeEnv(items: [])
         defer { try? FileManager.default.removeItem(at: passEnv.tempDir) }
+        let suiteName = "homeview-snapshot-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let configStore = TabConfigurationStore(defaults: defaults)
         withPinnedDefaults(Self.deadURLDefaults) {
             // Live prayer countdown + shared-store cache reads — render-only.
             ViewRender.assertRenders(
                 HomeView(padService: padService,
                          syncService: PadViewSnapshotTests.offlineSync(store: store),
-                         passService: passEnv.service))
+                         passService: passEnv.service)
+                    .environment(configStore)
+                    .environment(AppRouter(store: configStore, defaults: defaults)))
         }
     }
 
@@ -123,11 +129,17 @@ struct RootViewSnapshotTests {
         try PadViewSnapshotTests.seedItem(padEnv, id: "i-2", text: "Locker combo: 12-34-56")
         let passEnv = try PassServiceIntegrationTests.makeEnv(items: [])
         defer { try? FileManager.default.removeItem(at: passEnv.tempDir) }
+        let suiteName = "homeview-snapshot-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let configStore = TabConfigurationStore(defaults: defaults)
         withPinnedDefaults(Self.deadURLDefaults) {
             ViewRender.assertRenders(
                 HomeView(padService: padEnv.service,
                          syncService: PadViewSnapshotTests.offlineSync(store: padEnv.store),
-                         passService: passEnv.service))
+                         passService: passEnv.service)
+                    .environment(configStore)
+                    .environment(AppRouter(store: configStore, defaults: defaults)))
         }
     }
 
@@ -136,11 +148,17 @@ struct RootViewSnapshotTests {
         let padEnv = try PadServiceTests.makeUnlockedEnv()
         let passEnv = try PassServiceIntegrationTests.makeEnv(items: [])
         defer { try? FileManager.default.removeItem(at: passEnv.tempDir) }
+        let suiteName = "homeview-snapshot-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let configStore = TabConfigurationStore(defaults: defaults)
         withPinnedDefaults(Self.deadURLDefaults) {
             ViewRender.assertRenders(
                 HomeView(padService: padEnv.service,
                          syncService: PadViewSnapshotTests.offlineSync(store: padEnv.store),
-                         passService: passEnv.service))
+                         passService: passEnv.service)
+                    .environment(configStore)
+                    .environment(AppRouter(store: configStore, defaults: defaults)))
         }
     }
 
@@ -155,12 +173,18 @@ struct RootViewSnapshotTests {
         let passEnv = try PassServiceIntegrationTests.makeEnv(items: [])
         defer { try? FileManager.default.removeItem(at: passEnv.tempDir) }
         let address = "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"
+        let suiteName = "homeview-snapshot-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let configStore = TabConfigurationStore(defaults: defaults)
         withPinnedDefaults(Self.deadURLDefaults.merging(
             ["walletAddresses": address, "activeWalletAddress": address]) { _, new in new }) {
             ViewRender.assertRenders(
                 HomeView(padService: padService,
                          syncService: PadViewSnapshotTests.offlineSync(store: store),
-                         passService: passEnv.service))
+                         passService: passEnv.service)
+                    .environment(configStore)
+                    .environment(AppRouter(store: configStore, defaults: defaults)))
         }
     }
 
@@ -169,12 +193,18 @@ struct RootViewSnapshotTests {
         let (padService, store) = try PadViewSnapshotTests.lockedPadService()
         let passEnv = try PassServiceIntegrationTests.makeEnv(items: [])
         defer { try? FileManager.default.removeItem(at: passEnv.tempDir) }
+        let suiteName = "maintab-snapshot-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let configStore = TabConfigurationStore(defaults: defaults)
         withPinnedDefaults(Self.deadURLDefaults) {
             ViewRender.assertRenders(
                 MainTabView(padService: padService,
                             syncService: PadViewSnapshotTests.offlineSync(store: store),
                             passService: passEnv.service, onSignOut: {})
-                    .environment(AuthService()))
+                    .environment(AuthService())
+                    .environment(configStore)
+                    .environment(AppRouter(store: configStore, defaults: defaults)))
         }
     }
 
