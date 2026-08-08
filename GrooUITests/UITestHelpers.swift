@@ -14,14 +14,26 @@ enum UITest {
     static let masterPassword = "uitest-master-1"
     static let timeout: TimeInterval = 15
 
-    /// Fresh, hermetic app instance. `selectedTab` uses the NSArgumentDomain
-    /// UserDefaults override for @AppStorage("selectedTab") — the app opens
-    /// directly on that tab, no tab-bar navigation needed.
-    static func launchApp(selectedTab: String? = nil) -> XCUIApplication {
+    /// Fresh, hermetic app instance. `selectedTab` and `phoneTabBar` use the
+    /// NSArgumentDomain UserDefaults override — the app opens directly on that
+    /// tab with that bar configuration, no navigation needed. `phoneTabBar`
+    /// takes the JSON TabConfigurationStore persists,
+    /// e.g. `{"order":["azan","pass","pad","stocks","crypto","drive","scratchpad"],"showsHome":true}`.
+    ///
+    /// `selectedTab` seeds BOTH persistence keys: `selectedTab` (AppRouter's
+    /// pad selection) and `phoneSelectedTab` (its phone selection). The two are
+    /// deliberately separate keys — see AppRouter — and UI tests run on iPhone,
+    /// so seeding only the pad key would silently do nothing. Phone-only values
+    /// like "more" are simply not parsed by the pad key's TabID(rawValue:).
+    static func launchApp(selectedTab: String? = nil, phoneTabBar: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest"]
         if let selectedTab {
-            app.launchArguments += ["-selectedTab", selectedTab]
+            app.launchArguments += ["-selectedTab", selectedTab,
+                                    "-phoneSelectedTab", selectedTab]
+        }
+        if let phoneTabBar {
+            app.launchArguments += ["-phoneTabBar", phoneTabBar]
         }
         app.launch()
         return app
@@ -38,8 +50,9 @@ enum UITest {
         XCTAssertTrue(app.buttons["pass.add"].waitForExistence(timeout: timeout), "vault did not unlock into the item list", file: file, line: line)
     }
 
-    /// Select a tab by title, falling back to the tab bar's "More" overflow
-    /// (9 tabs may not all fit on an iPhone tab bar).
+    /// Select a tab by title, falling back to the app-owned More screen.
+    /// Unlike the old system overflow (a UIKit table), More is a SwiftUI List,
+    /// so its rows are buttons carrying `more.row.<rawValue>` identifiers.
     static func openTab(_ app: XCUIApplication, _ title: String, file: StaticString = #filePath, line: UInt = #line) {
         let direct = app.tabBars.buttons[title]
         if direct.exists {
@@ -49,17 +62,30 @@ enum UITest {
         let more = app.tabBars.buttons["More"]
         if more.exists {
             more.tap()
-            // The More overflow is a UIKit table whose rows expose the tab
-            // titles as static texts inside cells (observed hierarchy: Table >
-            // Cell > StaticText 'Pad' — no Button elements), so match the row
-            // label rather than a button.
-            let entry = app.tables.cells.staticTexts[title].firstMatch
+            let entry = app.buttons["more.row.\(identifier(for: title))"].firstMatch
             if entry.waitForExistence(timeout: timeout) {
                 entry.tap()
                 return
             }
         }
         XCTFail("Tab \(title) not reachable from the tab bar:\n\(app.tabBars.firstMatch.debugDescription)", file: file, line: line)
+    }
+
+    /// Map a tab's display title to its TabID raw value.
+    /// Mirrors TabID.title in Groo/Views/MainTabView.swift — keep in sync.
+    private static func identifier(for title: String) -> String {
+        switch title {
+        case "Home": "home"
+        case "Stocks": "stocks"
+        case "Wallet": "crypto"
+        case "Azan": "azan"
+        case "Pad": "pad"
+        case "Pass": "pass"
+        case "Drive": "drive"
+        case "Scratchpad": "scratchpad"
+        case "Settings": "settings"
+        default: title.lowercased()
+        }
     }
 
     /// Dismiss a system permission alert (e.g. location on the Azan tab) if
