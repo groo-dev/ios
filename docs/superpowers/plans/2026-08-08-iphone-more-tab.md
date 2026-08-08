@@ -2008,11 +2008,18 @@ In `GrooUITests/UITestHelpers.swift`, replace `launchApp` with:
     /// tab with that bar configuration, no navigation needed. `phoneTabBar`
     /// takes the JSON TabConfigurationStore persists,
     /// e.g. `{"order":["azan","pass","pad","stocks","crypto","drive","scratchpad"],"showsHome":true}`.
+    ///
+    /// `selectedTab` seeds BOTH persistence keys: `selectedTab` (AppRouter's
+    /// pad selection) and `phoneSelectedTab` (its phone selection). The two are
+    /// deliberately separate keys — see AppRouter — and UI tests run on iPhone,
+    /// so seeding only the pad key would silently do nothing. Phone-only values
+    /// like "more" are simply not parsed by the pad key's TabID(rawValue:).
     static func launchApp(selectedTab: String? = nil, phoneTabBar: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest"]
         if let selectedTab {
-            app.launchArguments += ["-selectedTab", selectedTab]
+            app.launchArguments += ["-selectedTab", selectedTab,
+                                    "-phoneSelectedTab", selectedTab]
         }
         if let phoneTabBar {
             app.launchArguments += ["-phoneTabBar", phoneTabBar]
