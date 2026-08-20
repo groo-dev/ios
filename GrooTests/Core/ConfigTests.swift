@@ -12,6 +12,10 @@ import Testing
 @testable import Groo
 
 struct ConfigTests {
+    @Test func oauthUsesGrooWorkspaceIssuer() {
+        #expect(GrooAuthFactory.makeConfig().issuer == URL(string: "https://me.groo.dev"))
+    }
+
     @Test func presentValidOverrideWins() throws {
         let suiteName = "config-tests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

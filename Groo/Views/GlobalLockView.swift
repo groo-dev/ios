@@ -108,7 +108,7 @@ struct GlobalLockView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You'll need to enter your PAT token again to sign back in.")
+            Text("You'll need to sign in with Groo again.")
         }
         .onAppear {
             checkBiometricAvailability()

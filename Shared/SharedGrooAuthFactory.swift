@@ -27,7 +27,7 @@ enum GrooAuthFactory {
         #endif
 
         return GrooAuthConfig(
-            issuer: URL(string: "https://accounts.groo.dev")!,
+            issuer: URL(string: "https://me.groo.dev")!,
             clientId: clientId,
             redirectURI: redirect,
             scopes: [

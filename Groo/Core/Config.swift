@@ -58,7 +58,7 @@ enum Config {
         #if DEBUG
         return URL(string: "http://universe.local:37586")!
         #else
-        return URL(string: "https://accounts.groo.dev")!
+        return URL(string: "https://me.groo.dev")!
         #endif
     }
 
@@ -78,7 +78,7 @@ enum Config {
         #if DEBUG
         URL(string: "http://universe.local:37586")!
         #else
-        URL(string: "https://accounts.groo.dev")!
+        URL(string: "https://me.groo.dev")!
         #endif
     }
 

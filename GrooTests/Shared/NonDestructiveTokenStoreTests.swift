@@ -99,7 +99,7 @@ struct UnavailableWebAuthenticatorTests {
 
         await #expect(throws: GrooAuthError.self) {
             _ = try await authenticator.authenticate(
-                url: URL(string: "https://accounts.groo.dev/authorize")!,
+                url: URL(string: "https://me.groo.dev/authorize")!,
                 callbackScheme: "dev.groo.ios",
                 anchor: ASPresentationAnchor()
             )
