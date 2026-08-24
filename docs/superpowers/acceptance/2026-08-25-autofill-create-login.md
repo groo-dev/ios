@@ -76,3 +76,25 @@ fields, and that the sheet's own biometric unlock still works with a second
 queue in the read path. Extension UI cannot be snapshot-tested from
 `GrooTests` (the test bundle hosts the app) and AutoFill cannot be driven from
 `GrooUITests`. M1-M11 are the only coverage of that, and they are outstanding.
+
+## Data-security review of the diff
+
+Run 2026-08-25 over `main..feat/autofill-create-login`. Each line below is a
+command that was run, not a reading.
+
+| Property | Evidence | Result |
+|---|---|---|
+| No credential field reaches a log | Every `Log.*` line added by the diff enumerated. They interpolate: the item `id`, a `reason` string, and `String(describing: error)`. No `password`, `username`, `payload` or `privateKey`. | **PASS** |
+| Extension never force-refreshes tokens | All three `PassAPIClient(` constructions in `GrooAutoFill/AutoFillService.swift` (`:244`, `:359`, `:425`) carry `forceRefresh: { throw APIError.unauthorized }`. A late refresh would revoke the token family and sign the user out everywhere. | **PASS** |
+| The extension cannot modify or destroy an existing record | Its entire server write surface is one call: `api.post(PassAPIClient.Endpoint.records, …)`, in `PasswordPublisher` and `PasskeyPublisher`. No `api.put`, no `api.delete` is reachable from extension code. Combined with a freshly generated `UUID().uuidString.lowercased()` per item, a read-modify-write of somebody else's item is structurally impossible, not merely avoided. | **PASS** |
+| A passkey assertion cannot be answered with a password credential | `allowsCreatingPassword` defaults to `false` and is only ever set by `updateServiceIdentifiers`, which the assertion branch (`:236`) and the registration entry point (`:314`) never call — they show `RegisterPasskeyView` or nothing. So the `+` button cannot appear on those paths. | **PASS** |
+| Queue file protection matches the existing convention | `SharedPendingQueue.swift:82` and `SharedRecordStore.swift:94` are the only `write(to:)` calls in `Shared/`; both use `options: .atomic` with no explicit `NSFileProtection`. The new queue therefore matches the store that already holds the whole vault. Contents are AES-GCM sealed under the vault key regardless. **Observation, not a finding:** neither sets protection explicitly, so both inherit the App Group default. Changing that is a separate decision affecting existing files. | **PASS (consistent)** |
+| Plaintext never lands on disk | `theFileOnDiskDoesNotContainThePasswordInClear` scans the written bytes for the password. | **PASS** |
+
+**One residual risk, stated rather than hidden.** Between the queue write and
+the app's next successful drain, a created login exists only in
+`pending_passwords.enc` on that device. Uninstalling the app, or losing the
+device, loses it. This is the accepted trade of the "save locally, fill, sync
+later" decision, and it is the same exposure the passkey queue already carries
+for private keys. The banner (Task 9) is what keeps a *persistently* failing
+drain visible rather than silent; it does not remove the window.
