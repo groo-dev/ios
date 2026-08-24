@@ -205,6 +205,44 @@ struct SharedPassPasswordItem: Codable, Identifiable {
         }
         deletedAt = try container.decodeIfPresent(Int.self, forKey: .deletedAt)
     }
+
+    /// Memberwise init, absent by synthesis because `init(from:)` is declared
+    /// in the body. Needed because the AutoFill extension now AUTHORS this
+    /// item — `SharedPassPasskeyItem` carries one for the same reason.
+    init(
+        id: String,
+        type: SharedPassVaultItemType = .password,
+        name: String,
+        username: String,
+        password: String,
+        urls: [String],
+        totp: SharedPassTotpConfig? = nil,
+        deletedAt: Int? = nil
+    ) {
+        self.id = id
+        self.type = type
+        self.name = name
+        self.username = username
+        self.password = password
+        self.urls = urls
+        self.totp = totp
+        self.deletedAt = deletedAt
+    }
+}
+
+// MARK: - Pending Password Envelope
+
+/// A password item queued by the AutoFill extension, with the timestamps
+/// `SharedPassPasswordItem` does not model.
+///
+/// The timestamps must survive the queue, not be re-stamped when the app
+/// drains it: the app rebuilds the record payload from this envelope, and it
+/// must come out byte-identical to what the extension already pushed —
+/// otherwise the drain rewrites a record that was already correct.
+struct SharedPendingPasswordItem: Codable {
+    let item: SharedPassPasswordItem
+    let createdAt: Int
+    let updatedAt: Int
 }
 
 // MARK: - Passkey Item

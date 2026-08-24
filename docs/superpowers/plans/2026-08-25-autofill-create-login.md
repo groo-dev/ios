@@ -21,10 +21,16 @@ extension, CryptoKit (AES-GCM), Swift Testing (`@Test`/`#expect`), xcodebuild.
 ## Global Constraints
 
 - **Every new `Shared/` file must be registered**: `ruby
-  scripts/register_shared_file.rb <File.swift> Groo GrooAutoFill GrooTests`.
+  scripts/register_shared_file.rb <File.swift> Groo GrooAutoFill`.
   `Shared/` is not a filesystem-synchronized group — an unregistered file
-  compiles into nothing and its tests silently do not exist. Files under
-  `GrooAutoFill/` and `GrooTests/` are picked up automatically.
+  compiles into nothing. Files under `GrooAutoFill/` and `GrooTests/` are
+  picked up automatically.
+  **Do NOT add `GrooTests`.** Verified 2026-08-25: every existing shared file
+  (`SharedPassModels`, `PasskeyPublisher`, `SharedPendingItemsStore`,
+  `SharedCredentialMatcher`, `SharedConfig`) is a member of `Groo` and
+  `GrooAutoFill` only; tests reach them through `@testable import Groo`.
+  Adding the test target compiles a second copy of the file that cannot see
+  the rest of `Shared/`, which fails as `cannot find type ... in scope`.
 - **No credential material in logs.** `password`, `username`, and the record
   payload must never appear in a log line at any level. Log the item `id` only.
 - **The extension never force-refreshes tokens.** Every `PassAPIClient` built
@@ -35,27 +41,16 @@ extension, CryptoKit (AES-GCM), Swift Testing (`@Test`/`#expect`), xcodebuild.
   (`notes`, `totp`, `folderId`, `favorite`, `deletedAt`).
 - **`createdAt` and `updatedAt` are required** by every other client and are
   not modelled on `SharedPassPasswordItem`. They travel in the queue envelope.
-- **Test suite baseline — the suite is ALREADY RED on `main`.** Measured
-  2026-08-25 by stashing all work and running `scripts/test.sh --unit`:
-  584 tests, 17 issues across these 11 tests, none of them related to this
-  feature:
-
-  | Suite | Test |
-  |---|---|
-  | `PrayerTimeServiceTests` | `afterIshaNextIsTomorrowsFajrAndIshaRunsUntilIt` |
-  | `PassViewSnapshotTests` | `itemDetailCorrupted`, `itemDetailEveryType`, `itemDetailExtraStates` |
-  | `PadViewSnapshotTests` | `padItemRowVariants`, `padListEmpty`, `padListPopulated` |
-  | `AzanViewSnapshotTests` | `prayerTimeRowVariants` |
-  | `ScratchpadViewSnapshotTests` | `scratchpadListStates` |
-  | `RootViewSnapshotTests` | `settingsViewWithBackupDate` |
-  | `StocksViewSnapshotTests` | `stockPriceChartVariants` |
-
-  Some of these are order-dependent and flake between runs (`padListEmpty` and
-  `padListPopulated` swap). **Do not treat "the suite passed" as the gate — it
-  cannot pass.** The gate is: the failing set must stay a subset of the table
-  above, and every test this plan adds must pass. Compare set-to-set after each
-  task, and if a new name appears, that is your regression. Single-suite runs use
-  `xcodebuild test -project Groo.xcodeproj -scheme Groo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:GrooTests/<SuiteName>`.
+- **Test suite baseline — the suite is ALREADY RED on `main`.** `CLAUDE.md`
+  ("Test suite baseline") is the authority: 12 unique pre-existing failures,
+  mostly view snapshots plus date-dependent cases. Do not copy that list here —
+  a second copy drifts. Confirmed 2026-08-25 by stashing all work and running
+  `scripts/test.sh --unit`: the observed set matched, with the date-dependent
+  entries varying between runs as documented.
+  **"The suite passed" cannot be the gate.** The gate is: the failing set of
+  *unique test names* stays a subset of that baseline, and every test this plan
+  adds passes. `CLAUDE.md` explains why comparing failure *counts* is a trap —
+  `itemDetailEveryType` contributes seven lines under one name.
 - **Commit after every task**, on branch `feat/autofill-create-login`.
 
 ## File Structure
@@ -252,7 +247,7 @@ enum SharedPasswordGenerator {
 
 - [ ] **Step 4: Register the file with every consuming target**
 
-Run: `ruby scripts/register_shared_file.rb SharedPasswordGenerator.swift Groo GrooAutoFill GrooTests`
+Run: `ruby scripts/register_shared_file.rb SharedPasswordGenerator.swift Groo GrooAutoFill`
 Expected: the script prints what it added and exits 0. It is idempotent.
 
 - [ ] **Step 5: Run the test and watch it pass**
@@ -571,7 +566,7 @@ struct SharedNewLoginDraft {
 - [ ] **Step 5: Register and run the test**
 
 ```bash
-ruby scripts/register_shared_file.rb SharedNewLoginDraft.swift Groo GrooAutoFill GrooTests
+ruby scripts/register_shared_file.rb SharedNewLoginDraft.swift Groo GrooAutoFill
 xcodebuild test -project Groo.xcodeproj -scheme Groo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:GrooTests/SharedNewLoginDraftTests
 ```
 Expected: PASS, 12 tests.
@@ -966,8 +961,8 @@ duplicating the fixture.
 - [ ] **Step 7: Register both files and run both suites**
 
 ```bash
-ruby scripts/register_shared_file.rb SharedPendingQueue.swift Groo GrooAutoFill GrooTests
-ruby scripts/register_shared_file.rb SharedPendingPasswordsStore.swift Groo GrooAutoFill GrooTests
+ruby scripts/register_shared_file.rb SharedPendingQueue.swift Groo GrooAutoFill
+ruby scripts/register_shared_file.rb SharedPendingPasswordsStore.swift Groo GrooAutoFill
 xcodebuild test -project Groo.xcodeproj -scheme Groo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -only-testing:GrooTests/SharedPendingPasswordsStoreTests \
   -only-testing:GrooTests/SharedPendingItemsStoreTests
@@ -1319,7 +1314,7 @@ struct APIPasswordPusher: PasswordRecordPushing {
 - [ ] **Step 5: Register and run**
 
 ```bash
-ruby scripts/register_shared_file.rb PasswordPublisher.swift Groo GrooAutoFill GrooTests
+ruby scripts/register_shared_file.rb PasswordPublisher.swift Groo GrooAutoFill
 xcodebuild test -project Groo.xcodeproj -scheme Groo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:GrooTests/PasswordPublisherTests
 ```
 Expected: PASS, 8 tests.
