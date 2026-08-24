@@ -51,6 +51,17 @@ enum SharedConfig {
         return override > 0 ? override : 5
     }
 
+    /// Total budget for the AutoFill new-login push.
+    ///
+    /// `completeRequest` tears the extension process down, so the push has to
+    /// finish before the field is filled — this is how long the user waits at
+    /// worst. Same default and override mechanism as the passkey deadline.
+    static var passwordPushDeadlineSeconds: Double {
+        let defaults = UserDefaults(suiteName: appGroupIdentifier) ?? .standard
+        let override = defaults.double(forKey: "passwordPushDeadlineSeconds")
+        return override > 0 ? override : 5
+    }
+
     /// Pass API base URL, mirroring `Config.passAPIBaseURL` including its
     /// UserDefaults override. Duplicated here rather than shared because
     /// `Config` lives in the app target, which extensions cannot see.
