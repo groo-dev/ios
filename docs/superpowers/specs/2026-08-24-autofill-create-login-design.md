@@ -124,6 +124,26 @@ item that was pushed *and* then drained is recognised as the same item. Name,
 username or URL would not be — a user may legitimately hold two logins for the
 same site with the same username.
 
+### D8. The drain refreshes records before merging
+
+Found while planning, and it applies to the existing passkey drain too.
+
+`writeRecordIfChanged` (`Groo/Features/Pass/PassService.swift:951-989`) chooses
+POST over PUT purely on whether `recordState` holds the id. When the extension
+has already pushed a record and the app's `recordState` is stale — the
+`ContentView.swift:90` foreground call reaches the merge with no preceding load
+— the drain POSTs an id the server already holds. The server answers `409
+RECORD_EXISTS`, which is **not** the `APIError.recordConflict` the PUT path
+recovers from, so `saveVault()` throws and the drain fails until something else
+refreshes the records.
+
+`mergePendingItems()` therefore pulls records first when `formatVersion == 2`.
+Combined with D4's envelope timestamps this makes the drain a genuine no-op for
+an already-pushed item: `recordState` holds the record, the rebuilt payload is
+byte-identical, and `writeRecordIfChanged` returns early. A failed refresh is
+logged and the merge proceeds — an item that cannot be written just stays
+queued.
+
 ## Components
 
 ### New — `Shared/SharedPasswordGenerator.swift`
@@ -171,7 +191,7 @@ struct SharedNewLoginDraft {
     static func normalizedURL(_ site: String) -> String?
 
     var isSaveable: Bool          // non-empty password
-    func item(id: String) -> SharedPassPasswordItem
+    func pendingItem(id: String, now: Int) -> SharedPendingPasswordItem
 }
 ```
 
@@ -289,6 +309,7 @@ next app run
 | Vault at format 1 | Push skipped by the gate, item stays queued for the app |
 | QuickType save fails | Logged only; the item is in the vault and the sheet, just not suggested until the app runs |
 | Drain fails in the app | Both queues kept, banner shown with Retry |
+| Records refresh fails before a drain | Logged; the merge proceeds against what is cached |
 | Pending queue unreadable | Moved aside as `.corrupt`, never overwritten; already the passkey store's rule |
 
 ## Testing
@@ -311,7 +332,10 @@ Unit (`GrooTests`), all reachable because the logic lives in `Shared/`:
   pending item with a new id appears; ordering.
 - **`PassService.mergePendingItems`** — passwords merged; ids already present
   skipped; passkey behaviour unchanged; both queues kept when `saveVault`
-  throws; both cleared on success.
+  throws; both cleared on success; `pendingSyncCount` reports the remainder.
+- **Payload equality** — the payload the app rebuilds when draining must
+  normalize byte-identically to `PasswordPublisher.payload`. Without it, D8's
+  no-op does not hold and every drain rewrites a correct record.
 
 Manual (the form is extension UI, which cannot be snapshot-tested here):
 simulator run through `prepareCredentialList`, then a real-device pass — create
