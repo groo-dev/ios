@@ -13,11 +13,16 @@ struct AutoFillCredentialListView: View {
     let serviceIdentifiers: [ASCredentialServiceIdentifier]
     let rpId: String?
     var allowedCredentialIds: [Data] = []
+    /// Whether this presentation can be answered with a password credential.
+    /// Set explicitly by the controller per entry point — never inferred.
+    var allowsCreatingPassword = false
     let onSelect: (SharedPassPasswordItem) -> Void
     var onSelectPasskey: ((SharedPassPasskeyItem) -> Void)? = nil
+    var onCreated: ((SharedPassPasswordItem) -> Void)? = nil
     let onCancel: () -> Void
 
     @State private var searchText = ""
+    @State private var showingNewLogin = false
 
     // MARK: - Derived Data
 
@@ -109,6 +114,26 @@ struct AutoFillCredentialListView: View {
                         onCancel()
                     }
                 }
+                if allowsCreatingPassword && service.isUnlocked {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            showingNewLogin = true
+                        } label: {
+                            Label("New Login", systemImage: "plus")
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showingNewLogin) {
+                NewLoginView(
+                    service: service,
+                    site: siteName,
+                    onSaved: { item in
+                        showingNewLogin = false
+                        onCreated?(item)
+                    },
+                    onCancel: { showingNewLogin = false }
+                )
             }
         }
     }
@@ -224,11 +249,17 @@ struct AutoFillCredentialListView: View {
         )
         .overlay {
             if vaultIsEmpty {
-                ContentUnavailableView(
-                    "No Items",
-                    systemImage: "key.slash",
-                    description: Text("Add passwords in the Groo app to fill them here")
-                )
+                ContentUnavailableView {
+                    Label("No Items", systemImage: "key.slash")
+                } description: {
+                    Text(allowsCreatingPassword
+                         ? "Create a login here, or add passwords in the Groo app"
+                         : "Add passwords in the Groo app to fill them here")
+                } actions: {
+                    if allowsCreatingPassword {
+                        Button("New Login") { showingNewLogin = true }
+                    }
+                }
             } else if isSearching && searchResultCredentials.isEmpty && searchResultPasskeys.isEmpty {
                 ContentUnavailableView.search(text: trimmedQuery)
             }

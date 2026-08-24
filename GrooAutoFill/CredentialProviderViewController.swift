@@ -18,6 +18,13 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
     private let service = AutoFillService()
     private var hostingController: UIHostingController<AnyView>?
     private var currentServiceIdentifiers: [ASCredentialServiceIdentifier] = []
+
+    /// Whether the presentation in progress can be completed with an
+    /// `ASPasswordCredential`. True for the credential-list entry points and
+    /// for the list fallback; false for a passkey assertion, which must be
+    /// answered with `completeAssertionRequest`. Set explicitly per entry
+    /// point: an inferred rule silently becomes wrong when one is added.
+    private var allowsCreatingPassword = false
     private var passkeyRequestParameters: Any? // ASPasskeyCredentialRequestParameters (iOS 17+)
     private var pendingRegistrationRequest: Any? // ASPasskeyCredentialRequest (iOS 17+)
 
@@ -81,7 +88,7 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
             } else {
                 // Vault and QuickType have drifted apart — fall back to the list
                 Log.autofill.error("Credential \(identity.recordIdentifier ?? "?", privacy: .public) not found in vault; showing list")
-                updateServiceIdentifiers([identity.serviceIdentifier])
+                updateServiceIdentifiers([identity.serviceIdentifier], allowsCreatingPassword: true)
             }
             return
         }
@@ -119,8 +126,12 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
         }
     }
 
-    private func updateServiceIdentifiers(_ identifiers: [ASCredentialServiceIdentifier]) {
+    private func updateServiceIdentifiers(
+        _ identifiers: [ASCredentialServiceIdentifier],
+        allowsCreatingPassword: Bool
+    ) {
         currentServiceIdentifiers = identifiers
+        self.allowsCreatingPassword = allowsCreatingPassword
         show(rootView: AnyView(makeCredentialListView(serviceIdentifiers: identifiers)))
     }
 
@@ -146,11 +157,15 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
             serviceIdentifiers: serviceIdentifiers,
             rpId: currentRpId,
             allowedCredentialIds: currentAllowedCredentialIds,
+            allowsCreatingPassword: allowsCreatingPassword,
             onSelect: { [weak self] credential in
                 self?.selectCredential(credential)
             },
             onSelectPasskey: { [weak self] passkey in
                 self?.selectPasskey(passkey)
+            },
+            onCreated: { [weak self] item in
+                self?.selectCredential(item)
             },
             onCancel: { [weak self] in
                 self?.cancel()
@@ -178,13 +193,13 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
         // and `completePendingRequest()` fills it without further taps.
         pendingPasswordIdentity = credentialIdentity
         wantsUnlockOnAppear = true
-        updateServiceIdentifiers([credentialIdentity.serviceIdentifier])
+        updateServiceIdentifiers([credentialIdentity.serviceIdentifier], allowsCreatingPassword: true)
     }
 
     /// Called to prepare UI for credential selection
     /// The serviceIdentifiers describe the service the user is logging into
     override func prepareCredentialList(for serviceIdentifiers: [ASCredentialServiceIdentifier]) {
-        updateServiceIdentifiers(serviceIdentifiers)
+        updateServiceIdentifiers(serviceIdentifiers, allowsCreatingPassword: true)
         wantsUnlockOnAppear = true
     }
 
@@ -195,7 +210,7 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
         requestParameters: ASPasskeyCredentialRequestParameters
     ) {
         self.passkeyRequestParameters = requestParameters
-        updateServiceIdentifiers(serviceIdentifiers)
+        updateServiceIdentifiers(serviceIdentifiers, allowsCreatingPassword: true)
         wantsUnlockOnAppear = true
     }
 
@@ -224,7 +239,7 @@ class CredentialProviderViewController: ASCredentialProviderViewController {
                   let passwordIdentity = passwordRequest.credentialIdentity as? ASPasswordCredentialIdentity {
             pendingPasswordIdentity = passwordIdentity
             wantsUnlockOnAppear = true
-            updateServiceIdentifiers([passwordIdentity.serviceIdentifier])
+            updateServiceIdentifiers([passwordIdentity.serviceIdentifier], allowsCreatingPassword: true)
         }
     }
 
