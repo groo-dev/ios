@@ -33,6 +33,36 @@ than editing the pbxproj by hand. `Groo/`, `GrooAutoFill/`, `GrooTests/` and
 the other extension folders *are* synchronized, so new files there are picked
 up automatically.
 
+**Register `Shared/` files to `Groo GrooAutoFill` — never to `GrooTests`.**
+The test bundle hosts the app and reaches shared code through
+`@testable import Groo`. Adding the test target compiles a *second* copy of the
+file into a module that cannot see the rest of `Shared/`, so the file fails with
+`cannot find type ... in scope` for its own dependencies while the app target
+builds fine. Every existing shared file follows this — check one before
+inventing a target list:
+
+```bash
+ruby -e 'require "xcodeproj"; p_ = Xcodeproj::Project.open("Groo.xcodeproj");
+  puts p_.targets.select { |t| t.source_build_phase.files.any? { |b|
+    b.file_ref && b.file_ref.path == ARGV[0] } }.map(&:name).join(", ")' SharedPassModels.swift
+# => Groo, GrooAutoFill
+```
+
+**There are several DerivedData directories for this project, and most are
+abandoned.** As of 2026-08-25 there are six `Groo-*` folders; the stale ones
+still hold `.appex` binaries from early August. `find ~/Library/Developer/Xcode/DerivedData/Groo-*/... | head -1`
+picks whichever sorts first, which is usually **not** the one the last build
+wrote to. Reading a stale folder makes a perfectly fresh build look like the
+embed-step-didn't-re-run trap below. Resolve the active directory first (sort by
+mtime, or take it from the build log's `Build/Products` path), and remember the
+scheme builds **Release**, so `Debug-iphonesimulator` is stale by default:
+
+```bash
+ls -dt ~/Library/Developer/Xcode/DerivedData/Groo-*/Build/Products/Release-iphonesimulator/Groo.app | head -1
+# then confirm the embedded appex really contains your change:
+nm -a "$APP/PlugIns/GrooAutoFill.appex/GrooAutoFill" | grep -c YourNewSymbol
+```
+
 **Clean-build after changing an extension's `Info.plist` or entitlements.**
 The extension target rebuilds, but the copy embedded at
 `Groo.app/PlugIns/<Name>.appex` can stay stale — the embed step does not
