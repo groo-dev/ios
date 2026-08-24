@@ -236,65 +236,13 @@ struct PasswordGeneratorView: View {
     // MARK: - Password Generation
 
     private func generatePassword() {
-        var charset = ""
-
-        if includeUppercase {
-            charset += "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        }
-        if includeLowercase {
-            charset += "abcdefghijklmnopqrstuvwxyz"
-        }
-        if includeNumbers {
-            charset += "0123456789"
-        }
-        if includeSymbols {
-            charset += "!@#$%^&*()_+-=[]{}|;:,.<>?"
-        }
-
-        guard !charset.isEmpty else {
-            password = ""
-            return
-        }
-
-        let charArray = Array(charset)
-        var result = ""
-
-        for _ in 0..<Int(length) {
-            if let randomChar = charArray.randomElement() {
-                result.append(randomChar)
-            }
-        }
-
-        // Ensure at least one character from each selected type
-        var finalPassword = Array(result)
-        var index = 0
-
-        if includeUppercase && !result.contains(where: { $0.isUppercase }) {
-            if let char = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".randomElement() {
-                finalPassword[index] = char
-                index += 1
-            }
-        }
-        if includeLowercase && !result.contains(where: { $0.isLowercase }) {
-            if let char = "abcdefghijklmnopqrstuvwxyz".randomElement() {
-                finalPassword[index] = char
-                index += 1
-            }
-        }
-        if includeNumbers && !result.contains(where: { $0.isNumber }) {
-            if let char = "0123456789".randomElement() {
-                finalPassword[index] = char
-                index += 1
-            }
-        }
-        if includeSymbols && !result.contains(where: { "!@#$%^&*()_+-=[]{}|;:,.<>?".contains($0) }) {
-            if let char = "!@#$%^&*()_+-=[]{}|;:,.<>?".randomElement() {
-                finalPassword[index] = char
-            }
-        }
-
-        // Shuffle to randomize positions of guaranteed characters
-        password = String(finalPassword.shuffled())
+        var options = SharedPasswordGeneratorOptions()
+        options.length = Int(length)
+        options.includeUppercase = includeUppercase
+        options.includeLowercase = includeLowercase
+        options.includeNumbers = includeNumbers
+        options.includeSymbols = includeSymbols
+        password = SharedPasswordGenerator.generate(options)
     }
 }
 

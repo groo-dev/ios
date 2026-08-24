@@ -35,8 +35,26 @@ extension, CryptoKit (AES-GCM), Swift Testing (`@Test`/`#expect`), xcodebuild.
   (`notes`, `totp`, `folderId`, `favorite`, `deletedAt`).
 - **`createdAt` and `updatedAt` are required** by every other client and are
   not modelled on `SharedPassPasswordItem`. They travel in the queue envelope.
-- **Test suite baseline:** `scripts/test.sh --unit` must pass at the end of
-  every task. Single-suite runs use
+- **Test suite baseline — the suite is ALREADY RED on `main`.** Measured
+  2026-08-25 by stashing all work and running `scripts/test.sh --unit`:
+  584 tests, 17 issues across these 11 tests, none of them related to this
+  feature:
+
+  | Suite | Test |
+  |---|---|
+  | `PrayerTimeServiceTests` | `afterIshaNextIsTomorrowsFajrAndIshaRunsUntilIt` |
+  | `PassViewSnapshotTests` | `itemDetailCorrupted`, `itemDetailEveryType`, `itemDetailExtraStates` |
+  | `PadViewSnapshotTests` | `padItemRowVariants`, `padListEmpty`, `padListPopulated` |
+  | `AzanViewSnapshotTests` | `prayerTimeRowVariants` |
+  | `ScratchpadViewSnapshotTests` | `scratchpadListStates` |
+  | `RootViewSnapshotTests` | `settingsViewWithBackupDate` |
+  | `StocksViewSnapshotTests` | `stockPriceChartVariants` |
+
+  Some of these are order-dependent and flake between runs (`padListEmpty` and
+  `padListPopulated` swap). **Do not treat "the suite passed" as the gate — it
+  cannot pass.** The gate is: the failing set must stay a subset of the table
+  above, and every test this plan adds must pass. Compare set-to-set after each
+  task, and if a new name appears, that is your regression. Single-suite runs use
   `xcodebuild test -project Groo.xcodeproj -scheme Groo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:GrooTests/<SuiteName>`.
 - **Commit after every task**, on branch `feat/autofill-create-login`.
 

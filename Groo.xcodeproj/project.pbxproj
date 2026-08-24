@@ -36,6 +36,7 @@
 		1B48208B2F35625A0018D7FA /* web3swift in Frameworks */ = {isa = PBXBuildFile; productRef = 1B48208A2F35625A0018D7FA /* web3swift */; };
 		1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = 1B9FA3702F44944100D792F5 /* Adhan */; };
 		21FE88472EA418233C774A82 /* NonDestructiveTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 364AF7528F2E858EC63A376F /* NonDestructiveTokenStore.swift */; };
+		251D94E4EF3A2023241E434B /* SharedPasswordGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1613F46ECA38F853AF6D455 /* SharedPasswordGenerator.swift */; };
 		263961DA5D1EE64BE5C84ECC /* SharedRecordDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DB49ABBE7F5CE5B6FE838E2 /* SharedRecordDecoder.swift */; };
 		33014595B70E77D7AFDAA895 /* SharedRecordModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56362AA81D8016439917CC5 /* SharedRecordModels.swift */; };
 		3895E09DCB8C3836CF4EDB82 /* SharedPadCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */; };
@@ -54,6 +55,7 @@
 		AFBF72D6FF86652019136C53 /* SharedRecordModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56362AA81D8016439917CC5 /* SharedRecordModels.swift */; };
 		B6FC3F9FCD5EE42BE00807BA /* GrooAuth in Frameworks */ = {isa = PBXBuildFile; productRef = A135E9C4D4E3DA5219FB27B0 /* GrooAuth */; };
 		B77C666E7C9B67020CB0FBB1 /* SharedRecordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 151FF840447FA0D6E2B69933 /* SharedRecordStore.swift */; };
+		B9CD2290877BDF839B2EBF25 /* SharedPasswordGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1613F46ECA38F853AF6D455 /* SharedPasswordGenerator.swift */; };
 		BB659CF4118678279427B23D /* SharedRecordCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1216F05DAB33620E75E2624 /* SharedRecordCrypto.swift */; };
 		BC82ED089E0E728AE427CDEE /* SharedPadCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */; };
 		C28ED402534EC41C9D99BFB1 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1824F78163C97BE82976C04C /* Foundation.framework */; };
@@ -63,6 +65,7 @@
 		D070088143A9E97B17B36A78 /* SharedPassAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB87AB7F5FD7807E1D49B4 /* SharedPassAPIClient.swift */; };
 		D98D408903A5F83C7A67E76A /* SharedPassAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB87AB7F5FD7807E1D49B4 /* SharedPassAPIClient.swift */; };
 		DEBF3BD72D0B0019273982DB /* SharedAPIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADAAA706A00A60B44BEBF74F /* SharedAPIError.swift */; };
+		FD865C645EBC910767E87390 /* SharedPasswordGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1613F46ECA38F853AF6D455 /* SharedPasswordGenerator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -157,6 +160,7 @@
 		A56E7B45592A2BC59A07A7E4 /* PasskeyPublisher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PasskeyPublisher.swift; sourceTree = "<group>"; };
 		ADAAA706A00A60B44BEBF74F /* SharedAPIError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedAPIError.swift; sourceTree = "<group>"; };
 		C1216F05DAB33620E75E2624 /* SharedRecordCrypto.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedRecordCrypto.swift; sourceTree = "<group>"; };
+		E1613F46ECA38F853AF6D455 /* SharedPasswordGenerator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedPasswordGenerator.swift; sourceTree = "<group>"; };
 		E285B8667C4DEBF920F1C040 /* SharedGrooAuthFactory.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedGrooAuthFactory.swift; sourceTree = "<group>"; };
 		FDB0B53A16A5327609878A8A /* GrooUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GrooUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -343,6 +347,7 @@
 				A56E7B45592A2BC59A07A7E4 /* PasskeyPublisher.swift */,
 				151FF840447FA0D6E2B69933 /* SharedRecordStore.swift */,
 				5DB49ABBE7F5CE5B6FE838E2 /* SharedRecordDecoder.swift */,
+				E1613F46ECA38F853AF6D455 /* SharedPasswordGenerator.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -694,6 +699,7 @@
 				77CDBA55737DC1F732BDD31D /* PasskeyPublisher.swift in Sources */,
 				A1E99CA41A462FDC9042A6EE /* SharedRecordStore.swift in Sources */,
 				263961DA5D1EE64BE5C84ECC /* SharedRecordDecoder.swift in Sources */,
+				FD865C645EBC910767E87390 /* SharedPasswordGenerator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -721,6 +727,7 @@
 				7EA43B88DD3E69030C017E6C /* PasskeyPublisher.swift in Sources */,
 				B77C666E7C9B67020CB0FBB1 /* SharedRecordStore.swift in Sources */,
 				9AA77F1E131B705481D0FD51 /* SharedRecordDecoder.swift in Sources */,
+				251D94E4EF3A2023241E434B /* SharedPasswordGenerator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -758,6 +765,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B9CD2290877BDF839B2EBF25 /* SharedPasswordGenerator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
