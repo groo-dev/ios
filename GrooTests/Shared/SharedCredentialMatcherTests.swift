@@ -151,4 +151,53 @@ struct SharedCredentialMatcherTests {
         // Empty query means "no filter"
         #expect(SharedCredentialMatcher.passkeys(passkeys, matchingQuery: "").count == 3)
     }
+
+    // MARK: - Pending passwords
+
+    private static func pendingPassword(id: String, name: String = "github.com") -> SharedPendingPasswordItem {
+        SharedNewLoginDraft(name: name, username: "me", password: "hunter2", site: "github.com")
+            .pendingItem(id: id, now: 1)
+    }
+
+    private static func vaultPassword(id: String) -> SharedPassPasswordItem {
+        SharedPassPasswordItem(
+            id: id, name: "github.com", username: "me", password: "hunter2",
+            urls: ["https://github.com"]
+        )
+    }
+
+    @Test func aPendingLoginNotYetInTheVaultIsAppended() {
+        let merged = SharedCredentialMatcher.mergingPendingPasswords(
+            vault: [Self.vaultPassword(id: "known")],
+            pending: [Self.pendingPassword(id: "fresh")]
+        )
+
+        #expect(merged.map(\.id) == ["known", "fresh"])
+    }
+
+    @Test func aPendingLoginAlreadySyncedIsNotDuplicated() {
+        // The push succeeded and the record came back down. The queue still
+        // holds it, because only the app clears the queue.
+        let merged = SharedCredentialMatcher.mergingPendingPasswords(
+            vault: [Self.vaultPassword(id: "known")],
+            pending: [Self.pendingPassword(id: "known")]
+        )
+
+        #expect(merged.map(\.id) == ["known"])
+    }
+
+    @Test func pendingPasswordDedupeIsByIdNotByNameOrUsername() {
+        // Two logins for the same site with the same username are legitimate.
+        let merged = SharedCredentialMatcher.mergingPendingPasswords(
+            vault: [Self.vaultPassword(id: "first")],
+            pending: [Self.pendingPassword(id: "second")]
+        )
+
+        #expect(merged.count == 2)
+    }
+
+    @Test func anEmptyPendingPasswordQueueChangesNothing() {
+        let vault = [Self.vaultPassword(id: "known")]
+        #expect(SharedCredentialMatcher.mergingPendingPasswords(vault: vault, pending: []).map(\.id) == ["known"])
+    }
 }
