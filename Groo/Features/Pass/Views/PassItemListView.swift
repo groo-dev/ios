@@ -18,6 +18,7 @@ struct PassItemListView: View {
     @State private var showingTypeFilter = false
     @State private var copiedItemId: String?
     @State private var actionError: String?
+    @State private var isRetryingSync = false
 
     private var items: [PassVaultItem] {
         if !searchText.isEmpty {
@@ -32,6 +33,44 @@ struct PassItemListView: View {
 
     var body: some View {
         List {
+            if passService.pendingSyncCount > 0 {
+                Section {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                            .foregroundStyle(.orange)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(passService.pendingSyncCount) item\(passService.pendingSyncCount == 1 ? "" : "s") waiting to sync")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Text("Created in AutoFill and saved on this device only.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        if isRetryingSync {
+                            ProgressView()
+                        } else {
+                            Button("Retry") {
+                                isRetryingSync = true
+                                Task {
+                                    defer { isRetryingSync = false }
+                                    do {
+                                        try await passService.sync()
+                                    } catch {
+                                        actionError = error.localizedDescription
+                                    }
+                                }
+                            }
+                            .font(.subheadline)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
             // Favorites section (when not searching or filtering)
             if searchText.isEmpty && selectedType == nil && !favorites.isEmpty {
                 Section {
