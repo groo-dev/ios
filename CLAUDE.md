@@ -168,9 +168,19 @@ either:
   failed on a Friday after Dhuhr; fixed 2026-08-07, and `jumuahReminderTime`
   now rolls past an elapsed Friday.
 
-For the UI suite, expect exactly one pre-existing failure —
-`PassUnlockUITests.testUnlockThenLockVaultRelocks` — confirmed pre-existing
-against the merge base, unrelated to this branch's work.
+For the UI suite, expect exactly one pre-existing failure. **Which one has
+changed** — re-confirm rather than trusting this line:
+
+- 2026-08-25: `PassCrudUITests.testLoginItemLifecycleCreateEditDetailTrashRestore`
+  fails at `PassCrudUITests.swift:41-42` — the leading-swipe `Edit` button is
+  never found. Confirmed pre-existing by running it on `main` (`6b467dd`), where
+  it fails identically. `PassUnlockUITests.testUnlockThenLockVaultRelocks`
+  passed in the same run.
+- Earlier (2026-08-08): `PassUnlockUITests.testUnlockThenLockVaultRelocks` was
+  the failing one instead.
+
+Both are swipe/timing-sensitive, so the failing member of this pair moves.
+Confirm against the merge base before blaming a branch.
 
 So diff the failing *set*, never the count, and re-run a suspicious failure at a
 different time of day before blaming your change:

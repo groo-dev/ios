@@ -55,6 +55,7 @@ class PassService {
     private let vaultStore: PassVaultStore
     private let credentialService: any CredentialIdentityProviding
     private let pendingPasskeys: any PendingPasskeyStoring
+    private let pendingPasswords: any PendingPasswordStoring
 
     // Encryption state
     private var encryptionKey: SymmetricKey?
@@ -76,6 +77,11 @@ class PassService {
     private(set) var isLoading = false
     private(set) var lastError: String?
 
+    /// Items created in the AutoFill sheet that a drain has failed to sync.
+    /// Zero on every normal path — this exists so a *persistently* failing
+    /// drain, where a password lives only on this device, is visible.
+    private(set) var pendingSyncCount = 0
+
     init(
         api: PassAPIClient? = nil,
         crypto: CryptoService = CryptoService(),
@@ -83,6 +89,7 @@ class PassService {
         vaultStore: PassVaultStore = PassVaultStore(),
         credentialService: any CredentialIdentityProviding = CredentialIdentityService(),
         pendingPasskeys: any PendingPasskeyStoring = SharedPendingPasskeyStore(),
+        pendingPasswords: any PendingPasswordStoring = SharedPendingPasswordStore(),
         tokenProvider: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized },
         forceRefresh: @escaping @Sendable () async throws -> String = { throw APIError.unauthorized }
     ) {
@@ -92,6 +99,7 @@ class PassService {
         self.vaultStore = vaultStore
         self.credentialService = credentialService
         self.pendingPasskeys = pendingPasskeys
+        self.pendingPasswords = pendingPasswords
     }
 
     // MARK: - State Properties
@@ -182,7 +190,7 @@ class PassService {
                 storeKeyInKeychain(key)
                 try? keychain.save(salt, for: KeychainService.Key.passSalt)
                 await credentialService.updateCredentialIdentities(from: assembled.items)
-                await mergePendingPasskeys()
+                await mergePendingItems()
                 return true
             }
 
@@ -231,7 +239,7 @@ class PassService {
         await credentialService.updateCredentialIdentities(from: decryptedVault.items)
 
         // Pick up passkeys created by the AutoFill extension
-        await mergePendingPasskeys()
+        await mergePendingItems()
 
         return true
     }
@@ -300,7 +308,7 @@ class PassService {
                     } catch {
                         Log.pass.error("Background sync after unlock failed: \(String(describing: error), privacy: .public)")
                     }
-                    await mergePendingPasskeys()
+                    await mergePendingItems()
                 }
 
                 return true
@@ -322,7 +330,7 @@ class PassService {
             recordState = .empty
             let assembled = try await loadFromRecords(using: key)
             await credentialService.updateCredentialIdentities(from: assembled.items)
-            await mergePendingPasskeys()
+            await mergePendingItems()
             return true
         }
 
@@ -361,7 +369,7 @@ class PassService {
         await credentialService.updateCredentialIdentities(from: decryptedVault.items)
 
         // Pick up passkeys created by the AutoFill extension
-        await mergePendingPasskeys()
+        await mergePendingItems()
 
         return true
     }
@@ -998,30 +1006,81 @@ class PassService {
 
     // MARK: - Pending Passkeys (created by the AutoFill extension)
 
-    /// Merge passkeys the AutoFill extension registered while the app wasn't running,
-    /// push them to the server, then clear the pending queue.
-    func mergePendingPasskeys() async {
-        guard let key = encryptionKey, var vault = vault else { return }
+    /// Rebuild a queued login as the vault's own model.
+    ///
+    /// `static` and `internal` so the payload-equality test can reach it: the
+    /// JSON this produces must match `PasswordPublisher.payload` exactly.
+    /// Every optional stays nil — the encoder omits nil, and the extension's
+    /// payload omits all four.
+    static func passwordItem(from pending: SharedPendingPasswordItem) -> PassPasswordItem {
+        PassPasswordItem(
+            id: pending.item.id,
+            type: .password,
+            name: pending.item.name,
+            username: pending.item.username,
+            password: pending.item.password,
+            urls: pending.item.urls,
+            notes: nil,
+            totp: nil,
+            folderId: nil,
+            favorite: nil,
+            createdAt: pending.createdAt,
+            updatedAt: pending.updatedAt
+        )
+    }
 
-        let pending: [SharedPassPasskeyItem]
+    /// Merge everything the AutoFill extension created while the app wasn't
+    /// running — passkeys and logins — then push and clear the queues.
+    func mergePendingItems() async {
+        guard let key = encryptionKey else { return }
+
+        // Refresh records first. The extension may already have pushed a record
+        // for a queued item; without this, `writeRecordIfChanged` sees no local
+        // record, POSTs the same id, and the server answers 409 RECORD_EXISTS —
+        // which is not the recordConflict the PUT path recovers from, so the
+        // whole save throws. A failure here is not fatal: the merge still runs
+        // against what we have, and a genuinely stale write just stays queued.
+        if formatVersion == 2 {
+            do {
+                try await loadFromRecords(using: key)
+            } catch {
+                Log.pass.error(
+                    "Could not refresh records before draining pending items: \(String(describing: error), privacy: .public)"
+                )
+            }
+        }
+
+        guard var vault = vault else { return }
+
+        let pendingPasskeyItems: [SharedPassPasskeyItem]
         do {
-            pending = try pendingPasskeys.load(key: key)
+            pendingPasskeyItems = try pendingPasskeys.load(key: key)
         } catch {
             // Never clear an unreadable queue; already logged by the store
             Log.pass.error("Cannot read pending passkey queue: \(String(describing: error), privacy: .public)")
-            return
+            pendingPasskeyItems = []
         }
-        guard !pending.isEmpty else { return }
+
+        let pendingPasswordItems: [SharedPendingPasswordItem]
+        do {
+            pendingPasswordItems = try pendingPasswords.load(key: key)
+        } catch {
+            Log.pass.error("Cannot read pending login queue: \(String(describing: error), privacy: .public)")
+            pendingPasswordItems = []
+        }
+
+        guard !pendingPasskeyItems.isEmpty || !pendingPasswordItems.isEmpty else { return }
 
         let existingCredentialIds = Set(vault.items.compactMap { item -> String? in
             guard case .passkey(let passkey) = item else { return nil }
             return passkey.credentialId
         })
+        let existingIds = Set(vault.items.map(\.id))
 
         let now = Int(Date().timeIntervalSince1970 * 1000)
         var added = false
 
-        for shared in pending where !existingCredentialIds.contains(shared.credentialId) {
+        for shared in pendingPasskeyItems where !existingCredentialIds.contains(shared.credentialId) {
             let item = PassPasskeyItem(
                 id: shared.id,
                 name: shared.name,
@@ -1040,18 +1099,32 @@ class PassService {
             added = true
         }
 
+        // Dedupe by id, not by name or username: two logins for the same site
+        // with the same username are legitimate.
+        for pending in pendingPasswordItems where !existingIds.contains(pending.item.id) {
+            vault.items.append(.password(Self.passwordItem(from: pending)))
+            added = true
+        }
+
         do {
             if added {
                 vault.lastModified = now
                 self.vault = vault
                 try await saveVault()
-                Log.pass.info("Merged \(pending.count) pending passkey(s) from AutoFill")
+                Log.pass.info(
+                    "Merged \(pendingPasskeyItems.count) passkey(s) and \(pendingPasswordItems.count) login(s) from AutoFill"
+                )
             }
             pendingPasskeys.clear()
+            pendingPasswords.clear()
+            pendingSyncCount = 0
         } catch {
-            // Keep the queue so the merge retries on the next unlock/sync —
-            // but a persistent failure must be observable
-            Log.pass.error("Failed to sync \(pending.count) pending passkey(s), will retry: \(String(describing: error), privacy: .public)")
+            // Keep both queues so the merge retries on the next unlock/sync —
+            // but a persistent failure must be observable, hence the count.
+            pendingSyncCount = pendingPasskeyItems.count + pendingPasswordItems.count
+            Log.pass.error(
+                "Failed to sync pending AutoFill items, will retry: \(String(describing: error), privacy: .public)"
+            )
         }
     }
 
@@ -1070,7 +1143,7 @@ class PassService {
             let assembled = try await loadFromRecords(using: key)
             await credentialService.updateCredentialIdentities(from: assembled.items)
             // Last, so the merge applies on top of what was just synced.
-            await mergePendingPasskeys()
+            await mergePendingItems()
             return
         }
 
@@ -1086,7 +1159,7 @@ class PassService {
             recordState = .empty
             let assembled = try await loadFromRecords(using: key)
             await credentialService.updateCredentialIdentities(from: assembled.items)
-            await mergePendingPasskeys()
+            await mergePendingItems()
             return
         }
 
@@ -1126,7 +1199,7 @@ class PassService {
         // PUT's expectedVersion current. Without this the queue only drained on
         // unlock, which — since the app never re-locks on background — meant a
         // cold start.
-        await mergePendingPasskeys()
+        await mergePendingItems()
     }
 
     // MARK: - Private Helpers

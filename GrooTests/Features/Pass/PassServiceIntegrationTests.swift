@@ -27,6 +27,7 @@ struct PassServiceIntegrationTests {
         let salt: Data
         let tempDir: URL
         let pending: InMemoryPendingPasskeyStore
+        let pendingPasswords: InMemoryPendingPasswordStore
     }
 
     static let crypto = CryptoService()
@@ -39,7 +40,8 @@ struct PassServiceIntegrationTests {
         items: [PassVaultItem],
         folders: [PassFolder] = [],
         vaultVersion: Int = 3,
-        pending: InMemoryPendingPasskeyStore = InMemoryPendingPasskeyStore()
+        pending: InMemoryPendingPasskeyStore = InMemoryPendingPasskeyStore(),
+        pendingPasswords: InMemoryPendingPasswordStore = InMemoryPendingPasswordStore()
     ) throws -> Env {
         StubURLProtocol.reset()
 
@@ -79,10 +81,12 @@ struct PassServiceIntegrationTests {
             keychain: keychain,
             vaultStore: PassVaultStore(directoryURL: tempDir),
             credentialService: credentials,
-            pendingPasskeys: pending)
+            pendingPasskeys: pending,
+            pendingPasswords: pendingPasswords)
 
         return Env(service: service, keychain: keychain, credentials: credentials,
-                   key: key, salt: salt, tempDir: tempDir, pending: pending)
+                   key: key, salt: salt, tempDir: tempDir, pending: pending,
+                   pendingPasswords: pendingPasswords)
     }
 
     /// Stub the PUT /v1/vault response `saveVault()` expects after a mutation.
@@ -433,6 +437,90 @@ struct PassServiceIntegrationTests {
         #expect(passkeys.map(\.credentialId) == ["Y3JlZC1hZg"])
         #expect(env.pending.clearCount == 1)
         #expect(env.pending.items.isEmpty)
+    }
+
+    // MARK: Pending logins created in the AutoFill sheet
+
+    static func makeSharedPassword(id: String = "item-1") -> SharedPendingPasswordItem {
+        SharedNewLoginDraft(name: "github.com", username: "me", password: "hunter2", site: "github.com")
+            .pendingItem(id: id, now: 1_700_000_000_123)
+    }
+
+    /// Re-stub the vault GET that `sync()` performs before the drain PUTs.
+    static func stubVaultGetForSync(items: [PassVaultItem], key: SymmetricKey, version: Int) throws {
+        let vault = PassVault(version: 1, items: items, folders: [], lastModified: 1_700_000_000_000)
+        let combined = try crypto.encryptData(try JSONEncoder().encode(vault), using: key)
+        StubURLProtocol.enqueue(
+            method: "GET", pathSuffix: "/v1/vault",
+            json: #"{"encryptedData":"\#(combined.dropFirst(12).base64EncodedString())","iv":"\#(combined.prefix(12).base64EncodedString())","version":\#(version),"updatedAt":1700000002}"#)
+    }
+
+    @Test func syncDrainsLoginsQueuedByAutoFill() async throws {
+        let env = try Self.makeEnv(items: [])
+        _ = try await env.service.unlock(password: Self.password)
+
+        env.pendingPasswords.items = [Self.makeSharedPassword()]
+
+        try Self.stubVaultGetForSync(items: [], key: env.key, version: 4)
+        Self.stubVaultPut(version: 5)
+
+        try await env.service.sync()
+
+        let uploaded = try Self.decodeUploadedVault(key: env.key)
+        let passwords = uploaded.vault.items.compactMap { item -> PassPasswordItem? in
+            guard case .password(let password) = item else { return nil }
+            return password
+        }
+        #expect(passwords.map(\.id) == ["item-1"])
+        #expect(passwords.first?.password == "hunter2")
+        // The queued timestamps survive the drain — see the payload-equality test.
+        #expect(passwords.first?.createdAt == 1_700_000_000_123)
+        #expect(env.pendingPasswords.clearCount == 1)
+        #expect(env.pendingPasswords.items.isEmpty)
+        #expect(env.service.pendingSyncCount == 0)
+    }
+
+    @Test func aLoginAlreadyInTheVaultIsNotMergedTwice() async throws {
+        // The extension pushed the record and it came back on sync, but the
+        // queue still holds it — only the app clears the queue.
+        let existing = PassVaultItem.password(PassService.passwordItem(from: Self.makeSharedPassword()))
+        let env = try Self.makeEnv(items: [existing])
+        _ = try await env.service.unlock(password: Self.password)
+
+        env.pendingPasswords.items = [Self.makeSharedPassword()]
+
+        try Self.stubVaultGetForSync(items: [existing], key: env.key, version: 4)
+        Self.stubVaultPut(version: 5)
+
+        try await env.service.sync()
+
+        // Nothing was added, so nothing needed uploading — but the queue is
+        // still cleared, because its contents are already in the vault.
+        #expect(env.pendingPasswords.clearCount == 1)
+        #expect(env.service.pendingSyncCount == 0)
+    }
+
+    @Test func aFailedSaveKeepsBothQueuesAndReportsTheCount() async throws {
+        let env = try Self.makeEnv(items: [])
+        _ = try await env.service.unlock(password: Self.password)
+
+        env.pending.items = [Self.makeSharedPasskey()]
+        env.pendingPasswords.items = [Self.makeSharedPassword()]
+
+        try Self.stubVaultGetForSync(items: [], key: env.key, version: 4)
+        // The upload fails. Clearing here would destroy the only copy of both
+        // the passkey private key and the password.
+        StubURLProtocol.enqueue(
+            method: "PUT", pathSuffix: "/v1/vault", status: 500,
+            json: #"{"error":"boom"}"#)
+
+        _ = try? await env.service.sync()
+
+        #expect(env.pending.clearCount == 0)
+        #expect(env.pendingPasswords.clearCount == 0)
+        #expect(env.pending.items.count == 1)
+        #expect(env.pendingPasswords.items.count == 1)
+        #expect(env.service.pendingSyncCount == 2)
     }
 }
 

@@ -107,4 +107,18 @@ enum SharedCredentialMatcher {
         let knownCredentialIds = Set(vault.map(\.credentialId))
         return vault + pending.filter { !knownCredentialIds.contains($0.credentialId) }
     }
+
+    /// Fold in logins created in the AutoFill sheet but not yet merged into the
+    /// vault by the main app.
+    ///
+    /// Dedupe is by item id — the extension authors the id and the pushed
+    /// record keeps it. Name or username would be wrong: two logins for the
+    /// same site with the same username are legitimate.
+    static func mergingPendingPasswords(
+        vault: [SharedPassPasswordItem],
+        pending: [SharedPendingPasswordItem]
+    ) -> [SharedPassPasswordItem] {
+        let knownIds = Set(vault.map(\.id))
+        return vault + pending.map(\.item).filter { !knownIds.contains($0.id) }
+    }
 }
