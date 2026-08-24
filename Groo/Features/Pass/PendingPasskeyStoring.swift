@@ -23,3 +23,19 @@ struct SharedPendingPasskeyStore: PendingPasskeyStoring {
         SharedPendingItemsStore.clear()
     }
 }
+
+protocol PendingPasswordStoring {
+    func load(key: SymmetricKey) throws -> [SharedPendingPasswordItem]
+    func clear()
+}
+
+/// Production implementation, backed by the App Group queue file.
+struct SharedPendingPasswordStore: PendingPasswordStoring {
+    func load(key: SymmetricKey) throws -> [SharedPendingPasswordItem] {
+        try SharedPendingPasswordsStore.load(key: key)
+    }
+
+    func clear() {
+        SharedPendingPasswordsStore.clear()
+    }
+}

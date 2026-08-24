@@ -78,9 +78,9 @@ struct ContentView: View {
             // The AutoFill extension may have registered a passkey while we were
             // backgrounded. The app doesn't re-lock on background, so without
             // this the queue would wait for the next cold start. A locked vault
-            // makes this a no-op — mergePendingPasskeys can't decrypt the queue
+            // makes this a no-op — mergePendingItems can't decrypt the queue
             // without the key, and the unlock paths already cover that case.
-            Task { await passService?.mergePendingPasskeys() }
+            Task { await passService?.mergePendingItems() }
         }
     }
 
