@@ -106,7 +106,7 @@ class AutoFillService: ObservableObject {
         // resolve it, so the sheet dismissed with credentialIdentityNotFound.
         if let cached = try? SharedRecordStore.load(key: key), !cached.records.isEmpty {
             let decoded = SharedRecordDecoder.decodeItems(cached.records, key: key)
-            credentials = decoded.passwords
+            credentials = Self.withPendingPasswords(decoded.passwords, key: key)
             passkeys = Self.withPendingPasskeys(decoded.passkeys, key: key)
             return
         }
@@ -159,7 +159,25 @@ class AutoFillService: ObservableObject {
             return passkeyItem
         }
 
+        credentials = Self.withPendingPasswords(credentials, key: key)
         passkeys = Self.withPendingPasskeys(passkeys, key: key)
+    }
+
+    /// Fold in logins created here but not yet merged into the vault by the
+    /// main app. A queue that cannot be read must not fail the whole unlock.
+    static func withPendingPasswords(
+        _ passwords: [SharedPassPasswordItem],
+        key: SymmetricKey
+    ) -> [SharedPassPasswordItem] {
+        do {
+            let pending = try SharedPendingPasswordsStore.load(key: key)
+            return SharedCredentialMatcher.mergingPendingPasswords(vault: passwords, pending: pending)
+        } catch {
+            Log.autofill.error(
+                "Skipping pending logins: \(String(describing: error), privacy: .public)"
+            )
+            return passwords
+        }
     }
 
     /// Fold in passkeys registered here but not yet merged into the vault by the
@@ -248,10 +266,11 @@ class AutoFillService: ObservableObject {
         try SharedRecordStore.save(cached, key: key)
 
         let decoded = SharedRecordDecoder.decodeItems(cached.records, key: key)
+        let mergedPasswords = Self.withPendingPasswords(decoded.passwords, key: key)
         let mergedPasskeys = Self.withPendingPasskeys(decoded.passkeys, key: key)
 
         await MainActor.run {
-            self.credentials = decoded.passwords
+            self.credentials = mergedPasswords
             self.passkeys = mergedPasskeys
         }
 
@@ -259,7 +278,7 @@ class AutoFillService: ObservableObject {
         // QuickType strip is driven by ASCredentialIdentityStore, which iOS
         // keeps separately — so without this a newly synced item shows in the
         // sheet but is never suggested until the main app runs.
-        await updateQuickTypeIdentities(passwords: decoded.passwords, passkeys: mergedPasskeys)
+        await updateQuickTypeIdentities(passwords: mergedPasswords, passkeys: mergedPasskeys)
     }
 
     /// Republish QuickType suggestions from a completed refresh.
@@ -361,6 +380,96 @@ class AutoFillService: ObservableObject {
 
         if case .queued(let reason) = outcome {
             Log.autofill.error("Passkey left queued: \(reason, privacy: .public)")
+        }
+    }
+
+    // MARK: - Creating a login from the sheet
+
+    /// Save a login created in the sheet and return it for filling.
+    ///
+    /// Order matters. The queue write comes first because it is the only
+    /// durability that does not depend on the network; the push is awaited
+    /// because `completeRequest` tears this process down and would kill it
+    /// mid-flight. Only the queue write can fail the save.
+    func createPassword(_ draft: SharedNewLoginDraft) async throws -> SharedPassPasswordItem {
+        guard let key = encryptionKey else {
+            throw AutoFillError.vaultLocked
+        }
+
+        let pending = draft.pendingItem(
+            id: UUID().uuidString.lowercased(),
+            now: Int(Date().timeIntervalSince1970 * 1000)
+        )
+
+        // 1. Durable locally, before anything else can fail.
+        try SharedPendingPasswordsStore.append(pending, key: key)
+        credentials.append(pending.item)
+
+        // 2. Best effort, bounded. A failure leaves it queued for the app.
+        await publishPassword(pending)
+
+        // 3. Offer it in QuickType without waiting for the app to run.
+        await saveQuickTypeIdentity(for: pending.item)
+
+        return pending.item
+    }
+
+    /// Push a freshly created login, bounded by a deadline. Never throws.
+    private func publishPassword(_ pending: SharedPendingPasswordItem) async {
+        guard let key = encryptionKey else {
+            Log.autofill.error("Cannot push login: vault is locked")
+            return
+        }
+
+        let session = GrooAuthFactory.makeTokenOnlySession()
+        let api = PassAPIClient(
+            tokenProvider: { try await session.accessToken() },
+            // No force-refresh: one attempt only. Combined with the deadline
+            // this makes a late refresh replay — which would revoke the token
+            // family and sign the user out everywhere — structurally impossible.
+            forceRefresh: { throw APIError.unauthorized }
+        )
+
+        let publisher = PasswordPublisher(pusher: APIPasswordPusher(api: api), vaultKey: key)
+
+        let push = Task { await publisher.publish(pending) }
+        let deadline = Task {
+            try? await Task.sleep(for: .seconds(SharedConfig.passwordPushDeadlineSeconds))
+            push.cancel()
+        }
+        let outcome = await push.value
+        deadline.cancel()
+
+        if case .queued(let reason) = outcome {
+            Log.autofill.error("Login left queued: \(reason, privacy: .public)")
+        }
+    }
+
+    /// Add one QuickType suggestion. Additive, not a replace: the full set is
+    /// only known after a successful refresh.
+    private func saveQuickTypeIdentity(for item: SharedPassPasswordItem) async {
+        let store = ASCredentialIdentityStore.shared
+        guard await store.state().isEnabled else { return }
+
+        let identities: [ASPasswordCredentialIdentity] = item.urls.compactMap { urlString in
+            let normalized = urlString.hasPrefix("http") ? urlString : "https://\(urlString)"
+            guard let host = URL(string: normalized)?.host else { return nil }
+            return ASPasswordCredentialIdentity(
+                serviceIdentifier: ASCredentialServiceIdentifier(identifier: host, type: .domain),
+                user: item.username,
+                recordIdentifier: item.id
+            )
+        }
+        guard !identities.isEmpty else { return }
+
+        do {
+            try await store.saveCredentialIdentities(identities)
+        } catch {
+            // QuickType drifts from the vault when this fails, but the item is
+            // saved and the sheet shows it — so log rather than surface.
+            Log.autofill.error(
+                "Failed to add QuickType identity: \(String(describing: error), privacy: .public)"
+            )
         }
     }
 
