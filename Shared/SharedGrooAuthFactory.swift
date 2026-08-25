@@ -15,7 +15,28 @@ import GrooAuth
 enum GrooAuthFactory {
     /// The iOS native OAuth client (shared by debug + release; only the redirect
     /// URI/keychain service vary by build configuration).
-    private static let clientId = "app_8462033acb01dbfac01c1e9f1e09fe03"
+    ///
+    /// **Any one of this bundle's four client rows works, and they are
+    /// interchangeable.** `runtime` resolves the full application set from the
+    /// row's `bundle_id`, not from the id presented
+    /// (`runtime/api/src/routes/oauth.ts:155`, `resolveRequestableApplications`),
+    /// and a bundle client's `iss` is the workspace origin regardless of which
+    /// sibling was presented (D8, `oauth.ts:133`). Pass is used here only because
+    /// this factory is also what the AutoFill extension authenticates with.
+    ///
+    /// Live `tenant-v1` on 2026-08-25 — `bundle_id = 'dev.groo.ios'`:
+    ///   Azan  client_6ad54e4b96837e2374d6854d3c8e9bf0
+    ///   Drive client_cc0167610f120dda620ed06c055cc688
+    ///   Pad   client_fe2ce7764cdeba15783f4a09ea61be83
+    ///   Pass  client_9ed9353071ab140875eeb1ef32095f66
+    ///
+    /// The previous value, `app_8462033acb01dbfac01c1e9f1e09fe03`, belonged to
+    /// the catch-all `Groo` application, which was **deleted on 2026-08-22**
+    /// (`runtime/CLAUDE.md`, "The `Groo` catch-all application is DELETED") —
+    /// deliberately, because it was the entitlement unit for all seven products.
+    /// Its clients died with it, so every shipped build since has failed sign-in
+    /// with `unknown client_id`. Do not restore it; it does not exist.
+    private static let clientId = "client_9ed9353071ab140875eeb1ef32095f66"
 
     static func makeConfig() -> GrooAuthConfig {
         #if DEBUG
@@ -30,12 +51,19 @@ enum GrooAuthFactory {
             issuer: URL(string: "https://me.groo.dev")!,
             clientId: clientId,
             redirectURI: redirect,
+            // Confined to the applications this bundle is registered for.
+            // `authorize` rejects the ENTIRE request with `invalid_scope` on any
+            // scope outside every named application's ceiling
+            // (`runtime/api/src/routes/oauth.ts:190`) — it does not drop the
+            // stray one and grant the rest. `tasks:*` was requested here until
+            // 2026-08-25 despite this app having no Tasks feature and no Tasks
+            // client for this bundle. Pinned by ConfigTests.
             scopes: [
                 "openid", "profile", "email", "offline_access",
+                "azan:read", "azan:write",
+                "drive:read", "drive:write",
                 "pad:read", "pad:write",
                 "pass:read", "pass:write",
-                "tasks:read", "tasks:write",
-                "drive:read", "drive:write",
             ],
             keychainService: service,
             // Deliberately nil: omitting the access group lands items in the
