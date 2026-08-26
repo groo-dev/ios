@@ -17,7 +17,6 @@ import os
 /// Seams so the publisher is testable without a network or an App Group.
 protocol PasskeyRecordPushing: Sendable {
     func createRecord(_ request: SharedRecordWriteRequest) async throws -> SharedRecordWriteResponse
-    func formatVersion() async throws -> Int
 }
 
 enum PasskeyPublishOutcome: Equatable {
@@ -83,15 +82,6 @@ struct PasskeyPublisher {
     /// the two preceding AutoFill bugs undiagnosable.
     func publish(_ item: SharedPassPasskeyItem) async -> PasskeyPublishOutcome {
         do {
-            // The push only exists once records are authoritative. At format 1
-            // the passkey simply stays queued and the app drains it, exactly as
-            // it does today.
-            let format = try await pusher.formatVersion()
-            guard format == 2 else {
-                Log.autofill.info("Vault is not on per-item records; leaving passkey queued")
-                return .queued(reason: "format \(format)")
-            }
-
             let request = try SharedRecordCrypto.encryptRecord(
                 id: item.id, kind: .item, payload: try payload(for: item), vaultKey: vaultKey
             )
@@ -127,11 +117,6 @@ struct PasskeyPublisher {
 /// Backs `PasskeyRecordPushing` with the real Pass API.
 struct APIPasskeyPusher: PasskeyRecordPushing {
     let api: PassAPIClient
-
-    func formatVersion() async throws -> Int {
-        let probe: SharedFormatProbe = try await api.get(PassAPIClient.Endpoint.keyInfo)
-        return probe.formatVersion ?? 1
-    }
 
     func createRecord(_ request: SharedRecordWriteRequest) async throws -> SharedRecordWriteResponse {
         try await api.post(PassAPIClient.Endpoint.records, body: request)

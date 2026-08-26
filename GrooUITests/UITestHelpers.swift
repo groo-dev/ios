@@ -194,10 +194,19 @@ enum UITest {
     /// window hierarchy — obscuring every other element until dismissed. Not
     /// every save triggers it (simulator heuristics vary), so this is a no-op
     /// when it doesn't appear within `timeout`.
+    /// Dismiss the system "Save this password?" sheet.
+    ///
+    /// It belongs to Springboard, not to the app, so `app.buttons` never
+    /// matches it — the query has to go to the springboard process. Scoping it
+    /// to the app looked like it worked only because the sheet used to appear
+    /// after the assertions that cared; a save that takes a different amount of
+    /// time is enough to leave it sitting over the next tap.
     static func dismissSavePasswordPromptIfPresent(_ app: XCUIApplication, timeout: TimeInterval = 3) {
-        let notNow = app.buttons["Not Now"]
-        if notNow.waitForExistence(timeout: timeout) {
-            notNow.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for candidate in [springboard.buttons["Not Now"], app.buttons["Not Now"]]
+        where candidate.waitForExistence(timeout: timeout) {
+            candidate.tap()
+            return
         }
     }
 }

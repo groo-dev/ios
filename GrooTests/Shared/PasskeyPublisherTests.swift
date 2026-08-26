@@ -11,15 +11,8 @@ import Testing
 struct PasskeyPublisherTests {
 
     final class SpyPusher: PasskeyRecordPushing, @unchecked Sendable {
-        var format = 2
-        var formatError: (any Error)?
         var createError: (any Error)?
         var created: [SharedRecordWriteRequest] = []
-
-        func formatVersion() async throws -> Int {
-            if let formatError { throw formatError }
-            return format
-        }
 
         func createRecord(_ request: SharedRecordWriteRequest) async throws -> SharedRecordWriteResponse {
             if let createError { throw createError }
@@ -174,23 +167,6 @@ struct PasskeyPublisherTests {
         #expect(pusher.created.first?.expectedVersion == nil)
     }
 
-    @Test("leaves the passkey queued when the vault is still on the blob format")
-    func skipsAtFormatOne() async {
-        let pusher = SpyPusher()
-        pusher.format = 1
-        let (publisher, _, queue, _) = makePublisher(pusher: pusher)
-
-        let outcome = await publisher.publish(passkey())
-
-        guard case .queued = outcome else {
-            Issue.record("expected the passkey to stay queued")
-            return
-        }
-        #expect(pusher.created.isEmpty)
-        // Nothing removed: the app-side drain still owns it.
-        #expect(queue.removed.isEmpty)
-    }
-
     @Test("stays queued when the push fails, and never throws into the ceremony")
     func pushFailureIsSwallowed() async {
         let pusher = SpyPusher()
@@ -203,22 +179,6 @@ struct PasskeyPublisherTests {
             Issue.record("expected the passkey to stay queued")
             return
         }
-        #expect(queue.removed.isEmpty)
-    }
-
-    @Test("stays queued when the format check fails, e.g. offline")
-    func offlineStaysQueued() async {
-        let pusher = SpyPusher()
-        pusher.formatError = Boom()
-        let (publisher, _, queue, _) = makePublisher(pusher: pusher)
-
-        let outcome = await publisher.publish(passkey())
-
-        guard case .queued = outcome else {
-            Issue.record("expected the passkey to stay queued")
-            return
-        }
-        #expect(pusher.created.isEmpty)
         #expect(queue.removed.isEmpty)
     }
 

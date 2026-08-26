@@ -19,6 +19,11 @@ final class StubURLProtocol: URLProtocol {
     nonisolated(unsafe) private static var queues: [String: [Response]] = [:]
     nonisolated(unsafe) private static var recorded: [URLRequest] = []
 
+    /// Consulted before the canned queues. Returning nil falls through to them,
+    /// so a suite can serve the endpoints it needs statefully (per-record
+    /// optimistic locking, say) and still enqueue one-off responses.
+    nonisolated(unsafe) static var handler: (@Sendable (URLRequest) -> Response?)?
+
     private static func key(_ method: String, _ pathSuffix: String) -> String {
         "\(method.uppercased()) \(pathSuffix)"
     }
@@ -43,6 +48,7 @@ final class StubURLProtocol: URLProtocol {
         lock.lock(); defer { lock.unlock() }
         queues = [:]
         recorded = []
+        handler = nil
     }
 
     static var recordedRequests: [URLRequest] {
@@ -60,6 +66,7 @@ final class StubURLProtocol: URLProtocol {
     private static func dequeue(for request: URLRequest) -> Response? {
         lock.lock(); defer { lock.unlock() }
         recorded.append(request)
+        if let handler, let response = handler(request) { return response }
         let method = request.httpMethod ?? "GET"
         let path = request.url?.path ?? ""
         guard let matchKey = queues.keys.first(where: { key in

@@ -11,15 +11,8 @@ import Testing
 struct PasswordPublisherTests {
 
     final class SpyPusher: PasswordRecordPushing, @unchecked Sendable {
-        var format = 2
-        var formatError: (any Error)?
         var createError: (any Error)?
         var created: [SharedRecordWriteRequest] = []
-
-        func formatVersion() async throws -> Int {
-            if let formatError { throw formatError }
-            return format
-        }
 
         func createRecord(_ request: SharedRecordWriteRequest) async throws -> SharedRecordWriteResponse {
             if let createError { throw createError }
@@ -103,18 +96,6 @@ struct PasswordPublisherTests {
         #expect(item.password == "hunter2")
     }
 
-    @Test("a format-1 vault leaves the login queued and pushes nothing")
-    func formatOneIsNotPushed() async throws {
-        let pusher = SpyPusher()
-        pusher.format = 1
-        let (publisher, _, _) = makePublisher(pusher: pusher)
-
-        let outcome = await publisher.publish(Self.pending())
-
-        #expect(outcome == .queued(reason: "format 1"))
-        #expect(pusher.created.isEmpty)
-    }
-
     @Test("a failing push leaves the login queued and never throws")
     func pushFailureIsQueuedNotThrown() async throws {
         let pusher = SpyPusher()
@@ -129,20 +110,6 @@ struct PasswordPublisherTests {
         }
     }
 
-    @Test("a failing format probe leaves the login queued and never throws")
-    func formatProbeFailureIsQueued() async throws {
-        let pusher = SpyPusher()
-        pusher.formatError = Boom()
-        let (publisher, _, _) = makePublisher(pusher: pusher)
-
-        let outcome = await publisher.publish(Self.pending())
-
-        guard case .queued = outcome else {
-            Issue.record("expected .queued, got \(outcome)")
-            return
-        }
-        #expect(pusher.created.isEmpty)
-    }
 
     @Test("a successful push reports published")
     func successReportsPublished() async throws {

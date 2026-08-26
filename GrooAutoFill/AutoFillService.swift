@@ -246,11 +246,6 @@ class AutoFillService: ObservableObject {
             forceRefresh: { throw APIError.unauthorized }
         )
 
-        // Records only. At format 1 the blob is authoritative and owned by the
-        // app, so there is nothing safe for the extension to refresh.
-        let keyInfo: SharedFormatProbe = try await api.get(PassAPIClient.Endpoint.keyInfo)
-        guard (keyInfo.formatVersion ?? 1) == 2 else { return }
-
         // A cache that exists but cannot be read must not silently reset the
         // cursor — that would refetch every record on every sheet.
         var cached = try SharedRecordStore.load(key: key) ?? .empty

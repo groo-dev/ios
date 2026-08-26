@@ -69,7 +69,6 @@ class PassService {
     /// Which storage the server says is authoritative: 1 = the legacy blob,
     /// 2 = per-item records. iOS never converts — only the web app does — so
     /// this is read and followed, never written.
-    private(set) var formatVersion: Int = 1
     private var recordState: PassRecordState = .empty
 
     // State
@@ -164,65 +163,10 @@ class PassService {
             using: wrappingKey
         )
 
-        formatVersion = keyInfo.formatVersion ?? 1
-
-        let decryptedVault: PassVault
-        if formatVersion == 2 {
-            // Records are authoritative; the blob endpoint 410s now.
-            encryptionKey = key
-            recordState = .empty
-            decryptedVault = try await loadFromRecords(using: key)
-        } else {
-            let vaultResponse: PassVaultResponse
-            do {
-                vaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
-            } catch APIError.httpError(let status, let code)
-                        where status == 410 || code == "FORMAT_MIGRATED" {
-                // The vault was converted on the web app between our key-info
-                // read and this fetch. This build speaks records, so recover by
-                // switching rather than surfacing an error — "update required"
-                // is for builds that predate record support, not this one.
-                Log.pass.info("Vault converted to per-item records; switching")
-                formatVersion = 2
-                encryptionKey = key
-                recordState = .empty
-                let assembled = try await loadFromRecords(using: key)
-                storeKeyInKeychain(key)
-                try? keychain.save(salt, for: KeychainService.Key.passSalt)
-                await credentialService.updateCredentialIdentities(from: assembled.items)
-                await mergePendingItems()
-                return true
-            }
-
-            guard let encryptedData = Data(base64Encoded: vaultResponse.encryptedData),
-                  let iv = Data(base64Encoded: vaultResponse.iv) else {
-                throw PassError.invalidVaultData
-            }
-
-            let decryptedData = try decryptVaultData(encryptedData, iv: iv, using: key)
-
-            // Decryption succeeded, so a decode failure is a schema bug — not a wrong password
-            do {
-                decryptedVault = try JSONDecoder().decode(PassVault.self, from: decryptedData)
-            } catch {
-                Log.pass.error("Vault JSON decode failed after password unlock: \(String(describing: error), privacy: .public)")
-                throw PassError.invalidVaultData
-            }
-
-            // Success - store key and vault
-            encryptionKey = key
-            vault = decryptedVault
-            serverVersion = vaultResponse.version
-            hasVaultSetup = true
-
-            let metadata = PassVaultMetadata(
-                version: vaultResponse.version,
-                iv: vaultResponse.iv,
-                updatedAt: vaultResponse.updatedAt,
-                lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
-            )
-            await saveVaultCache(encryptedData: encryptedData, metadata: metadata)
-        }
+        // Records are the only storage.
+        encryptionKey = key
+        recordState = .empty
+        let decryptedVault = try await loadFromRecords(using: key)
 
         // Store key in Keychain with biometric protection
         storeKeyInKeychain(key)
@@ -319,58 +263,12 @@ class PassService {
             }
         }
 
-        // Fallback to server fetch. Branch on the server's format first: the
-        // blob endpoint 410s once records are authoritative, and treating that
-        // as a network error would leave a stale enrolment quietly in place.
-        let fallbackKeyInfo: PassKeyInfo = try await api.get(PassAPIClient.Endpoint.keyInfo)
-        formatVersion = fallbackKeyInfo.formatVersion ?? 1
-
-        if formatVersion == 2 {
-            encryptionKey = key
-            recordState = .empty
-            let assembled = try await loadFromRecords(using: key)
-            await credentialService.updateCredentialIdentities(from: assembled.items)
-            await mergePendingItems()
-            return true
-        }
-
-        let vaultResponse: PassVaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
-
-        guard let encryptedData = Data(base64Encoded: vaultResponse.encryptedData),
-              let iv = Data(base64Encoded: vaultResponse.iv) else {
-            throw PassError.invalidVaultData
-        }
-
-        let decryptedData = try decryptVaultData(encryptedData, iv: iv, using: key)
-
-        let decryptedVault: PassVault
-        do {
-            decryptedVault = try JSONDecoder().decode(PassVault.self, from: decryptedData)
-        } catch {
-            Log.pass.error("Vault JSON decode failed after biometric unlock: \(String(describing: error), privacy: .public)")
-            throw PassError.invalidVaultData
-        }
-
+        // Fallback to server fetch.
         encryptionKey = key
-        vault = decryptedVault
-        serverVersion = vaultResponse.version
-        hasVaultSetup = true
-
-        // Save encrypted vault locally for AutoFill extension access
-        let metadata = PassVaultMetadata(
-            version: vaultResponse.version,
-            iv: vaultResponse.iv,
-            updatedAt: vaultResponse.updatedAt,
-            lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
-        )
-        await saveVaultCache(encryptedData: encryptedData, metadata: metadata)
-
-        // Register AutoFill QuickType suggestions
-        await credentialService.updateCredentialIdentities(from: decryptedVault.items)
-
-        // Pick up passkeys created by the AutoFill extension
+        recordState = .empty
+        let assembled = try await loadFromRecords(using: key)
+        await credentialService.updateCredentialIdentities(from: assembled.items)
         await mergePendingItems()
-
         return true
     }
 
@@ -381,7 +279,6 @@ class PassService {
         serverVersion = 0
         // Decrypted records are as sensitive as the key that opened them.
         recordState = .empty
-        formatVersion = 1
     }
 
     /// Lock and clear stored key (full sign out)
@@ -863,56 +760,14 @@ class PassService {
 
     /// Persist the current vault.
     ///
-    /// At format 1 this is the whole-blob PUT it always was. At format 2 it
-    /// diffs the in-memory vault against the last synced records and writes only
-    /// what changed, so all eleven existing call sites keep working unchanged.
+    /// Diffs the in-memory vault against the last synced records and writes only
+    /// what changed, so every existing call site keeps working unchanged.
     private func saveVault() async throws {
         guard let key = encryptionKey, let vault = vault else {
             throw PassError.noEncryptionKey
         }
 
-        if formatVersion == 2 {
-            try await saveChangedRecords(vault, using: key)
-            return
-        }
-
-        isLoading = true
-        defer { isLoading = false }
-
-        // Encode vault to JSON
-        let vaultData = try JSONEncoder().encode(vault)
-
-        // Encrypt the vault
-        let encryptedData = try crypto.encryptData(vaultData, using: key)
-
-        // Split IV and ciphertext (encryptData returns IV + ciphertext + tag)
-        let iv = encryptedData.prefix(12)
-        let ciphertext = encryptedData.dropFirst(12)
-
-        // Prepare update request
-        let request = PassVaultUpdateRequest(
-            encryptedData: ciphertext.base64EncodedString(),
-            iv: iv.base64EncodedString(),
-            expectedVersion: serverVersion
-        )
-
-        // Send to server
-        let response: PassVaultResponse = try await api.put(PassAPIClient.Endpoint.vault, body: request)
-
-        // Update server version
-        serverVersion = response.version
-
-        // Update local cache
-        let metadata = PassVaultMetadata(
-            version: response.version,
-            iv: iv.base64EncodedString(),
-            updatedAt: response.updatedAt,
-            lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
-        )
-        try await vaultStore.saveVault(encryptedData: ciphertext, metadata: metadata)
-
-        // Update AutoFill credential identities
-        await credentialService.updateCredentialIdentities(from: vault.items)
+        try await saveChangedRecords(vault, using: key)
     }
 
 
@@ -1040,14 +895,12 @@ class PassService {
         // which is not the recordConflict the PUT path recovers from, so the
         // whole save throws. A failure here is not fatal: the merge still runs
         // against what we have, and a genuinely stale write just stays queued.
-        if formatVersion == 2 {
-            do {
-                try await loadFromRecords(using: key)
-            } catch {
-                Log.pass.error(
-                    "Could not refresh records before draining pending items: \(String(describing: error), privacy: .public)"
-                )
-            }
+        do {
+            try await loadFromRecords(using: key)
+        } catch {
+            Log.pass.error(
+                "Could not refresh records before draining pending items: \(String(describing: error), privacy: .public)"
+            )
         }
 
         guard var vault = vault else { return }
@@ -1139,66 +992,12 @@ class PassService {
         isLoading = true
         defer { isLoading = false }
 
-        if formatVersion == 2 {
-            let assembled = try await loadFromRecords(using: key)
-            await credentialService.updateCredentialIdentities(from: assembled.items)
-            // Last, so the merge applies on top of what was just synced.
-            await mergePendingItems()
-            return
-        }
-
-        // Fetch latest from server
-        let vaultResponse: PassVaultResponse
-        do {
-            vaultResponse = try await api.get(PassAPIClient.Endpoint.vault)
-        } catch APIError.httpError(let status, let code)
-                    where status == 410 || code == "FORMAT_MIGRATED" {
-            // Converted elsewhere while we were running; switch and resync.
-            Log.pass.info("Vault converted to per-item records; switching on sync")
-            formatVersion = 2
-            recordState = .empty
-            let assembled = try await loadFromRecords(using: key)
-            await credentialService.updateCredentialIdentities(from: assembled.items)
-            await mergePendingItems()
-            return
-        }
-
-        guard let encryptedData = Data(base64Encoded: vaultResponse.encryptedData),
-              let iv = Data(base64Encoded: vaultResponse.iv) else {
-            throw PassError.invalidVaultData
-        }
-
-        let decryptedData = try decryptVaultData(encryptedData, iv: iv, using: key)
-
-        let serverVault: PassVault
-        do {
-            serverVault = try JSONDecoder().decode(PassVault.self, from: decryptedData)
-        } catch {
-            Log.pass.error("Vault JSON decode failed during sync: \(String(describing: error), privacy: .public)")
-            throw PassError.invalidVaultData
-        }
-
-        // Update local state
-        vault = serverVault
-        serverVersion = vaultResponse.version
-
-        // Update local cache
-        let metadata = PassVaultMetadata(
-            version: vaultResponse.version,
-            iv: vaultResponse.iv,
-            updatedAt: vaultResponse.updatedAt,
-            lastSyncedAt: Int(Date().timeIntervalSince1970 * 1000)
-        )
-        try await vaultStore.saveVault(encryptedData: encryptedData, metadata: metadata)
-
-        // Update AutoFill credential identities
-        await credentialService.updateCredentialIdentities(from: serverVault.items)
-
-        // Drain passkeys the AutoFill extension queued. Runs last so the merge
-        // applies on top of the vault/serverVersion just fetched, keeping its
-        // PUT's expectedVersion current. Without this the queue only drained on
-        // unlock, which — since the app never re-locks on background — meant a
-        // cold start.
+        let assembled = try await loadFromRecords(using: key)
+        await credentialService.updateCredentialIdentities(from: assembled.items)
+        // Drain passkeys and logins the AutoFill extension queued. Runs last so
+        // the merge applies on top of what was just synced. Without this the
+        // queue only drained on unlock, which — since the app never re-locks on
+        // background — meant a cold start.
         await mergePendingItems()
     }
 

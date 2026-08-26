@@ -28,42 +28,43 @@ struct PassServiceIntegrationTests {
         let tempDir: URL
         let pending: InMemoryPendingPasskeyStore
         let pendingPasswords: InMemoryPendingPasswordStore
+        let server: PassRecordTestServer
     }
 
     static let crypto = CryptoService()
     static let password = "test-master-password"
     static let iterations: UInt32 = 1_000
 
-    /// Build a PassService wired entirely to fakes, and stub key-info + vault
-    /// GET endpoints so `unlock(password:)` succeeds with `items` inside.
+    /// Build a PassService wired entirely to fakes, backed by an in-memory
+    /// record server seeded with `items`/`folders`, so `unlock(password:)`
+    /// succeeds with them inside.
     static func makeEnv(
         items: [PassVaultItem],
         folders: [PassFolder] = [],
-        vaultVersion: Int = 3,
         pending: InMemoryPendingPasskeyStore = InMemoryPendingPasskeyStore(),
         pendingPasswords: InMemoryPendingPasswordStore = InMemoryPendingPasswordStore()
     ) throws -> Env {
         StubURLProtocol.reset()
 
         let salt = Data("integration-salt".utf8)
-        // The passphrase-derived key only wraps the vault key now — it is never
-        // used to encrypt the vault directly. `key` (below) is the vault key,
-        // exactly what PassService ends up storing/using after unlock.
+        // The passphrase-derived key only wraps the vault key — it never
+        // encrypts vault content. `key` (below) is the vault key, exactly what
+        // PassService ends up storing/using after unlock.
         let wrappingKey = try crypto.deriveKey(password: password, salt: salt, iterations: iterations)
         let key = crypto.generateContentKey()
         let wrapped = try crypto.wrapKey(key, using: wrappingKey)
 
-        let vault = PassVault(version: 1, items: items, folders: folders, lastModified: 1_700_000_000_000)
-        let combined = try crypto.encryptData(try JSONEncoder().encode(vault), using: key)
-        let iv = combined.prefix(12)
-        let ciphertext = combined.dropFirst(12)
-
-        StubURLProtocol.enqueue(
-            method: "GET", pathSuffix: "/v1/vault/key-info",
-            json: #"{"keySalt":"\#(salt.base64EncodedString())","kdfIterations":\#(iterations),"wrappedVaultKey":"\#(wrapped.ciphertext)","wrapIv":"\#(wrapped.iv)"}"#)
-        StubURLProtocol.enqueue(
-            method: "GET", pathSuffix: "/v1/vault",
-            json: #"{"encryptedData":"\#(ciphertext.base64EncodedString())","iv":"\#(iv.base64EncodedString())","version":\#(vaultVersion),"updatedAt":1700000000}"#)
+        let server = PassRecordTestServer(
+            keyInfoJSON: #"{"keySalt":"\#(salt.base64EncodedString())","kdfIterations":\#(iterations),"wrappedVaultKey":"\#(wrapped.ciphertext)","wrapIv":"\#(wrapped.iv)"}"#)
+        for item in items {
+            try server.seed(id: item.id, kind: .item,
+                            payload: try JSONEncoder().encode(item), vaultKey: key)
+        }
+        for folder in folders {
+            try server.seed(id: folder.id, kind: .folder,
+                            payload: try JSONEncoder().encode(folder), vaultKey: key)
+        }
+        server.install()
 
         let keychain = InMemoryKeychain()
         let credentials = RecordingCredentialService()
@@ -86,27 +87,7 @@ struct PassServiceIntegrationTests {
 
         return Env(service: service, keychain: keychain, credentials: credentials,
                    key: key, salt: salt, tempDir: tempDir, pending: pending,
-                   pendingPasswords: pendingPasswords)
-    }
-
-    /// Stub the PUT /v1/vault response `saveVault()` expects after a mutation.
-    static func stubVaultPut(version: Int) {
-        StubURLProtocol.enqueue(
-            method: "PUT", pathSuffix: "/v1/vault",
-            json: #"{"encryptedData":"","iv":"","version":\#(version),"updatedAt":1700000001}"#)
-    }
-
-    /// Decrypt the vault the service uploaded in its last PUT request.
-    static func decodeUploadedVault(key: SymmetricKey) throws -> (vault: PassVault, request: PassVaultUpdateRequest) {
-        let put = try #require(StubURLProtocol.recordedRequests.last {
-            $0.httpMethod == "PUT" && ($0.url?.path.hasSuffix("/v1/vault") ?? false)
-        })
-        let body = try #require(put.bodyData)
-        let update = try JSONDecoder().decode(PassVaultUpdateRequest.self, from: body)
-        var combined = try #require(Data(base64Encoded: update.iv))
-        combined.append(try #require(Data(base64Encoded: update.encryptedData)))
-        let plaintext = try crypto.decryptData(combined, using: key)
-        return (try JSONDecoder().decode(PassVault.self, from: plaintext), update)
+                   pendingPasswords: pendingPasswords, server: server)
     }
 
     // MARK: Unlock
@@ -204,34 +185,36 @@ struct PassServiceIntegrationTests {
 
     // MARK: CRUD — every mutation must roundtrip through encryption
 
-    @Test func addItemUploadsReencryptedVaultWithOptimisticVersion() async throws {
-        let env = try Self.makeEnv(items: [], vaultVersion: 3)
+    @Test func addItemWritesItAsARecord() async throws {
+        let env = try Self.makeEnv(items: [])
         defer { try? FileManager.default.removeItem(at: env.tempDir) }
         _ = try await env.service.unlock(password: Self.password)
-        Self.stubVaultPut(version: 4)
 
         let newItem = PassVaultItem.password(VaultItemFixtures.samplePasswordItem(id: "pw-new", name: "New Login"))
         try await env.service.addItem(newItem)
 
         #expect(env.service.getItems().map(\.id) == ["pw-new"])
-        let uploaded = try Self.decodeUploadedVault(key: env.key)
-        #expect(uploaded.vault.items.map(\.id) == ["pw-new"])
-        #expect(uploaded.request.expectedVersion == 3)
+        let uploaded = try env.server.assembledVault(vaultKey: env.key)
+        #expect(uploaded.items.map(\.id) == ["pw-new"])
+        // A create, not a whole-vault rewrite: the server saw exactly one write.
+        let writes = StubURLProtocol.recordedRequests.filter {
+            $0.httpMethod == "POST" && ($0.url?.path.hasSuffix("/v1/vault/records") ?? false)
+        }
+        #expect(writes.count == 1)
     }
 
     @Test func updateItemPersistsChanges() async throws {
         let env = try Self.makeEnv(items: [.password(VaultItemFixtures.samplePasswordItem())])
         defer { try? FileManager.default.removeItem(at: env.tempDir) }
         _ = try await env.service.unlock(password: Self.password)
-        Self.stubVaultPut(version: 4)
 
         var edited = VaultItemFixtures.samplePasswordItem()
         edited.name = "Renamed"
         try await env.service.updateItem(.password(edited))
 
         #expect(env.service.getItem(id: "pw-1")?.name == "Renamed")
-        let uploaded = try Self.decodeUploadedVault(key: env.key)
-        #expect(uploaded.vault.items.first?.name == "Renamed")
+        let uploaded = try env.server.assembledVault(vaultKey: env.key)
+        #expect(uploaded.items.first?.name == "Renamed")
     }
 
     @Test func deleteMovesToTrashAndRestoreRecovers() async throws {
@@ -240,31 +223,29 @@ struct PassServiceIntegrationTests {
         defer { try? FileManager.default.removeItem(at: env.tempDir) }
         _ = try await env.service.unlock(password: Self.password)
 
-        Self.stubVaultPut(version: 4)
         try await env.service.deleteItem(item)
         #expect(env.service.getItems().isEmpty)
         #expect(env.service.getTrashItems().map(\.id) == ["pw-1"])
         // The uploaded vault must tombstone the item, not remove it.
-        let afterDelete = try Self.decodeUploadedVault(key: env.key)
-        let deletedUploaded = try #require(afterDelete.vault.items.first { $0.id == "pw-1" })
+        let afterDelete = try env.server.assembledVault(vaultKey: env.key)
+        let deletedUploaded = try #require(afterDelete.items.first { $0.id == "pw-1" })
         #expect(deletedUploaded.deletedAt != nil)
 
-        Self.stubVaultPut(version: 5)
         let trashed = try #require(env.service.getTrashItems().first)
         try await env.service.restoreItem(trashed)
         #expect(env.service.getItems().map(\.id) == ["pw-1"])
         #expect(env.service.getTrashItems().isEmpty)
         // The restored upload must clear the tombstone.
-        let afterRestore = try Self.decodeUploadedVault(key: env.key)
-        let restoredUploaded = try #require(afterRestore.vault.items.first { $0.id == "pw-1" })
+        let afterRestore = try env.server.assembledVault(vaultKey: env.key)
+        let restoredUploaded = try #require(afterRestore.items.first { $0.id == "pw-1" })
         #expect(restoredUploaded.deletedAt == nil)
     }
 
-    @Test func versionConflictOnSaveSurfacesError() async throws {
+    @Test func aRejectedRecordWriteSurfacesAsAnError() async throws {
         let env = try Self.makeEnv(items: [])
         defer { try? FileManager.default.removeItem(at: env.tempDir) }
         _ = try await env.service.unlock(password: Self.password)
-        StubURLProtocol.enqueue(method: "PUT", pathSuffix: "/v1/vault", status: 409, json: "{}")
+        env.server.failNextWrite = (status: 409, code: "RECORD_EXISTS")
 
         await #expect(throws: (any Error).self) {
             try await env.service.addItem(.password(VaultItemFixtures.samplePasswordItem(id: "pw-x")))
@@ -300,16 +281,14 @@ struct PassServiceIntegrationTests {
         defer { try? FileManager.default.removeItem(at: env.tempDir) }
         _ = try await env.service.unlock(password: Self.password)
 
-        Self.stubVaultPut(version: 4)
         try await env.service.addFolder(PassFolder(id: "f-1", name: "Work"))
         #expect(env.service.getFolders().map(\.name) == ["Work"])
-        var uploaded = try Self.decodeUploadedVault(key: env.key)
-        #expect(uploaded.vault.folders.map(\.id) == ["f-1"])
+        var uploaded = try env.server.assembledVault(vaultKey: env.key)
+        #expect(uploaded.folders.map(\.id) == ["f-1"])
 
-        Self.stubVaultPut(version: 5)
         try await env.service.updateFolder(PassFolder(id: "f-1", name: "Work Renamed"))
-        uploaded = try Self.decodeUploadedVault(key: env.key)
-        #expect(uploaded.vault.folders.map(\.name) == ["Work Renamed"])
+        uploaded = try env.server.assembledVault(vaultKey: env.key)
+        #expect(uploaded.folders.map(\.name) == ["Work Renamed"])
     }
 
     @Test func deleteFolderMovesItemsToRoot() async throws {
@@ -320,14 +299,13 @@ struct PassServiceIntegrationTests {
         _ = try await env.service.unlock(password: Self.password)
         #expect(env.service.getItemsInFolder("f-1").map(\.id) == ["pw-1"])
 
-        Self.stubVaultPut(version: 4)
         try await env.service.deleteFolder(PassFolder(id: "f-1", name: "Work"))
 
         #expect(env.service.getFolders().isEmpty)
         #expect(env.service.getItemsInFolder("f-1").isEmpty)
-        let uploaded = try Self.decodeUploadedVault(key: env.key)
-        #expect(uploaded.vault.folders.isEmpty)
-        guard case .password(let survivor) = uploaded.vault.items.first else {
+        let uploaded = try env.server.assembledVault(vaultKey: env.key)
+        #expect(uploaded.folders.isEmpty)
+        guard case .password(let survivor) = uploaded.items.first else {
             Issue.record("expected surviving password item"); return
         }
         #expect(survivor.folderId == nil)   // item moved to root, not deleted
@@ -341,16 +319,14 @@ struct PassServiceIntegrationTests {
         _ = try await env.service.unlock(password: Self.password)
         let item = try #require(env.service.getItem(id: "pw-1"))
 
-        Self.stubVaultPut(version: 4)
         try await env.service.toggleFavorite(item)
         #expect(env.service.getFavorites().map(\.id) == ["pw-1"])
-        var uploaded = try Self.decodeUploadedVault(key: env.key)
-        guard case .password(let fav) = uploaded.vault.items.first else {
+        var uploaded = try env.server.assembledVault(vaultKey: env.key)
+        guard case .password(let fav) = uploaded.items.first else {
             Issue.record("expected password item"); return
         }
         #expect(fav.favorite == true)
 
-        Self.stubVaultPut(version: 5)
         try await env.service.toggleFavorite(try #require(env.service.getItem(id: "pw-1")))
         #expect(env.service.getFavorites().isEmpty)
     }
@@ -361,7 +337,6 @@ struct PassServiceIntegrationTests {
         let env = try Self.makeEnv(items: [])
         defer { try? FileManager.default.removeItem(at: env.tempDir) }
         _ = try await env.service.unlock(password: Self.password)
-        Self.stubVaultPut(version: 4)
 
         let decoder = JSONDecoder()
         let allItems = try VaultItemFixtures.allItemJSONs.map {
@@ -373,8 +348,8 @@ struct PassServiceIntegrationTests {
             try await env.service.addItem(item)
         }
         #expect(env.service.getItems().count == allItems.count)
-        var uploaded = try Self.decodeUploadedVault(key: env.key)
-        #expect(Set(uploaded.vault.items.map(\.type)) == Set(PassVaultItemType.allCases))
+        var uploaded = try env.server.assembledVault(vaultKey: env.key)
+        #expect(Set(uploaded.items.map(\.type)) == Set(PassVaultItemType.allCases))
 
         // Tombstone every type (exercises the per-type deletedAt switch)
         for item in env.service.getItems() {
@@ -382,8 +357,8 @@ struct PassServiceIntegrationTests {
         }
         #expect(env.service.getItems().isEmpty)
         #expect(env.service.getTrashItems().count == allItems.count)
-        uploaded = try Self.decodeUploadedVault(key: env.key)
-        #expect(uploaded.vault.items.allSatisfy { $0.deletedAt != nil })
+        uploaded = try env.server.assembledVault(vaultKey: env.key)
+        #expect(uploaded.items.allSatisfy { $0.deletedAt != nil })
 
         // Restore every type
         for item in env.service.getTrashItems() {
@@ -391,8 +366,8 @@ struct PassServiceIntegrationTests {
         }
         #expect(env.service.getItems().count == allItems.count)
         #expect(env.service.getTrashItems().isEmpty)
-        uploaded = try Self.decodeUploadedVault(key: env.key)
-        #expect(uploaded.vault.items.allSatisfy { $0.deletedAt == nil })
+        uploaded = try env.server.assembledVault(vaultKey: env.key)
+        #expect(uploaded.items.allSatisfy { $0.deletedAt == nil })
     }
 
     // MARK: - AutoFill pending-passkey drain
@@ -419,18 +394,10 @@ struct PassServiceIntegrationTests {
         // merge has already run and cannot be what picks this up.
         env.pending.items = [Self.makeSharedPasskey()]
 
-        // sync() re-fetches, then the drain PUTs the merged vault.
-        let vault = PassVault(version: 1, items: [], folders: [], lastModified: 1_700_000_000_000)
-        let combined = try Self.crypto.encryptData(try JSONEncoder().encode(vault), using: env.key)
-        StubURLProtocol.enqueue(
-            method: "GET", pathSuffix: "/v1/vault",
-            json: #"{"encryptedData":"\#(combined.dropFirst(12).base64EncodedString())","iv":"\#(combined.prefix(12).base64EncodedString())","version":4,"updatedAt":1700000002}"#)
-        Self.stubVaultPut(version: 5)
-
         try await env.service.sync()
 
-        let uploaded = try Self.decodeUploadedVault(key: env.key)
-        let passkeys = uploaded.vault.items.compactMap { item -> PassPasskeyItem? in
+        let uploaded = try env.server.assembledVault(vaultKey: env.key)
+        let passkeys = uploaded.items.compactMap { item -> PassPasskeyItem? in
             guard case .passkey(let passkey) = item else { return nil }
             return passkey
         }
@@ -446,28 +413,17 @@ struct PassServiceIntegrationTests {
             .pendingItem(id: id, now: 1_700_000_000_123)
     }
 
-    /// Re-stub the vault GET that `sync()` performs before the drain PUTs.
-    static func stubVaultGetForSync(items: [PassVaultItem], key: SymmetricKey, version: Int) throws {
-        let vault = PassVault(version: 1, items: items, folders: [], lastModified: 1_700_000_000_000)
-        let combined = try crypto.encryptData(try JSONEncoder().encode(vault), using: key)
-        StubURLProtocol.enqueue(
-            method: "GET", pathSuffix: "/v1/vault",
-            json: #"{"encryptedData":"\#(combined.dropFirst(12).base64EncodedString())","iv":"\#(combined.prefix(12).base64EncodedString())","version":\#(version),"updatedAt":1700000002}"#)
-    }
-
     @Test func syncDrainsLoginsQueuedByAutoFill() async throws {
         let env = try Self.makeEnv(items: [])
         _ = try await env.service.unlock(password: Self.password)
 
         env.pendingPasswords.items = [Self.makeSharedPassword()]
 
-        try Self.stubVaultGetForSync(items: [], key: env.key, version: 4)
-        Self.stubVaultPut(version: 5)
 
         try await env.service.sync()
 
-        let uploaded = try Self.decodeUploadedVault(key: env.key)
-        let passwords = uploaded.vault.items.compactMap { item -> PassPasswordItem? in
+        let uploaded = try env.server.assembledVault(vaultKey: env.key)
+        let passwords = uploaded.items.compactMap { item -> PassPasswordItem? in
             guard case .password(let password) = item else { return nil }
             return password
         }
@@ -489,8 +445,6 @@ struct PassServiceIntegrationTests {
 
         env.pendingPasswords.items = [Self.makeSharedPassword()]
 
-        try Self.stubVaultGetForSync(items: [existing], key: env.key, version: 4)
-        Self.stubVaultPut(version: 5)
 
         try await env.service.sync()
 
@@ -507,12 +461,9 @@ struct PassServiceIntegrationTests {
         env.pending.items = [Self.makeSharedPasskey()]
         env.pendingPasswords.items = [Self.makeSharedPassword()]
 
-        try Self.stubVaultGetForSync(items: [], key: env.key, version: 4)
-        // The upload fails. Clearing here would destroy the only copy of both
+        // The write fails. Clearing here would destroy the only copy of both
         // the passkey private key and the password.
-        StubURLProtocol.enqueue(
-            method: "PUT", pathSuffix: "/v1/vault", status: 500,
-            json: #"{"error":"boom"}"#)
+        env.server.failNextWrite = (status: 500, code: "boom")
 
         _ = try? await env.service.sync()
 

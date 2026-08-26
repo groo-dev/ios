@@ -2,7 +2,7 @@
 //  PassServiceRecordsTests.swift
 //  GrooTests
 //
-//  PassService against a stubbed server reporting formatVersion 2. Nested under
+//  PassService against a stubbed record server. Nested under
 //  NetworkStubbedSuites because StubURLProtocol carries static state.
 //
 
@@ -27,7 +27,7 @@ struct PassServiceRecordsTests {
         let tempDir: URL
     }
 
-    /// Stub key-info at formatVersion 2 plus one page of records.
+    /// Stub key-info plus one page of records.
     static func makeEnv(
         records: [(id: String, kind: String, payload: String, seq: Int, version: Int)],
         privateKeyStored: Bool = false
@@ -41,7 +41,7 @@ struct PassServiceRecordsTests {
 
         StubURLProtocol.enqueue(
             method: "GET", pathSuffix: "/v1/vault/key-info",
-            json: #"{"keySalt":"\#(salt.base64EncodedString())","kdfIterations":\#(iterations),"wrappedVaultKey":"\#(wrapped.ciphertext)","wrapIv":"\#(wrapped.iv)","formatVersion":2}"#)
+            json: #"{"keySalt":"\#(salt.base64EncodedString())","kdfIterations":\#(iterations),"wrappedVaultKey":"\#(wrapped.ciphertext)","wrapIv":"\#(wrapped.iv)"}"#)
 
         let encoded = try records.map { record -> String in
             let kind = SharedRecordKind(rawValue: record.kind) ?? .item
@@ -54,7 +54,7 @@ struct PassServiceRecordsTests {
         let maxSeq = records.map(\.seq).max() ?? 0
         StubURLProtocol.enqueue(
             method: "GET", pathSuffix: "/v1/vault/records",
-            json: #"{"records":[\#(encoded)],"nextSeq":\#(maxSeq),"hasMore":false,"formatVersion":2}"#)
+            json: #"{"records":[\#(encoded)],"nextSeq":\#(maxSeq),"hasMore":false}"#)
 
         if privateKeyStored {
             let sealed = try crypto.encrypt("private-jwk", using: key)
@@ -100,7 +100,7 @@ struct PassServiceRecordsTests {
 
     // MARK: - Unlock
 
-    @Test func unlockSyncsRecordsAndNeverFetchesTheBlob() async throws {
+    @Test func unlockSyncsRecords() async throws {
         let env = try Self.makeEnv(records: [
             (id: "a", kind: "item", payload: Self.passwordItem("a", name: "GitHub"), seq: 1, version: 1),
             (id: "f", kind: "folder", payload: #"{"id":"f","name":"Work"}"#, seq: 2, version: 1),
@@ -110,13 +110,8 @@ struct PassServiceRecordsTests {
         let unlocked = try await env.service.unlock(password: Self.password)
 
         #expect(unlocked)
-        #expect(env.service.formatVersion == 2)
         #expect(env.service.getItems().map(\.id) == ["a"])
-        // The blob endpoint 410s once converted; touching it at all is the bug.
-        let blobGets = Self.requests("GET", containing: "/v1/vault").filter {
-            $0.url?.path.hasSuffix("/v1/vault") ?? false
-        }
-        #expect(blobGets.isEmpty)
+        #expect(env.service.getFolders().map(\.id) == ["f"])
     }
 
     @Test func unlockToleratesAnAbsentSharingPrivateKey() async throws {
@@ -146,9 +141,9 @@ struct PassServiceRecordsTests {
         let item = VaultItemFixtures.samplePasswordItem(id: "new-1")
         try await env.service.addItem(.password(item))
 
+        // One record write, not a rewrite of everything the vault holds.
         #expect(Self.requests("POST", containing: "/v1/vault/records").count == 1)
-        // A whole-vault PUT would 410 after the cutover.
-        #expect(Self.requests("PUT", containing: "/v1/vault").isEmpty)
+        #expect(Self.requests("PUT", containing: "/v1/vault/records").isEmpty)
     }
 
     @Test func anUnchangedItemIsNotRewritten() async throws {
@@ -242,66 +237,6 @@ struct PassServiceRecordsTests {
         #expect(retry.expectedVersion == 9)
     }
 
-    // MARK: - Recovering from a conversion that happened elsewhere
-
-    /// key-info still says 1 (stale), but the blob endpoint has already 410'd.
-    static func makeConvertedMidFlightEnv() throws -> Env {
-        StubURLProtocol.reset()
-
-        let salt = Data("records-salt".utf8)
-        let wrappingKey = try crypto.deriveKey(password: password, salt: salt, iterations: iterations)
-        let key = crypto.generateContentKey()
-        let wrapped = try crypto.wrapKey(key, using: wrappingKey)
-
-        StubURLProtocol.enqueue(
-            method: "GET", pathSuffix: "/v1/vault/key-info",
-            json: #"{"keySalt":"\#(salt.base64EncodedString())","kdfIterations":\#(iterations),"wrappedVaultKey":"\#(wrapped.ciphertext)","wrapIv":"\#(wrapped.iv)","formatVersion":1}"#)
-
-        StubURLProtocol.enqueue(
-            method: "GET", pathSuffix: "/v1/vault",
-            status: 410,
-            json: #"{"error":"This vault now uses per-item records; update your client","code":"FORMAT_MIGRATED"}"#)
-
-        let enc = try SharedRecordCrypto.encryptRecord(
-            id: "a", kind: .item,
-            payload: Data(passwordItem("a", name: "GitHub").utf8), vaultKey: key)
-        StubURLProtocol.enqueue(
-            method: "GET", pathSuffix: "/v1/vault/records",
-            json: #"{"records":[{"id":"a","encryptedData":"\#(enc.encryptedData)","iv":"\#(enc.iv)","wrappedRecordKey":"\#(enc.wrappedRecordKey)","wrapIv":"\#(enc.wrapIv)","version":1,"seq":1,"isDeleted":false,"createdAt":1,"updatedAt":1}],"nextSeq":1,"hasMore":false,"formatVersion":2}"#)
-        StubURLProtocol.enqueue(
-            method: "GET", pathSuffix: "/v1/vault/private-key",
-            status: 404, json: #"{"error":"none","code":"PRIVATE_KEY_NOT_SET"}"#)
-
-        let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("PassRecordsTests-\(UUID().uuidString)", isDirectory: true)
-
-        let service = PassService(
-            api: PassAPIClient(
-                tokenProvider: { "test-token" },
-                forceRefresh: { "test-token-2" },
-                sessionConfiguration: StubURLProtocol.stubbedConfiguration()),
-            crypto: crypto,
-            keychain: InMemoryKeychain(),
-            vaultStore: PassVaultStore(directoryURL: tempDir),
-            credentialService: RecordingCredentialService(),
-            pendingPasskeys: InMemoryPendingPasskeyStore())
-
-        return Env(service: service, key: key, tempDir: tempDir)
-    }
-
-    @Test func unlockRecoversWhenTheVaultConvertedMidFlight() async throws {
-        let env = try Self.makeConvertedMidFlightEnv()
-        defer { try? FileManager.default.removeItem(at: env.tempDir) }
-
-        // A 410 here means the web app converted between our key-info read and
-        // this fetch. This build speaks records, so it must switch rather than
-        // fail — "update required" is for builds that predate record support.
-        let unlocked = try await env.service.unlock(password: Self.password)
-
-        #expect(unlocked)
-        #expect(env.service.formatVersion == 2)
-        #expect(env.service.getItems().map(\.id) == ["a"])
-    }
 }
 
 }
