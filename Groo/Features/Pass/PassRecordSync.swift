@@ -119,9 +119,9 @@ enum PassRecordSync {
     /// Assemble a `PassVault` from decoded records.
     ///
     /// Builds the vault's JSON and hands it to the existing decoder rather than
-    /// constructing `PassVaultItem` values directly. That reuses the lossless
-    /// decoding and `.corrupted` fallback already proven for the blob format,
-    /// instead of adding a second, subtly different decoding path.
+    /// constructing `PassVaultItem` values directly. That reuses its lossless
+    /// decoding and `.corrupted` fallback, instead of adding a second, subtly
+    /// different decoding path.
     static func buildVault(
         from state: PassRecordState,
         rsaPrivateKey: String? = nil

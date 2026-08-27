@@ -66,9 +66,8 @@ class PassService {
     private var vault: PassVault?
     private var serverVersion: Int = 0
 
-    /// Which storage the server says is authoritative: 1 = the legacy blob,
-    /// 2 = per-item records. iOS never converts — only the web app does — so
-    /// this is read and followed, never written.
+    /// The synced per-item records and the cursor they were synced to.
+    /// Per-item records are the only vault storage the server offers.
     private var recordState: PassRecordState = .empty
 
     // State
@@ -734,9 +733,9 @@ class PassService {
 
     /// Re-encrypt the assembled vault into the App Group cache.
     ///
-    /// The cache deliberately stays a single blob even in records mode: it is a
-    /// local, read-only cache for AutoFill, not a sync artifact, so AutoFill's
-    /// read path needs no changes. Regenerating it is local-only work.
+    /// The cache deliberately stays a single sealed blob: it is a local,
+    /// read-only cache for AutoFill, not a sync artifact. Regenerating it is
+    /// local-only work.
     private func refreshVaultCache(_ vault: PassVault, using key: SymmetricKey) async {
         do {
             let encoded = try JSONEncoder().encode(vault)
@@ -777,11 +776,9 @@ class PassService {
     /// the server must never learn what was thrown away. Only an item that has
     /// left the vault entirely becomes a tombstone.
     ///
-    /// Caveat, inherited rather than introduced: an item is re-encoded from its
-    /// typed model, so a field this build does not model is dropped from the
-    /// item it rewrites. The blob path already did this to *every* item on
-    /// every save; per-record writes narrow the blast radius to the items that
-    /// actually changed.
+    /// Caveat: an item is re-encoded from its typed model, so a field this
+    /// build does not model is dropped from the item it rewrites. Per-record
+    /// writes hold the blast radius to the items that actually changed.
     private func saveChangedRecords(_ vault: PassVault, using key: SymmetricKey) async throws {
         isLoading = true
         defer { isLoading = false }

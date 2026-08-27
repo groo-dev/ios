@@ -99,7 +99,7 @@ class AutoFillService: ObservableObject {
         }
 
         // Per-item records first. A background refresh persists them, but each
-        // AutoFill invocation is a fresh process — reading only the blob cache
+        // AutoFill invocation is a fresh process — reading only the vault cache
         // rebuilt state from whatever the main app last wrote and discarded
         // everything the refresh had synced. QuickType kept suggesting the new
         // passkey (that lives in the OS store) while findPasskey could not
@@ -111,7 +111,7 @@ class AutoFillService: ObservableObject {
             return
         }
 
-        // No records yet (never refreshed, or still on the blob format).
+        // No records synced yet: fall back to the cache the main app wrote.
         let (encryptedData, metadata) = try SharedVaultStore.loadVault()
 
         // Decrypt vault

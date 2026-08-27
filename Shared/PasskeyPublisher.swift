@@ -30,9 +30,9 @@ enum PasskeyPublishOutcome: Equatable {
 ///
 /// The record id is brand new, so **no conflict is possible**: there is no
 /// version to guess, no 409 path, no retry, and no base vault to fetch first.
-/// That is the whole reason this is possible at all — under the blob format the
-/// extension would have had to read, decode, mutate and re-encode the entire
-/// vault through models that silently drop item types.
+/// That is the whole reason this is possible at all: writing one record needs
+/// no base vault, where a whole-vault write would have to read, decode, mutate
+/// and re-encode every item through models that silently drop item types.
 struct PasskeyPublisher {
     let pusher: any PasskeyRecordPushing
     let vaultKey: SymmetricKey

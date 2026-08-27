@@ -214,13 +214,6 @@ struct KeychainService: KeychainServicing {
 
 extension KeychainService {
     enum Key {
-        // Authentication
-        static let patToken = "pat_token"
-
-        // Encryption (legacy)
-        static let encryptionKey = "encryption_key"
-        static let encryptionSalt = "encryption_salt"
-
         // Pad encryption key (biometric protected, shared with extensions)
         static let padEncryptionKey = "pad_encryption_key"
 

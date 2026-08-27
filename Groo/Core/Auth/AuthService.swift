@@ -20,8 +20,8 @@ import GrooAuthUI
 /// The actor-to-main-actor bridge this used to do by hand now lives in
 /// `GrooAuthController`, which `bt/space` had written a second time — that
 /// duplication is why GrooAuthUI exists. What stays here is what is actually
-/// Groo's: the legacy-PAT migration, and the token accessors that `PushService`
-/// and `WebSocketService` are declared against.
+/// Groo's: the token accessors that `PushService` and `WebSocketService` are
+/// declared against.
 ///
 /// The state properties forward rather than mirror, so there is one observation
 /// task and one copy of the state. SwiftUI still tracks them: reading them in a
@@ -41,28 +41,9 @@ final class AuthService {
     var isLoading: Bool { controller.isLoading }
 
     private var session: GrooAuthSession { controller.session }
-    private let legacyKeychain = KeychainService()
 
     init() {
         controller = GrooAuthController(session: GrooAuthFactory.makeSession())
-
-        Task { [weak self] in
-            await self?.migrateLegacyPATIfNeeded()
-        }
-    }
-
-    /// One-time migration away from the old pasted-PAT flow: if a legacy
-    /// `pat_token` is still in the Keychain and OAuth hasn't produced a signed-in
-    /// session, the PAT is dead weight — delete it and require a fresh
-    /// "Sign in with Groo".
-    private func migrateLegacyPATIfNeeded() async {
-        guard case .signedOut = await session.currentState() else { return }
-        guard legacyKeychain.exists(for: KeychainService.Key.patToken) else { return }
-        do {
-            try legacyKeychain.delete(for: KeychainService.Key.patToken)
-        } catch {
-            Log.store.fault("Legacy PAT migration: failed to delete pat_token: \(String(describing: error), privacy: .public)")
-        }
     }
 
     // MARK: - Sign in / out
