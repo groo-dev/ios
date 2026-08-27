@@ -4,6 +4,15 @@
 <dict>
 	<key>aps-environment</key>
 	<string>production</string>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<!-- Required for native passkey sign-in: without it the platform will not
+		     look for a credential scoped to me.groo.dev and simply reports that
+		     there are none, with nothing naming the cause. The issuer serves the
+		     matching apple-app-site-association from the ios client row's
+		     bundle_id + apple_team_id. -->
+		<string>webcredentials:me.groo.dev</string>
+	</array>
 	<key>com.apple.developer.authentication-services.autofill-credential-provider</key>
 	<true/>
 	<key>com.apple.security.application-groups</key>
