@@ -8,6 +8,7 @@
 //  HomeView's refresh tasks fail fast without leaving the process.
 //
 
+import GrooAuthUI
 import SnapshotTesting
 import SwiftUI
 import Testing
@@ -30,7 +31,12 @@ struct RootViewSnapshotTests {
     ]
 
     @Test func signInScreen() {
-        assertViewSnapshot(of: SignInScreen().environment(AuthService()), named: "logged-out")
+        // The theme comes from GrooApp in production, so the test supplies it
+        // rather than the screen carrying its own copy.
+        assertViewSnapshot(
+            of: SignInScreen().environment(AuthService()).environment(\.grooAuthTheme, .grooApp),
+            named: "logged-out"
+        )
     }
 
     @Test func unlockView() throws {
@@ -57,6 +63,9 @@ struct RootViewSnapshotTests {
             named: "locked")
     }
 
+    // SettingsView renders GrooUserButton, and the theme reaches it from GrooApp
+    // in production. A snapshot taken without it pictures a green avatar this app
+    // never shows — which is how the missing theme was noticed in the first place.
     @Test func settingsView() async throws {
         StubURLProtocol.reset()
         let (padService, _) = try PadViewSnapshotTests.lockedPadService()
@@ -68,7 +77,8 @@ struct RootViewSnapshotTests {
                     SettingsView(padService: padService, passService: passEnv.service,
                                  onSignOut: {}, onLock: {})
                 }
-                .environment(AuthService()),
+                .environment(AuthService())
+                .environment(\.grooAuthTheme, .grooApp),
                 named: "default")
         }
     }
@@ -93,7 +103,8 @@ struct RootViewSnapshotTests {
                     SettingsView(padService: padService, passService: passEnv.service,
                                  onSignOut: {}, onLock: {})
                 }
-                .environment(AuthService()),
+                .environment(AuthService())
+                .environment(\.grooAuthTheme, .grooApp),
                 named: "backup-date")
         }
     }

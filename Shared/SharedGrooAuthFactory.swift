@@ -60,6 +60,11 @@ enum GrooAuthFactory {
             // client for this bundle. Pinned by ConfigTests.
             scopes: [
                 "openid", "profile", "email", "offline_access",
+                // What GrooUserButton's account screen reads and writes. Global,
+                // so it is granted per request rather than recorded against one
+                // application — but adding it still re-prompts every existing
+                // user for consent once. There is no silent way to widen a grant.
+                "accounts:profile",
                 "azan:read", "azan:write",
                 "drive:read", "drive:write",
                 "pad:read", "pad:write",

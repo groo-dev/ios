@@ -5,6 +5,7 @@
 //  Main app entry point with environment setup.
 //
 
+import GrooAuthUI
 import SwiftUI
 import SwiftData
 import os
@@ -26,6 +27,11 @@ struct GrooApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // Set ONCE, here, so every GrooAuthUI component in the app is
+                // Groo's colour without each call site remembering to say so.
+                // The sign-in screen was already themed; the account card added
+                // later was not, and rendered a green avatar in a violet app.
+                .environment(\.grooAuthTheme, .grooApp)
                 .environment(authService)
                 .environment(pushService)
                 .environment(azanAudioService)

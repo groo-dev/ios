@@ -19,6 +19,11 @@ import SwiftUI
 /// It is a named view rather than an expression inside `ContentView` so that the
 /// snapshot test renders the same thing that ships, instead of a copy of these
 /// arguments that can drift from them.
+///
+/// The theme is NOT set here. `GrooApp` puts it in the environment for the whole
+/// app, so every component from the library is Groo's colour without each screen
+/// restating it — a rule that was already broken once, by an account card that
+/// came out green.
 struct SignInScreen: View {
     @Environment(AuthService.self) private var authService
 
@@ -29,11 +34,11 @@ struct SignInScreen: View {
             icon: Image(systemName: "lock.shield.fill"),
             controller: authService.controller
         )
-        .environment(\.grooAuthTheme, .grooApp)
     }
 }
 
 #Preview {
     SignInScreen()
         .environment(AuthService())
+        .environment(\.grooAuthTheme, .grooApp)
 }
