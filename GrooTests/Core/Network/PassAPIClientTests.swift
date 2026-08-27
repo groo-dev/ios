@@ -79,36 +79,42 @@ struct PassAPIClientTests {
 
     @Test func secondUnauthorizedPropagates() async {
         StubURLProtocol.reset()
-        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault", status: 401, json: "{}")
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault/records", status: 401, json: "{}")
         // last-response-repeats: the 401 sticks for the retry too
 
         await #expect(throws: APIError.self) {
-            let _: PassVaultResponse = try await Self.makeClient().get(PassAPIClient.Endpoint.vault)
+            let _: SharedRecordsResponse = try await Self.makeClient().get(
+                PassAPIClient.Endpoint.recordsSince(0))
         }
         #expect(StubURLProtocol.recordedRequests.count == 2)  // exactly one retry, no loop
     }
 
-    @Test func conflict409SurfacesAsVersionConflict() async {
+    @Test func conflict409SurfacesAsRecordConflict() async {
         StubURLProtocol.reset()
-        StubURLProtocol.enqueue(method: "PUT", pathSuffix: "/v1/vault", status: 409, json: "{}")
+        StubURLProtocol.enqueue(
+            method: "PUT", pathSuffix: "/v1/vault/records/a", status: 409,
+            json: #"{"code":"RECORD_CONFLICT"}"#)
 
         await #expect {
-            let _: PassVaultResponse = try await Self.makeClient().put(
-                PassAPIClient.Endpoint.vault,
-                body: PassVaultUpdateRequest(encryptedData: "", iv: "", expectedVersion: 1))
+            let _: SharedRecordWriteResponse = try await Self.makeClient().put(
+                PassAPIClient.Endpoint.record("a"),
+                body: SharedRecordWriteRequest(
+                    id: "a", encryptedData: "", iv: "", wrappedRecordKey: "", wrapIv: "",
+                    expectedVersion: 1))
         } throws: { error in
             guard case APIError.httpError(let status, let message) = error else { return false }
-            return status == 409 && message == "VERSION_CONFLICT"
+            return status == 409 && message == "RECORD_CONFLICT"
         }
     }
 
     @Test func serverErrorMessageIsExtracted() async {
         StubURLProtocol.reset()
-        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault", status: 500,
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault/records", status: 500,
                                 json: #"{"error":"boom"}"#)
 
         await #expect {
-            let _: PassVaultResponse = try await Self.makeClient().get(PassAPIClient.Endpoint.vault)
+            let _: SharedRecordsResponse = try await Self.makeClient().get(
+                PassAPIClient.Endpoint.recordsSince(0))
         } throws: { error in
             guard case APIError.httpError(let status, let message) = error else { return false }
             return status == 500 && message == "boom"
@@ -117,10 +123,11 @@ struct PassAPIClientTests {
 
     @Test func malformedJsonIsDecodingFailure() async {
         StubURLProtocol.reset()
-        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault", json: "not json at all")
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault/records", json: "not json at all")
 
         await #expect {
-            let _: PassVaultResponse = try await Self.makeClient().get(PassAPIClient.Endpoint.vault)
+            let _: SharedRecordsResponse = try await Self.makeClient().get(
+                PassAPIClient.Endpoint.recordsSince(0))
         } throws: { error in
             guard case APIError.decodingFailed = error else { return false }
             return true
@@ -130,19 +137,21 @@ struct PassAPIClientTests {
     @Test(arguments: [URLError.Code.timedOut, .notConnectedToInternet])
     func transportErrorsPropagate(_ code: URLError.Code) async {
         StubURLProtocol.reset()
-        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault", error: URLError(code))
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault/records", error: URLError(code))
 
         await #expect(throws: (any Error).self) {
-            let _: PassVaultResponse = try await Self.makeClient().get(PassAPIClient.Endpoint.vault)
+            let _: SharedRecordsResponse = try await Self.makeClient().get(
+                PassAPIClient.Endpoint.recordsSince(0))
         }
     }
 
     @Test func emptyBodyOn2xxIsDecodingFailure() async {
         StubURLProtocol.reset()
-        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault", json: "")
+        StubURLProtocol.enqueue(method: "GET", pathSuffix: "/v1/vault/records", json: "")
 
         await #expect(throws: (any Error).self) {
-            let _: PassVaultResponse = try await Self.makeClient().get(PassAPIClient.Endpoint.vault)
+            let _: SharedRecordsResponse = try await Self.makeClient().get(
+                PassAPIClient.Endpoint.recordsSince(0))
         }
     }
 }

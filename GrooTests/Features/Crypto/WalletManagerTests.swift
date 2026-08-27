@@ -31,7 +31,6 @@ struct WalletManagerTests {
     static func makeWalletEnv() async throws -> WalletEnv {
         let env = try PassServiceIntegrationTests.makeEnv(items: [])
         _ = try await env.service.unlock(password: PassServiceIntegrationTests.password)
-        PassServiceIntegrationTests.stubVaultPut(version: 4)
 
         let suiteName = "WalletManagerTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

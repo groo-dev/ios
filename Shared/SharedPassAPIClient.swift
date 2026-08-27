@@ -149,9 +149,7 @@ actor PassAPIClient {
 
     enum Endpoint {
         static let keyInfo = "/v1/vault/key-info"
-        static let vault = "/v1/vault"
         static let vaultSetup = "/v1/vault/setup"
-        static let vaultVersion = "/v1/vault/version"
         static let files = "/v1/files"
         static let audit = "/v1/audit"
 
@@ -160,10 +158,6 @@ actor PassAPIClient {
         }
 
         // MARK: Per-item records
-        //
-        // Deliberately no `convert/commit`: only the web app converts a vault,
-        // so exposing it here would invite a call that must never happen from
-        // iOS.
 
         static let records = "/v1/vault/records"
         static let recordsBulk = "/v1/vault/records/bulk"

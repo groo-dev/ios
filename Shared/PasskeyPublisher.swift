@@ -17,7 +17,6 @@ import os
 /// Seams so the publisher is testable without a network or an App Group.
 protocol PasskeyRecordPushing: Sendable {
     func createRecord(_ request: SharedRecordWriteRequest) async throws -> SharedRecordWriteResponse
-    func formatVersion() async throws -> Int
 }
 
 enum PasskeyPublishOutcome: Equatable {
@@ -31,9 +30,9 @@ enum PasskeyPublishOutcome: Equatable {
 ///
 /// The record id is brand new, so **no conflict is possible**: there is no
 /// version to guess, no 409 path, no retry, and no base vault to fetch first.
-/// That is the whole reason this is possible at all — under the blob format the
-/// extension would have had to read, decode, mutate and re-encode the entire
-/// vault through models that silently drop item types.
+/// That is the whole reason this is possible at all: writing one record needs
+/// no base vault, where a whole-vault write would have to read, decode, mutate
+/// and re-encode every item through models that silently drop item types.
 struct PasskeyPublisher {
     let pusher: any PasskeyRecordPushing
     let vaultKey: SymmetricKey
@@ -83,15 +82,6 @@ struct PasskeyPublisher {
     /// the two preceding AutoFill bugs undiagnosable.
     func publish(_ item: SharedPassPasskeyItem) async -> PasskeyPublishOutcome {
         do {
-            // The push only exists once records are authoritative. At format 1
-            // the passkey simply stays queued and the app drains it, exactly as
-            // it does today.
-            let format = try await pusher.formatVersion()
-            guard format == 2 else {
-                Log.autofill.info("Vault is not on per-item records; leaving passkey queued")
-                return .queued(reason: "format \(format)")
-            }
-
             let request = try SharedRecordCrypto.encryptRecord(
                 id: item.id, kind: .item, payload: try payload(for: item), vaultKey: vaultKey
             )
@@ -127,11 +117,6 @@ struct PasskeyPublisher {
 /// Backs `PasskeyRecordPushing` with the real Pass API.
 struct APIPasskeyPusher: PasskeyRecordPushing {
     let api: PassAPIClient
-
-    func formatVersion() async throws -> Int {
-        let probe: SharedFormatProbe = try await api.get(PassAPIClient.Endpoint.keyInfo)
-        return probe.formatVersion ?? 1
-    }
 
     func createRecord(_ request: SharedRecordWriteRequest) async throws -> SharedRecordWriteResponse {
         try await api.post(PassAPIClient.Endpoint.records, body: request)

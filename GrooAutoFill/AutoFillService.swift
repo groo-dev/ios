@@ -99,7 +99,7 @@ class AutoFillService: ObservableObject {
         }
 
         // Per-item records first. A background refresh persists them, but each
-        // AutoFill invocation is a fresh process — reading only the blob cache
+        // AutoFill invocation is a fresh process — reading only the vault cache
         // rebuilt state from whatever the main app last wrote and discarded
         // everything the refresh had synced. QuickType kept suggesting the new
         // passkey (that lives in the OS store) while findPasskey could not
@@ -111,7 +111,7 @@ class AutoFillService: ObservableObject {
             return
         }
 
-        // No records yet (never refreshed, or still on the blob format).
+        // No records synced yet: fall back to the cache the main app wrote.
         let (encryptedData, metadata) = try SharedVaultStore.loadVault()
 
         // Decrypt vault
@@ -245,11 +245,6 @@ class AutoFillService: ObservableObject {
             tokenProvider: { try await session.accessToken() },
             forceRefresh: { throw APIError.unauthorized }
         )
-
-        // Records only. At format 1 the blob is authoritative and owned by the
-        // app, so there is nothing safe for the extension to refresh.
-        let keyInfo: SharedFormatProbe = try await api.get(PassAPIClient.Endpoint.keyInfo)
-        guard (keyInfo.formatVersion ?? 1) == 2 else { return }
 
         // A cache that exists but cannot be read must not silently reset the
         // cursor — that would refetch every record on every sheet.

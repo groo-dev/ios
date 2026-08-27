@@ -10,32 +10,18 @@ import os
 
 // MARK: - API Response Types
 
-/// Vault response from GET /v1/vault
-struct PassVaultResponse: Codable {
-    let encryptedData: String  // base64 encoded
-    let iv: String             // base64 encoded
-    let version: Int           // for optimistic locking
-    let updatedAt: Int         // Unix timestamp
-}
-
 /// Key info response from GET /v1/vault/key-info
 struct PassKeyInfo: Codable {
     let keySalt: String         // base64 encoded
     let kdfIterations: Int
     let wrappedVaultKey: String // base64, vault key wrapped by the passphrase-derived key
     let wrapIv: String          // base64
-    /// 1 = the legacy `encrypted_data` blob is authoritative, 2 = per-item
-    /// records are. Optional so an older server (which omits it) reads as 1.
-    /// iOS follows this; only the web app ever converts.
-    let formatVersion: Int?
 }
 
 /// Setup request for POST /v1/vault/setup
 struct PassVaultSetupRequest: Codable {
     let keySalt: String        // base64 encoded
     let kdfIterations: Int?
-    let encryptedData: String  // base64 encoded
-    let iv: String             // base64 encoded
     let wrappedVaultKey: String // base64, vault key wrapped by the passphrase-derived key
     let wrapIv: String          // base64
     // Both halves of the sharing keypair go in this one request. Splitting them
@@ -43,13 +29,6 @@ struct PassVaultSetupRequest: Codable {
     // no matching private key.
     let encryptedPrivateKey: String
     let privateKeyIv: String
-}
-
-/// Update request for PUT /v1/vault
-struct PassVaultUpdateRequest: Codable {
-    let encryptedData: String  // base64 encoded
-    let iv: String             // base64 encoded
-    let expectedVersion: Int   // for optimistic locking
 }
 
 // MARK: - Vault Structure (decrypted client-side)

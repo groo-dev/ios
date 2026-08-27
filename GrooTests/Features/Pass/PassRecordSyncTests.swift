@@ -48,7 +48,7 @@ struct PassRecordSyncTests {
         hasMore: Bool = false
     ) -> SharedRecordsResponse {
         SharedRecordsResponse(
-            records: records, nextSeq: nextSeq, hasMore: hasMore, formatVersion: 2
+            records: records, nextSeq: nextSeq, hasMore: hasMore
         )
     }
 
@@ -220,8 +220,8 @@ struct PassRecordSyncTests {
             ], nextSeq: 1)
         }
 
-        // The blob format already preserves unmodelled items as .corrupted so
-        // they are never destroyed; records must behave identically.
+        // An item this build does not model must survive as .corrupted rather
+        // than being destroyed.
         let vault = try PassRecordSync.buildVault(from: state)
         #expect(vault.items.count == 1)
     }

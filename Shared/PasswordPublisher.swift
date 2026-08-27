@@ -16,7 +16,6 @@ import os
 /// Seam so the publisher is testable without a network or an App Group.
 protocol PasswordRecordPushing: Sendable {
     func createRecord(_ request: SharedRecordWriteRequest) async throws -> SharedRecordWriteResponse
-    func formatVersion() async throws -> Int
 }
 
 enum PasswordPublishOutcome: Equatable {
@@ -68,14 +67,6 @@ struct PasswordPublisher {
     /// path leaves the login queued for the app-side drain and is logged.
     func publish(_ pending: SharedPendingPasswordItem) async -> PasswordPublishOutcome {
         do {
-            // At format 1 the blob is authoritative and app-owned, so there is
-            // nothing safe for the extension to write.
-            let format = try await pusher.formatVersion()
-            guard format == 2 else {
-                Log.autofill.info("Vault is not on per-item records; leaving login queued")
-                return .queued(reason: "format \(format)")
-            }
-
             let request = try SharedRecordCrypto.encryptRecord(
                 id: pending.item.id, kind: .item, payload: try payload(for: pending), vaultKey: vaultKey
             )
@@ -103,11 +94,6 @@ struct PasswordPublisher {
 /// Backs `PasswordRecordPushing` with the real Pass API.
 struct APIPasswordPusher: PasswordRecordPushing {
     let api: PassAPIClient
-
-    func formatVersion() async throws -> Int {
-        let probe: SharedFormatProbe = try await api.get(PassAPIClient.Endpoint.keyInfo)
-        return probe.formatVersion ?? 1
-    }
 
     func createRecord(_ request: SharedRecordWriteRequest) async throws -> SharedRecordWriteResponse {
         try await api.post(PassAPIClient.Endpoint.records, body: request)

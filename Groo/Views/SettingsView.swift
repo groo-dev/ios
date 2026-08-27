@@ -6,6 +6,7 @@
 //
 
 import LocalAuthentication
+import GrooAuthUI
 import SwiftUI
 
 struct SettingsView: View {
@@ -27,8 +28,25 @@ struct SettingsView: View {
     @State private var isBackupLoading = false
     @State private var lastBackupDate: Date?
 
+    /// Groo's hosted account console, for what the native screen deliberately
+    /// does not do.
+    private static let accountConsoleURL = URL(string: "https://me.groo.dev/account")!
+
     var body: some View {
         List {
+            // The same account screen bt/space shows, from GrooAuthUI: name and
+            // phone edited natively, everything with a destructive list behind it
+            // — passkeys, devices, connected apps, tokens — left at the console.
+            Section {
+                GrooUserButton(
+                    controller: authService.controller,
+                    consoleURL: Self.accountConsoleURL,
+                    sections: GrooAuthFactory.accountSections,
+                    showsLabel: true
+                )
+                .tint(.primary)
+            }
+
             // Biometric Section
             Section {
                 Toggle(isOn: $biometricEnabled) {

@@ -41,7 +41,7 @@ struct SharedRecordStoreTests {
         hasMore: Bool = false
     ) -> SharedRecordsResponse {
         SharedRecordsResponse(
-            records: records, nextSeq: nextSeq, hasMore: hasMore, formatVersion: 2
+            records: records, nextSeq: nextSeq, hasMore: hasMore
         )
     }
 
