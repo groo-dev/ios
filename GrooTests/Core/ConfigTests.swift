@@ -32,7 +32,13 @@ struct ConfigTests {
     /// bundle allows them.
     @Test func requestsNoScopeOutsideTheApplicationsThisBundleIsRegisteredFor() {
         let registered: Set<String> = [
-            "openid", "profile", "email", "offline_access", "accounts:profile",
+            "openid", "profile", "email", "offline_access",
+            // Every `accounts:*` scope except `accounts:handoff`. They became
+            // GLOBAL on 2026-08-27 and were added to all four of this bundle's
+            // application ceilings at the same time — verified against live D1,
+            // which is the only place this property exists.
+            "accounts:profile", "accounts:passkeys", "accounts:devices",
+            "accounts:apps", "accounts:tokens",
             "azan:read", "azan:write",
             "drive:read", "drive:write",
             "pad:read", "pad:write",

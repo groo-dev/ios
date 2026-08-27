@@ -41,6 +41,7 @@ struct SettingsView: View {
                 GrooUserButton(
                     controller: authService.controller,
                     consoleURL: Self.accountConsoleURL,
+                    sections: GrooAuthFactory.accountSections,
                     showsLabel: true
                 )
                 .tint(.primary)

@@ -38,6 +38,13 @@ enum GrooAuthFactory {
     /// with `unknown client_id`. Do not restore it; it does not exist.
     private static let clientId = "client_9ed9353071ab140875eeb1ef32095f66"
 
+    /// The account sections this app shows. Each costs a scope, so the scope list
+    /// above derives from this rather than being kept in step by hand.
+    ///
+    /// API tokens are the one section left out: a token is shown once and has to
+    /// be copied somewhere safe, which is a desk job. The console link covers it.
+    static let accountSections: GrooAccountSections = [.passkeys, .devices, .connectedApps]
+
     static func makeConfig() -> GrooAuthConfig {
         #if DEBUG
         let redirect = "dev.groo.ios.debug://oauth-callback"
@@ -69,7 +76,7 @@ enum GrooAuthFactory {
                 "drive:read", "drive:write",
                 "pad:read", "pad:write",
                 "pass:read", "pass:write",
-            ],
+            ] + accountSections.requiredScopes,
             keychainService: service,
             // Deliberately nil: omitting the access group lands items in the
             // app's default Keychain access group, which — because this app
