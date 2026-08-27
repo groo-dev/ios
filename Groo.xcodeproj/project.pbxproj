@@ -65,6 +65,7 @@
 		BC82ED089E0E728AE427CDEE /* SharedPadCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */; };
 		C28ED402534EC41C9D99BFB1 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1824F78163C97BE82976C04C /* Foundation.framework */; };
 		C32C63A5A95F4C7A29363DA9 /* GrooAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 6CB17EFCC3A613A008ADBD29 /* GrooAuth */; };
+		AA1000000000000000000001 /* GrooAuthUI in Frameworks */ = {isa = PBXBuildFile; productRef = AA1000000000000000000002 /* GrooAuthUI */; };
 		C469004D4292690B7FEA6654 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = B026D97D28BCC53D8ED6E1D0 /* Adhan */; };
 		CDB30DD6E6A22EBBEBC6DD18 /* SharedGrooAuthFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E285B8667C4DEBF920F1C040 /* SharedGrooAuthFactory.swift */; };
 		D070088143A9E97B17B36A78 /* SharedPassAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB87AB7F5FD7807E1D49B4 /* SharedPassAPIClient.swift */; };
@@ -284,6 +285,7 @@
 				1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */,
 				1B48208B2F35625A0018D7FA /* web3swift in Frameworks */,
 				C32C63A5A95F4C7A29363DA9 /* GrooAuth in Frameworks */,
+				AA1000000000000000000001 /* GrooAuthUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -484,6 +486,7 @@
 				1B48208A2F35625A0018D7FA /* web3swift */,
 				1B9FA3702F44944100D792F5 /* Adhan */,
 				6CB17EFCC3A613A008ADBD29 /* GrooAuth */,
+				AA1000000000000000000002 /* GrooAuthUI */,
 			);
 			productName = Groo;
 			productReference = 1B2850A72F13FF540046247D /* Groo.app */;
@@ -1425,7 +1428,7 @@
 			repositoryURL = "https://github.com/groo-dev/auth-swift.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.0.3;
+				minimumVersion = 0.1.1;
 			};
 		};
 		8B834A862708F3215293BAC8 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */ = {
@@ -1453,6 +1456,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */;
 			productName = GrooAuth;
+		};
+		AA1000000000000000000002 /* GrooAuthUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */;
+			productName = GrooAuthUI;
 		};
 		A135E9C4D4E3DA5219FB27B0 /* GrooAuth */ = {
 			isa = XCSwiftPackageProductDependency;

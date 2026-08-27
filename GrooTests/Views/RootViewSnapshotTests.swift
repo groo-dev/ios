@@ -29,8 +29,8 @@ struct RootViewSnapshotTests {
         "selectedTab": "home",
     ]
 
-    @Test func loginView() {
-        assertViewSnapshot(of: LoginView().environment(AuthService()), named: "logged-out")
+    @Test func signInScreen() {
+        assertViewSnapshot(of: SignInScreen().environment(AuthService()), named: "logged-out")
     }
 
     @Test func unlockView() throws {

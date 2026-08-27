@@ -29,8 +29,15 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if !isLoggedIn {
-                LoginView()
+            if authService.isLoading && !UITestMode.isActive {
+                // "Signed out" and "not read from the Keychain yet" are different
+                // states. Without this branch an already-signed-in person sees the
+                // sign-in screen flash on every launch while the Keychain read
+                // completes — the controller publishes `isLoading` precisely so
+                // this is tellable.
+                ProgressView().controlSize(.large)
+            } else if !isLoggedIn {
+                SignInScreen()
             } else if let padService, let syncService, let passService {
                 if needsGlobalUnlock && !isGloballyUnlocked {
                     GlobalLockView(
