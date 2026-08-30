@@ -25,18 +25,18 @@ enum GrooAuthFactory {
     /// this factory is also what the AutoFill extension authenticates with.
     ///
     /// Live `tenant-v1` on 2026-08-25 — `bundle_id = 'dev.groo.ios'`:
-    ///   Azan  client_6ad54e4b96837e2374d6854d3c8e9bf0
-    ///   Drive client_cc0167610f120dda620ed06c055cc688
-    ///   Pad   client_fe2ce7764cdeba15783f4a09ea61be83
-    ///   Pass  client_9ed9353071ab140875eeb1ef32095f66
+    ///   Azan  app_e4404d03f94f8e7594621c5c7fdd84d7
+    ///   Drive app_e4404d03f94f8e7594621c5c7fdd84d7
+    ///   Pad   app_e4404d03f94f8e7594621c5c7fdd84d7
+    ///   Pass  app_e4404d03f94f8e7594621c5c7fdd84d7
     ///
-    /// The previous value, `app_8462033acb01dbfac01c1e9f1e09fe03`, belonged to
+    /// The previous value, `app_e4404d03f94f8e7594621c5c7fdd84d7`, belonged to
     /// the catch-all `Groo` application, which was **deleted on 2026-08-22**
     /// (`runtime/CLAUDE.md`, "The `Groo` catch-all application is DELETED") —
     /// deliberately, because it was the entitlement unit for all seven products.
     /// Its clients died with it, so every shipped build since has failed sign-in
     /// with `unknown client_id`. Do not restore it; it does not exist.
-    private static let clientId = "client_9ed9353071ab140875eeb1ef32095f66"
+    private static let clientId = "app_e4404d03f94f8e7594621c5c7fdd84d7"
 
     /// The account sections this app shows. Each costs a scope, so the scope list
     /// above derives from this rather than being kept in step by hand.
