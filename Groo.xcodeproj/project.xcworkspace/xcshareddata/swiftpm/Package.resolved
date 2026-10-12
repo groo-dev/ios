@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/groo-dev/auth-swift.git",
       "state" : {
-        "revision" : "8fb89360a1563340b2dc431e094d08001c404ce6",
-        "version" : "0.4.1"
+        "revision" : "b432da30507ad5011e87dbf8a8290c380c38ce3e",
+        "version" : "0.4.4"
       }
     },
     {
