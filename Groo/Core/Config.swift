@@ -112,11 +112,23 @@ enum Config {
     // MARK: - Ethereum (public RPC + Blockscout, no API keys needed)
 
     /// Public Ethereum JSON-RPC endpoint. Override via UserDefaults "ethereumRPCURL".
+    ///
+    /// Was eth.llamarpc.com until 2026-10-17, when it began answering every
+    /// request with a Cloudflare 525 (TLS handshake failed) — four attempts,
+    /// no successes. That takes the whole crypto tab down with it: balances,
+    /// gas, and sending all go through here, and a free public endpoint can
+    /// disappear without notice or warning.
+    ///
+    /// Checked before switching: eth_blockNumber, eth_call, eth_estimateGas,
+    /// eth_gasPrice, eth_getBalance, eth_getTransactionCount all answer, and
+    /// eth_chainId is 0x1 — which must stay true, because transactions are
+    /// signed for chain 1 and a node on another chain would be a wrong-chain
+    /// signature rather than a failed request.
     static var ethereumRPCURL: URL {
         if let url = overrideURL(forKey: "ethereumRPCURL") {
             return url
         }
-        return URL(string: "https://eth.llamarpc.com")!
+        return URL(string: "https://ethereum-rpc.publicnode.com")!
     }
 
     /// Blockscout API for token discovery. Override via UserDefaults "blockscoutBaseURL".
