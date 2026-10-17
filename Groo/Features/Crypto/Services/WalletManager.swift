@@ -330,6 +330,94 @@ class WalletManager {
         return output.encoded
     }
 
+    // MARK: - Token Transfers
+
+    /// The `transfer(address,uint256)` payload for an ERC-20 transfer.
+    ///
+    /// Needed *before* signing: what a token transfer costs in gas depends on
+    /// the contract's own bookkeeping, so `eth_estimateGas` has to be handed
+    /// the real payload to measure it. The 21000 that covers a plain ETH send
+    /// never covers a contract call, and an under-estimate does not save
+    /// money — the transaction runs out of gas and is charged for the attempt.
+    static func erc20TransferCallData(to: String, amount: BigUInt) throws -> Data {
+        guard let recipient = AnyAddress(string: to, coin: .ethereum) else {
+            throw WalletError.invalidRecipient
+        }
+        let function = EthereumAbiFunction(name: "transfer")
+        function.addParamAddress(val: recipient.data, isOutput: false)
+        function.addParamUInt256(val: amount.serialize(), isOutput: false)
+        return EthereumAbi.encode(fn: function)
+    }
+
+    /// Sign an ERC-20 token transfer (requires Pass vault to be unlocked).
+    ///
+    /// A token is not held by the network — it is a row in a ledger owned by
+    /// the token's contract, so moving it is a *call to that contract*, not a
+    /// payment to the recipient. Three things follow, and all three differ from
+    /// `signTransaction`:
+    ///
+    /// - the transaction goes **to the contract**, not to `to`;
+    /// - it carries **no ETH** (`value` is absent), because no ETH moves;
+    /// - the recipient and the amount travel inside the call payload.
+    ///
+    /// `amount` is already in the token's base units — see `TokenAmount`. The
+    /// token's own `decimals` decide that scale, and assuming ETH's 18 for a
+    /// 6-decimal token overstates a transfer by a factor of a trillion.
+    func signTokenTransfer(
+        tokenContract: String,
+        to: String,
+        amount: BigUInt,
+        nonce: BigUInt,
+        gasPrice: BigUInt,
+        gasLimit: BigUInt,
+        chainId: BigUInt = 1,
+        fromAddress: String
+    ) throws -> Data {
+        guard let privateKeyHex = getPrivateKey(for: fromAddress),
+              let privateKeyData = Data(hexString: privateKeyHex) else {
+            throw WalletError.privateKeyNotFound
+        }
+
+        guard AnyAddress.isValid(string: tokenContract, coin: .ethereum) else {
+            Log.wallet.error("Invalid token contract: \(tokenContract, privacy: .public)")
+            throw WalletError.invalidTokenContract
+        }
+
+        guard AnyAddress.isValid(string: to, coin: .ethereum) else {
+            Log.wallet.error("Invalid recipient address: \(to, privacy: .public)")
+            throw WalletError.invalidRecipient
+        }
+
+        let input = EthereumSigningInput.with {
+            $0.chainID = chainId.serialize()
+            $0.nonce = nonce.serialize()
+            // Legacy, as in signTransaction — see the note there.
+            $0.gasPrice = gasPrice.serialize()
+            $0.gasLimit = gasLimit.serialize()
+            // The contract is the destination. The person being paid appears
+            // only inside erc20Transfer below.
+            $0.toAddress = tokenContract
+            $0.privateKey = privateKeyData
+            $0.transaction = EthereumTransaction.with {
+                $0.erc20Transfer = EthereumTransaction.ERC20Transfer.with {
+                    $0.to = to
+                    $0.amount = amount.serialize()
+                }
+            }
+        }
+
+        let output: EthereumSigningOutput = AnySigner.sign(input: input, coin: .ethereum)
+
+        guard output.error.rawValue == 0, !output.encoded.isEmpty else {
+            Log.wallet.error(
+                "Token transfer signing failed (\(output.error.rawValue, privacy: .public)): \(output.errorMessage, privacy: .public)"
+            )
+            throw WalletError.transactionSigningFailed
+        }
+
+        return output.encoded
+    }
+
     // MARK: - Delete Wallet
 
     func deleteWallet(address: String) async throws {
@@ -363,6 +451,8 @@ enum WalletError: Error, LocalizedError {
     case invalidSeedPhrase
     case invalidPrivateKey
     case invalidRecipient
+    case invalidTokenContract
+    case amountTooPrecise(allowed: Int)
     case privateKeyNotFound
     case transactionSigningFailed
     case walletNotFound
@@ -375,6 +465,11 @@ enum WalletError: Error, LocalizedError {
         case .invalidSeedPhrase: "Invalid seed phrase"
         case .invalidPrivateKey: "Invalid private key"
         case .invalidRecipient: "Invalid recipient address"
+        case .invalidTokenContract: "Invalid token contract address"
+        case .amountTooPrecise(let allowed):
+            allowed == 0
+                ? "This token cannot be split — enter a whole number"
+                : "This token supports at most \(allowed) decimal places"
         case .privateKeyNotFound: "Private key not found in vault"
         case .transactionSigningFailed: "Failed to sign transaction"
         case .walletNotFound: "Wallet not found in vault"

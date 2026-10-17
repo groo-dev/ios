@@ -25,6 +25,22 @@ struct WalletManagerTests {
     // Core's EthereumTests.testSigner. Neither is a recording of our own
     // output, so this vector cannot drift with the signing library — it is the
     // gate that caught nothing when web3swift was swapped out, and would have.
+    // Trust Wallet Core's own EthereumTests.testSignERC20Transfer. Published
+    // by the library, not recorded from ours, so it pins our wiring rather
+    // than agreeing with it.
+    static let erc20Key = "608dcb1742bb3fb7aec002074e3420e4fab7d00cced79ccdac53ed5b27138151"
+    static let erc20Contract = "0x6b175474e89094c44da98b954eedeac495271d0f"   // DAI
+    static let erc20Recipient = "0x5322b34c88ed0691971bf52a7047448f0f4efc84"
+    static let erc20Amount = BigUInt("2000000000000000000")                  // 2 DAI, 18 decimals
+    static let erc20CallData = "a9059cbb"
+        + "0000000000000000000000005322b34c88ed0691971bf52a7047448f0f4efc84"
+        + "0000000000000000000000000000000000000000000000001bc16d674ec80000"
+    static let erc20SignedTx = "f8aa808509c7652400830130b9946b175474e89094c44da98b954eedeac495271d0f"
+        + "80b844a9059cbb0000000000000000000000005322b34c88ed0691971bf52a7047448f0f4efc84"
+        + "0000000000000000000000000000000000000000000000001bc16d674ec8000025"
+        + "a0724c62ad4fbf47346b02de06e603e013f26f26b56fdc0be7ba3d6273401d98ce"
+        + "a0032131cae15da7ddcda66963e8bef51ca0d9962bfef0547d3f02597a4a58c931"
+
     static let eip155Key = "4646464646464646464646464646464646464646464646464646464646464646"
     static let eip155SignedTx = "f86c098504a817c800825208943535353535353535353535353535353535353535"
         + "880de0b6b3a76400008025a028ef61340bd939bc2195fe537567866003e1a15d3c71ff63e1590620aa636276"
@@ -309,6 +325,92 @@ struct WalletManagerTests {
                 fromAddress: Self.vectorPrivateKeyAddress)
         } throws: { error in
             guard case WalletError.invalidRecipient = error else { return false }
+            return true
+        }
+    }
+
+    // MARK: - ERC-20 transfers
+
+    @Test func erc20CallDataMatchesReferenceVector() throws {
+        let data = try WalletManager.erc20TransferCallData(
+            to: Self.erc20Recipient, amount: Self.erc20Amount)
+        let hex = data.map { String(format: "%02x", $0) }.joined()
+        #expect(hex == Self.erc20CallData,
+                "transfer(address,uint256) encoding diverged from the reference vector")
+    }
+
+    @Test func signTokenTransferMatchesReferenceVector() async throws {
+        let walletEnv = try await Self.makeWalletEnv()
+        defer { Self.tearDown(walletEnv) }
+        let from = try await walletEnv.manager.importWallet(privateKey: Self.erc20Key)
+
+        let signed = try walletEnv.manager.signTokenTransfer(
+            tokenContract: Self.erc20Contract,
+            to: Self.erc20Recipient,
+            amount: Self.erc20Amount,
+            nonce: BigUInt(0),
+            gasPrice: BigUInt(42_000_000_000),
+            gasLimit: BigUInt(78_009),
+            fromAddress: from
+        )
+
+        let hex = signed.map { String(format: "%02x", $0) }.joined()
+        #expect(hex == Self.erc20SignedTx,
+                "signed token transfer diverged from the reference vector")
+    }
+
+    /// Shaped like the defect it defends against. Until this existed, tapping
+    /// Send on a token signed a *plain ETH transfer to the recipient* for the
+    /// token's amount — the money left, the token never moved, and the
+    /// confirmation said otherwise. Asserting "it signs something" would have
+    /// passed throughout. These three fields are the difference.
+    @Test func tokenTransferPaysTheContractAndMovesNoEther() async throws {
+        let walletEnv = try await Self.makeWalletEnv()
+        defer { Self.tearDown(walletEnv) }
+        let from = try await walletEnv.manager.importWallet(privateKey: Self.erc20Key)
+
+        let signed = try walletEnv.manager.signTokenTransfer(
+            tokenContract: Self.erc20Contract,
+            to: Self.erc20Recipient,
+            amount: Self.erc20Amount,
+            nonce: BigUInt(0),
+            gasPrice: BigUInt(42_000_000_000),
+            gasLimit: BigUInt(78_009),
+            fromAddress: from
+        )
+
+        // Legacy RLP: [nonce, gasPrice, gasLimit, to, value, data, v, r, s]
+        let fields = try Self.rlpListItems(signed)
+        #expect(fields.count == 9)
+
+        let destination = "0x" + fields[3].map { String(format: "%02x", $0) }.joined()
+        #expect(destination == Self.erc20Contract,
+                "destination must be the token contract, got \(destination)")
+        #expect(destination != Self.erc20Recipient.lowercased(),
+                "the recipient must NOT be the transaction destination — that is the ETH-send bug")
+
+        #expect(fields[4].isEmpty,
+                "a token transfer carries no ether; value must be zero")
+
+        let payload = fields[5].map { String(format: "%02x", $0) }.joined()
+        #expect(payload == Self.erc20CallData)
+        #expect(payload.contains("5322b34c88ed0691971bf52a7047448f0f4efc84"),
+                "the recipient travels inside the call payload")
+    }
+
+    @Test func signTokenTransferRejectsAnInvalidContract() async throws {
+        let walletEnv = try await Self.makeWalletEnv()
+        defer { Self.tearDown(walletEnv) }
+        let from = try await walletEnv.manager.importWallet(privateKey: Self.erc20Key)
+        #expect {
+            _ = try walletEnv.manager.signTokenTransfer(
+                tokenContract: "not-a-contract",
+                to: Self.erc20Recipient,
+                amount: Self.erc20Amount,
+                nonce: BigUInt(0), gasPrice: BigUInt(1), gasLimit: BigUInt(78_009),
+                fromAddress: from)
+        } throws: { error in
+            guard case WalletError.invalidTokenContract = error else { return false }
             return true
         }
     }

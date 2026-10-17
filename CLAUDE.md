@@ -197,6 +197,37 @@ gone — `Data.toHexString()` and `Data.fromHex` were theirs, and the WalletCore
 equivalents (`Data.hexString`, `Data(hexString:)`) replaced the five call
 sites.
 
+**Sending a token is not sending ETH with a different label.** A token is a
+row in a ledger owned by its contract, so a transfer is a *call to that
+contract*: the transaction goes **to the contract**, carries **no ETH**, and
+names the recipient and amount inside the call payload. `WalletManager` keeps
+them as two functions — `signTransaction` and `signTokenTransfer` — because
+every field differs. `SendView` branches on `asset.contractAddress` (`nil` for
+native ETH). Until 2026-10-17 it did not: tapping Send on a token signed a
+plain ETH transfer to the recipient for the token's amount, and the
+confirmation sheet said "Send 3 USDC" while 3 ETH left the wallet. The test
+that pins this is `tokenTransferPaysTheContractAndMovesNoEther`, which asserts
+the destination **is** the contract and **is not** the recipient — the second
+half is the one that fails when the bug returns.
+
+**Never compute an amount through `Double`.** `TokenAmount.baseUnits` parses
+the decimal string directly. A `Double` carries about 17 significant digits
+and an 18-decimal amount needs 19, so `Double("1.1")! * 1e18` is
+1100000000000000128 wei — 128 more than was typed, for an utterly ordinary
+amount. `TokenAmountTests` pins that exact discrepancy; if it ever stops
+differing, the test says so rather than quietly passing.
+
+**The scale is the asset's, never a constant.** ETH has 18 decimals, USDC has
+6. `CryptoAsset.decimals` carries it and `PortfolioView` already divides by it
+when *reading* balances — the send path has to multiply by the same number.
+Hardcoding `1e18` overstates a 6-decimal transfer by a factor of a trillion.
+
+**A contract call has no safe default gas limit.** 21000 covers a plain send
+and nothing else. `eth_estimateGas` has to be given the real `transfer(...)`
+payload — `WalletManager.erc20TransferCallData` builds it — and if the
+estimate is missing, a token send is refused rather than guessed: an
+out-of-gas transaction fails *and* is charged for.
+
 **`scripts/test.sh` takes `GROO_TEST_DESTINATION`.** A bare device name stops
 being a unique destination the moment two runtimes offer the same model, and
 xcodebuild then refuses the run and prints every simulator on the machine —

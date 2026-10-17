@@ -2,7 +2,8 @@
 //  SendView.swift
 //  Groo
 //
-//  Send ETH or ERC-20 tokens to another address.
+//  Send ETH or an ERC-20 token to another address. The two are different
+//  transactions, not one with a flag — see sendTransaction().
 //
 
 import BigInt
@@ -30,12 +31,35 @@ struct SendView: View {
     @State private var showConfirm = false
     @State private var showUnlockPrompt = false
 
+    /// For display only — the price line and the balance check. Never for
+    /// building a transaction: see `amountBaseUnits`.
     private var amountDouble: Double {
         Double(amount) ?? 0
     }
 
+    /// The typed amount in the asset's own base units, or nil if it is not a
+    /// usable number. This is what a transaction carries.
+    private var amountBaseUnits: BigUInt? {
+        try? TokenAmount.baseUnits(from: amount, decimals: asset.decimals)
+    }
+
+    /// Set only when the amount is well-formed but finer than the token can
+    /// represent, so the field can say why rather than just refusing.
+    private var amountPrecisionWarning: String? {
+        do {
+            _ = try TokenAmount.baseUnits(from: amount, decimals: asset.decimals)
+            return nil
+        } catch TokenAmount.ParseError.tooManyFractionalDigits(let allowed) {
+            return WalletError.amountTooPrecise(allowed: allowed).errorDescription
+        } catch {
+            return nil
+        }
+    }
+
+    /// A 42-character string beginning "0x" is not an address — "0x" plus 40
+    /// spaces passes that test. Ask the library that will have to encode it.
     private var isValidAddress: Bool {
-        recipientAddress.hasPrefix("0x") && recipientAddress.count == 42
+        AnyAddress.isValid(string: recipientAddress, coin: .ethereum)
     }
 
     private var gasCostEth: Double {
@@ -135,7 +159,11 @@ struct SendView: View {
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
 
-                if amountDouble > 0 {
+                if let amountPrecisionWarning {
+                    Text(amountPrecisionWarning)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                } else if amountDouble > 0 {
                     Text("\(formatCurrency(amountDouble * asset.price))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -254,7 +282,10 @@ struct SendView: View {
     // MARK: - Helpers
 
     private var canSend: Bool {
-        isValidAddress && amountDouble > 0 && amountDouble <= asset.balance
+        isValidAddress
+            && amountDouble > 0
+            && amountDouble <= asset.balance
+            && amountBaseUnits != nil
     }
 
     private func estimateAndConfirm() async {
@@ -266,13 +297,42 @@ struct SendView: View {
             return
         }
 
-        let weiHex = ethToHex(amountDouble)
+        let units: BigUInt
+        do {
+            units = try TokenAmount.baseUnits(from: amount, decimals: asset.decimals)
+        } catch TokenAmount.ParseError.tooManyFractionalDigits(let allowed) {
+            error = WalletError.amountTooPrecise(allowed: allowed).errorDescription
+            return
+        } catch {
+            // `error` here is the caught value; the state property needs self.
+            self.error = "Enter a valid amount"
+            return
+        }
 
         do {
+            // What a transfer costs in gas depends on what it does. A plain
+            // send is a fixed 21000; a token transfer is the contract's own
+            // bookkeeping, which only the node can price — and only if it is
+            // given the actual call payload to run.
+            let destination: String
+            let value: String
+            let callData: String
+            if let contract = asset.contractAddress {
+                destination = contract
+                value = "0x0"   // no ETH moves in a token transfer
+                callData = "0x" + (try WalletManager.erc20TransferCallData(
+                    to: recipientAddress, amount: units)).hexString
+            } else {
+                destination = recipientAddress
+                value = "0x" + String(units, radix: 16)
+                callData = "0x"
+            }
+
             async let gasEstimateTask = ethereumService.estimateGas(
                 from: address,
-                to: recipientAddress,
-                value: weiHex
+                to: destination,
+                value: value,
+                data: callData
             )
             async let gasPriceTask = ethereumService.getGasPrice()
 
@@ -302,7 +362,20 @@ struct SendView: View {
 
         do {
             let nonceHex = try await ethereumService.getTransactionCount(address: address)
-            let gasLimitHex = gasEstimate ?? "0x5208" // 21000 default
+
+            // A plain send always costs 21000, so falling back to it is safe.
+            // A contract call has no safe default: guessing one buys an
+            // out-of-gas transaction, which fails and is charged for anyway.
+            let gasLimitHex: String
+            if asset.contractAddress == nil {
+                gasLimitHex = gasEstimate ?? "0x5208" // 21000 default
+            } else if let estimate = gasEstimate {
+                gasLimitHex = estimate
+            } else {
+                Log.wallet.error("Send aborted: no gas estimate for a token transfer")
+                error = "Could not estimate the network fee — send aborted"
+                return
+            }
 
             guard let nonce = hexToUInt64(nonceHex),
                   let gasPriceValue = hexToUInt64(gasPriceHex),
@@ -312,14 +385,32 @@ struct SendView: View {
                 return
             }
 
-            let signedTx = try walletManager.signTransaction(
-                to: recipientAddress,
-                value: BigUInt(amountDouble * 1e18),
-                nonce: BigUInt(nonce),
-                gasPrice: BigUInt(gasPriceValue),
-                gasLimit: BigUInt(gasLimitValue),
-                fromAddress: address
-            )
+            let units = try TokenAmount.baseUnits(from: amount, decimals: asset.decimals)
+
+            // Two different transactions. A token is a row in the contract's
+            // ledger, so moving it is a call to that contract carrying no ETH;
+            // only a native send pays the recipient directly.
+            let signedTx: Data
+            if let contract = asset.contractAddress {
+                signedTx = try walletManager.signTokenTransfer(
+                    tokenContract: contract,
+                    to: recipientAddress,
+                    amount: units,
+                    nonce: BigUInt(nonce),
+                    gasPrice: BigUInt(gasPriceValue),
+                    gasLimit: BigUInt(gasLimitValue),
+                    fromAddress: address
+                )
+            } else {
+                signedTx = try walletManager.signTransaction(
+                    to: recipientAddress,
+                    value: units,
+                    nonce: BigUInt(nonce),
+                    gasPrice: BigUInt(gasPriceValue),
+                    gasLimit: BigUInt(gasLimitValue),
+                    fromAddress: address
+                )
+            }
 
             let hash = try await ethereumService.sendRawTransaction(
                 signedTx: signedTx.hexString
@@ -333,11 +424,6 @@ struct SendView: View {
     private func hexToUInt64(_ hex: String) -> UInt64? {
         let clean = hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
         return UInt64(clean, radix: 16)
-    }
-
-    private func ethToHex(_ eth: Double) -> String {
-        let wei = UInt64(eth * 1e18)
-        return "0x" + String(wei, radix: 16)
     }
 
     private func formatCurrency(_ value: Double) -> String {
