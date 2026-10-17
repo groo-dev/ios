@@ -161,7 +161,75 @@ races sibling suites touching the same defaults. All current callers
 `StocksViewSnapshotTests`, `PhoneTabSnapshotTests`, `RootViewSnapshotTests`) do
 this — keep new callers under the same umbrella.
 
+**The crypto stack is Trust Wallet Core, pinned through a local wrapper, and
+the wrapper is load-bearing.** `Packages/WalletCoreBinary/Package.swift`
+declares two `binaryTarget`s by URL and checksum. It exists because the
+`Package.swift` *committed to* `trustwallet/wallet-core` is stale: at tag 4.8.4
+it still points at the **4.2.9** binaries, under an asset name that release no
+longer publishes. Adding the package the ordinary way in Xcode therefore
+resolves 4.8.4 and installs 4.2.9, silently and without error. The correct
+manifest ships as a release **asset**. To upgrade, take the URLs and checksums
+from there, never from the repository tree:
+
+```bash
+gh release download <tag> --repo trustwallet/wallet-core --pattern Package.swift
+```
+
+**`import WalletCore` alone is not enough to build a signing input.**
+`EthereumSigningInput` and its siblings are SwiftProtobuf messages, and under
+`MemberImportVisibility` their `.with { }` builders resolve only when the
+defining module is imported directly — so `WalletManager.swift` also imports
+`WalletCoreSwiftProtobuf`. WalletCore's own tests import just `WalletCore`
+because they predate the rule; copying their import list reproduces a
+confusing "static method 'with' is not available" error.
+
+**`AnySigner.sign` does not throw.** A failed sign returns a `SigningOutput`
+carrying a non-zero `error` (`TW.Common.Proto.SigningError`, where `OK = 0`)
+and an empty `encoded`. Without an explicit check, a signing failure surfaces
+as a silently empty transaction rather than an error — see the guard at the end
+of `WalletManager.signTransaction`.
+
+**BigInt is a direct dependency now, deliberately.** `BigUInt` used to reach
+the app transitively through web3swift; nothing declared it. It is in the
+project's own package list so that removing another dependency cannot take it
+away again. `CryptoSwift` and `secp256k1` arrived the same way and are simply
+gone — `Data.toHexString()` and `Data.fromHex` were theirs, and the WalletCore
+equivalents (`Data.hexString`, `Data(hexString:)`) replaced the five call
+sites.
+
+**`scripts/test.sh` takes `GROO_TEST_DESTINATION`.** A bare device name stops
+being a unique destination the moment two runtimes offer the same model, and
+xcodebuild then refuses the run and prints every simulator on the machine —
+which reads as a catastrophic failure rather than an ambiguous argument. Pin
+one with a UDID:
+
+```bash
+GROO_TEST_DESTINATION="platform=iOS Simulator,id=<udid>" scripts/test.sh --unit
+```
+
 ## Test suite baseline
+
+**The 2026-08-08 baseline below no longer describes this toolchain.** On
+2026-10-17, the first run after the project became buildable under Xcode 27,
+the unit suite failed **34 lines / 27 unique names** — every one of them an
+image snapshot, with zero logic-test failures. The references date from
+2026-07-06 and SwiftUI's large-title rendering has moved since: the diff on
+`CryptoViewSnapshotTests.walletOnboardingMain` is a **missing navigation
+title**, with the content below it pixel-identical. The same shift explains
+why Drive, Pad, Stocks, Pass, Azan and Scratchpad snapshots all went red at
+once.
+
+Be careful what this does and does not establish. No before/after comparison
+was possible, because **the app did not build at all on Xcode 27** until that
+day — nothing had run this suite on this toolchain before. 34 is a first
+measurement, not a regression against a comparable baseline. It was, however,
+stable across the WalletCore swap and three dependency bumps: the failing
+multiset was byte-identical before and after, which is the useful property.
+
+Re-recording these references is deliberate, separate work — it would bake in
+whatever the new rendering is, so it wants a human looking at the diffs.
+
+The older baseline is kept below because its two traps still apply.
 
 As of 2026-08-08 the unit suite has 12 unique pre-existing failures (18
 failing-test *lines* — see the parameterized-test trap below): view snapshot

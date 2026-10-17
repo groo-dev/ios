@@ -20,6 +20,16 @@ struct WalletManagerTests {
     static let vectorPrivateKey = "4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318"
     static let vectorPrivateKeyAddress = "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23"
 
+    // The EIP-155 specification's own worked example. The expected bytes are
+    // published twice, independently: in the EIP text, and in Trust Wallet
+    // Core's EthereumTests.testSigner. Neither is a recording of our own
+    // output, so this vector cannot drift with the signing library — it is the
+    // gate that caught nothing when web3swift was swapped out, and would have.
+    static let eip155Key = "4646464646464646464646464646464646464646464646464646464646464646"
+    static let eip155SignedTx = "f86c098504a817c800825208943535353535353535353535353535353535353535"
+        + "880de0b6b3a76400008025a028ef61340bd939bc2195fe537567866003e1a15d3c71ff63e1590620aa636276"
+        + "a067cbe9d8997f761aecb703304b3800ccf555c9f3dc64214b297fb1966a3b6d83"
+
     struct WalletEnv {
         let manager: WalletManager
         let env: PassServiceIntegrationTests.Env
@@ -169,6 +179,30 @@ struct WalletManagerTests {
 
         #expect(!signed.isEmpty)
         #expect(signed.first == 0xf8)  // RLP list prefix for a legacy signed tx of this size
+    }
+
+    /// Byte-for-byte against the EIP-155 reference transaction. Everything the
+    /// other signing tests check structurally (field order, RLP framing, the
+    /// EIP-155 v, the secp256k1 signature itself) is pinned here at once, so a
+    /// signing-library change that is merely plausible rather than correct
+    /// fails on this test rather than shipping.
+    @Test func signTransactionMatchesEip155ReferenceVector() async throws {
+        let walletEnv = try await Self.makeWalletEnv()
+        defer { Self.tearDown(walletEnv) }
+        let from = try await walletEnv.manager.importWallet(privateKey: Self.eip155Key)
+
+        let signed = try walletEnv.manager.signTransaction(
+            to: "0x3535353535353535353535353535353535353535",
+            value: BigUInt(1_000_000_000_000_000_000),
+            nonce: BigUInt(9),
+            gasPrice: BigUInt(20_000_000_000),
+            gasLimit: BigUInt(21_000),
+            fromAddress: from
+        )
+
+        let hex = signed.map { String(format: "%02x", $0) }.joined()
+        #expect(hex == Self.eip155SignedTx,
+                "signed bytes diverged from the EIP-155 reference vector")
     }
 
     enum RLPError: Error { case malformed }

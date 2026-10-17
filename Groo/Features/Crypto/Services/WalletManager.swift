@@ -8,12 +8,15 @@
 //
 
 import BigInt
-import CryptoSwift
 import Foundation
 import os
 import SwiftUI
-import Web3Core
-import web3swift
+import WalletCore
+// The generated signing-input types (EthereumSigningInput and friends) are
+// SwiftProtobuf messages, and their `.with { }` builders resolve only when the
+// defining module is imported directly. WalletCore's own tests get away with
+// importing just WalletCore because they predate MemberImportVisibility.
+import WalletCoreSwiftProtobuf
 
 @MainActor
 @Observable
@@ -112,42 +115,22 @@ class WalletManager {
         error = nil
         defer { isLoading = false }
 
-        let generatedMnemonics: String?
-        do {
-            generatedMnemonics = try BIP39.generateMnemonics(bitsOfEntropy: 128)
-        } catch {
-            Log.wallet.error("BIP39 mnemonic generation failed: \(String(describing: error))")
-            throw WalletError.mnemonicGenerationFailed
-        }
-        guard let mnemonics = generatedMnemonics else {
+        // 128 bits of entropy is a 12-word BIP39 phrase. Empty passphrase
+        // keeps the seed derivation standard (BIP39 salt "mnemonic" + ""),
+        // which is what every other wallet assumes when importing this phrase.
+        guard let wallet = HDWallet(strength: 128, passphrase: "") else {
             Log.wallet.error("BIP39 mnemonic generation returned nil")
             throw WalletError.mnemonicGenerationFailed
         }
+        let mnemonics = wallet.mnemonic
 
-        let createdKeystore: BIP32Keystore?
-        do {
-            createdKeystore = try BIP32Keystore(mnemonics: mnemonics, password: "")
-        } catch {
-            Log.wallet.error("BIP32 keystore creation failed: \(String(describing: error))")
-            throw WalletError.keystoreCreationFailed
-        }
-        guard let keystore = createdKeystore else {
-            Log.wallet.error("BIP32 keystore creation returned nil")
-            throw WalletError.keystoreCreationFailed
-        }
-
-        guard let address = keystore.addresses?.first else {
+        guard let addressString = wallet.getAddressForCoin(coin: .ethereum),
+              let derivedKey = wallet.getKeyForCoin(coin: .ethereum) else {
             throw WalletError.addressDerivationFailed
         }
 
-        let addressString = address.address
-
         // Get private key for storage
-        let privateKeyData = try keystore.UNSAFE_getPrivateKeyData(
-            password: "",
-            account: address
-        )
-        let privateKeyHex = privateKeyData.toHexString()
+        let privateKeyHex = derivedKey.data.hexString
 
         // Store in Pass vault
         let walletItem = PassCryptoWalletItem.create(
@@ -155,7 +138,7 @@ class WalletManager {
             address: addressString,
             seedPhrase: mnemonics,
             privateKey: privateKeyHex,
-            publicKey: address.address
+            publicKey: addressString
         )
 
         // The create sheet's .task is our caller — dismissing the sheet
@@ -198,36 +181,26 @@ class WalletManager {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
 
-        let importedKeystore: BIP32Keystore?
-        do {
-            importedKeystore = try BIP32Keystore(mnemonics: trimmed, password: "")
-        } catch {
-            Log.wallet.error("BIP32 keystore creation from seed phrase failed: \(String(describing: error))")
-            throw WalletError.invalidSeedPhrase
-        }
-        guard let keystore = importedKeystore else {
-            Log.wallet.error("BIP32 keystore creation from seed phrase returned nil")
+        // Returns nil on a phrase that fails BIP39 wordlist or checksum
+        // validation, which is the only seed-phrase rejection we need.
+        guard let wallet = HDWallet(mnemonic: trimmed, passphrase: "") else {
+            Log.wallet.error("BIP39 seed phrase failed validation")
             throw WalletError.invalidSeedPhrase
         }
 
-        guard let address = keystore.addresses?.first else {
+        guard let addressString = wallet.getAddressForCoin(coin: .ethereum),
+              let derivedKey = wallet.getKeyForCoin(coin: .ethereum) else {
             throw WalletError.addressDerivationFailed
         }
 
-        let addressString = address.address
-
-        let privateKeyData = try keystore.UNSAFE_getPrivateKeyData(
-            password: "",
-            account: address
-        )
-        let privateKeyHex = privateKeyData.toHexString()
+        let privateKeyHex = derivedKey.data.hexString
 
         let walletItem = PassCryptoWalletItem.create(
             name: "Imported Wallet",
             address: addressString,
             seedPhrase: trimmed,
             privateKey: privateKeyHex,
-            publicKey: address.address
+            publicKey: addressString
         )
 
         try await passService.addItem(.cryptoWallet(walletItem))
@@ -248,33 +221,30 @@ class WalletManager {
 
         let cleanKey = privateKey.hasPrefix("0x") ? String(privateKey.dropFirst(2)) : privateKey
 
-        guard let keyData = Data.fromHex(cleanKey) else {
+        guard let keyData = Data(hexString: cleanKey) else {
             throw WalletError.invalidPrivateKey
         }
 
-        let importedKeystore: EthereumKeystoreV3?
-        do {
-            importedKeystore = try EthereumKeystoreV3(privateKey: keyData, password: "")
-        } catch {
-            Log.wallet.error("Keystore creation from private key failed: \(String(describing: error))")
-            throw WalletError.invalidPrivateKey
-        }
-        guard let keystore = importedKeystore else {
-            Log.wallet.error("Keystore creation from private key returned nil")
+        // Rejects anything that is not a valid secp256k1 scalar — wrong
+        // length, zero, or >= the curve order.
+        guard let privateKey = PrivateKey(data: keyData) else {
+            Log.wallet.error("Private key failed secp256k1 validation")
             throw WalletError.invalidPrivateKey
         }
 
-        guard let address = keystore.addresses?.first else {
-            throw WalletError.addressDerivationFailed
-        }
-
-        let addressString = address.address
+        // Ethereum addresses come from the UNCOMPRESSED public key: keccak256
+        // of its 64 body bytes, last 20 taken. Passing compressed: true here
+        // yields a different, wrong address.
+        let addressString = AnyAddress(
+            publicKey: privateKey.getPublicKeySecp256k1(compressed: false),
+            coin: .ethereum
+        ).description
 
         let walletItem = PassCryptoWalletItem.create(
             name: "Imported Wallet",
             address: addressString,
             privateKey: cleanKey,
-            publicKey: address.address
+            publicKey: addressString
         )
 
         try await passService.addItem(.cryptoWallet(walletItem))
@@ -313,32 +283,51 @@ class WalletManager {
         fromAddress: String
     ) throws -> Data {
         guard let privateKeyHex = getPrivateKey(for: fromAddress),
-              let privateKeyData = Data.fromHex(privateKeyHex) else {
+              let privateKeyData = Data(hexString: privateKeyHex) else {
             throw WalletError.privateKeyNotFound
         }
 
-        guard let toAddress = EthereumAddress(to) else {
+        guard AnyAddress.isValid(string: to, coin: .ethereum) else {
             Log.wallet.error("Invalid recipient address: \(to, privacy: .public)")
             throw WalletError.invalidRecipient
         }
 
-        var transaction = CodableTransaction(
-            to: toAddress,
-            nonce: nonce,
-            chainID: chainId,
-            value: value,
-            data: data,
-            gasLimit: gasLimit,
-            gasPrice: gasPrice
-        )
+        // Every numeric field is a big-endian uint256 byte string, which is
+        // exactly BigUInt.serialize(). Zero serialises to empty Data, and RLP
+        // encodes zero as the empty string, so that is the correct wire form
+        // rather than a missing value.
+        let input = EthereumSigningInput.with {
+            $0.chainID = chainId.serialize()
+            $0.nonce = nonce.serialize()
+            // txMode left unset: Legacy, matching the EIP-155 transaction
+            // web3swift produced here. Switching to .enveloped would emit a
+            // type-2 (EIP-1559) transaction and break every signature vector.
+            $0.gasPrice = gasPrice.serialize()
+            $0.gasLimit = gasLimit.serialize()
+            $0.toAddress = to
+            $0.privateKey = privateKeyData
+            $0.transaction = EthereumTransaction.with {
+                $0.transfer = EthereumTransaction.Transfer.with {
+                    $0.amount = value.serialize()
+                    $0.data = data
+                }
+            }
+        }
 
-        try transaction.sign(privateKey: privateKeyData)
+        let output: EthereumSigningOutput = AnySigner.sign(input: input, coin: .ethereum)
 
-        guard let encoded = transaction.encode() else {
+        // AnySigner does not throw. A failed sign returns an output carrying a
+        // non-zero error and empty `encoded` (TW.Common.Proto.SigningError,
+        // where OK = 0), so without this check a signing failure would surface
+        // as a silently empty transaction.
+        guard output.error.rawValue == 0, !output.encoded.isEmpty else {
+            Log.wallet.error(
+                "Transaction signing failed (\(output.error.rawValue, privacy: .public)): \(output.errorMessage, privacy: .public)"
+            )
             throw WalletError.transactionSigningFailed
         }
 
-        return encoded
+        return output.encoded
     }
 
     // MARK: - Delete Wallet

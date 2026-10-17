@@ -18,8 +18,14 @@ done
 # state (StubURLProtocol's request queues) and are nested under the shared
 # NetworkStubbedSuites(.serialized) umbrella so they serialize relative to
 # each other; no global parallelism override is needed here.
-ARGS=(test -project Groo.xcodeproj -scheme Groo
-      -destination "platform=iOS Simulator,name=iPhone 17 Pro")
+# A bare device name stops being a unique destination as soon as two runtimes
+# offer the same model (there are currently an iPhone 17 Pro on 26.3.1 and one
+# on 26.5), and xcodebuild then refuses the run and prints every simulator on
+# the machine instead. Override with a UDID to pin one:
+#   GROO_TEST_DESTINATION="platform=iOS Simulator,id=<udid>" scripts/test.sh
+DESTINATION="${GROO_TEST_DESTINATION:-platform=iOS Simulator,name=iPhone 17 Pro}"
+
+ARGS=(test -project Groo.xcodeproj -scheme Groo -destination "$DESTINATION")
 
 case "$MODE" in
   --unit) ARGS+=(-only-testing:GrooTests) ;;

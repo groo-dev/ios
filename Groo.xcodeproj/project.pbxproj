@@ -34,7 +34,6 @@
 		1B2850D32F1401620046247D /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1B2850D22F1401620046247D /* SwiftUI.framework */; };
 		1B2850E42F1401620046247D /* WidgetExtensionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850CE2F1401620046247D /* WidgetExtensionExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1B2850F42F14017A0046247D /* KeyboardExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1B2850ED2F14017A0046247D /* KeyboardExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		1B48208B2F35625A0018D7FA /* web3swift in Frameworks */ = {isa = PBXBuildFile; productRef = 1B48208A2F35625A0018D7FA /* web3swift */; };
 		1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = 1B9FA3702F44944100D792F5 /* Adhan */; };
 		21FE88472EA418233C774A82 /* NonDestructiveTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 364AF7528F2E858EC63A376F /* NonDestructiveTokenStore.swift */; };
 		251D94E4EF3A2023241E434B /* SharedPasswordGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1613F46ECA38F853AF6D455 /* SharedPasswordGenerator.swift */; };
@@ -52,11 +51,13 @@
 		8B264274D29842908B44F07D /* PasswordPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A04CAABBBC49E96CEE0878 /* PasswordPublisher.swift */; };
 		8E467FE4C7CC04AAFE8DEE2F /* NonDestructiveTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 364AF7528F2E858EC63A376F /* NonDestructiveTokenStore.swift */; };
 		9626E40122525C37EF357693 /* SharedNewLoginDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = E819E5B00A472B4A85872B8C /* SharedNewLoginDraft.swift */; };
+		98B5182CA41BF26B54DE50D3 /* WalletCore in Frameworks */ = {isa = PBXBuildFile; productRef = 318BCCEC150AA9A028E3D405 /* WalletCore */; };
 		9AA77F1E131B705481D0FD51 /* SharedRecordDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DB49ABBE7F5CE5B6FE838E2 /* SharedRecordDecoder.swift */; };
 		9CA5EADA873D22ECCB2633D6 /* SharedPadCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */; };
 		A1E99CA41A462FDC9042A6EE /* SharedRecordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 151FF840447FA0D6E2B69933 /* SharedRecordStore.swift */; };
 		A2E19003D986BB4E2D72F30C /* SharedPendingPasswordsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ED97F75F5E31235F9F725FA /* SharedPendingPasswordsStore.swift */; };
 		A3BD28C085538D3ECB44D79D /* SharedRecordCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1216F05DAB33620E75E2624 /* SharedRecordCrypto.swift */; };
+		AA1000000000000000000001 /* GrooAuthUI in Frameworks */ = {isa = PBXBuildFile; productRef = AA1000000000000000000002 /* GrooAuthUI */; };
 		AD4F8D1650FB9A99098DBC77 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1824F78163C97BE82976C04C /* Foundation.framework */; };
 		AFBF72D6FF86652019136C53 /* SharedRecordModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56362AA81D8016439917CC5 /* SharedRecordModels.swift */; };
 		B6FC3F9FCD5EE42BE00807BA /* GrooAuth in Frameworks */ = {isa = PBXBuildFile; productRef = A135E9C4D4E3DA5219FB27B0 /* GrooAuth */; };
@@ -65,7 +66,6 @@
 		BC82ED089E0E728AE427CDEE /* SharedPadCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A362BB30EA68DD81133A12A /* SharedPadCrypto.swift */; };
 		C28ED402534EC41C9D99BFB1 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1824F78163C97BE82976C04C /* Foundation.framework */; };
 		C32C63A5A95F4C7A29363DA9 /* GrooAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 6CB17EFCC3A613A008ADBD29 /* GrooAuth */; };
-		AA1000000000000000000001 /* GrooAuthUI in Frameworks */ = {isa = PBXBuildFile; productRef = AA1000000000000000000002 /* GrooAuthUI */; };
 		C469004D4292690B7FEA6654 /* Adhan in Frameworks */ = {isa = PBXBuildFile; productRef = B026D97D28BCC53D8ED6E1D0 /* Adhan */; };
 		CDB30DD6E6A22EBBEBC6DD18 /* SharedGrooAuthFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E285B8667C4DEBF920F1C040 /* SharedGrooAuthFactory.swift */; };
 		D070088143A9E97B17B36A78 /* SharedPassAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB87AB7F5FD7807E1D49B4 /* SharedPassAPIClient.swift */; };
@@ -73,6 +73,7 @@
 		D98D408903A5F83C7A67E76A /* SharedPassAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB87AB7F5FD7807E1D49B4 /* SharedPassAPIClient.swift */; };
 		DEBF3BD72D0B0019273982DB /* SharedAPIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADAAA706A00A60B44BEBF74F /* SharedAPIError.swift */; };
 		E11A60F351B21D8E649572A6 /* PasswordPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A04CAABBBC49E96CEE0878 /* PasswordPublisher.swift */; };
+		EBA3D199DF3C8A35B11F579D /* BigInt in Frameworks */ = {isa = PBXBuildFile; productRef = 87AF5BDD8BD83F638757E2D7 /* BigInt */; };
 		FD865C645EBC910767E87390 /* SharedPasswordGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1613F46ECA38F853AF6D455 /* SharedPasswordGenerator.swift */; };
 /* End PBXBuildFile section */
 
@@ -258,11 +259,15 @@
 		};
 		5EE3A5983E9B0DC71FBFC004 /* GrooUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = GrooUITests;
 			sourceTree = "<group>";
 		};
 		7053C3AF65D76D022CD9DA03 /* GrooTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = GrooTests;
 			sourceTree = "<group>";
 		};
@@ -283,9 +288,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				1B9FA48C2F44959600D792F5 /* Adhan in Frameworks */,
-				1B48208B2F35625A0018D7FA /* web3swift in Frameworks */,
 				C32C63A5A95F4C7A29363DA9 /* GrooAuth in Frameworks */,
 				AA1000000000000000000001 /* GrooAuthUI in Frameworks */,
+				98B5182CA41BF26B54DE50D3 /* WalletCore in Frameworks */,
+				EBA3D199DF3C8A35B11F579D /* BigInt in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -483,10 +489,11 @@
 			);
 			name = Groo;
 			packageProductDependencies = (
-				1B48208A2F35625A0018D7FA /* web3swift */,
 				1B9FA3702F44944100D792F5 /* Adhan */,
 				6CB17EFCC3A613A008ADBD29 /* GrooAuth */,
 				AA1000000000000000000002 /* GrooAuthUI */,
+				318BCCEC150AA9A028E3D405 /* WalletCore */,
+				87AF5BDD8BD83F638757E2D7 /* BigInt */,
 			);
 			productName = Groo;
 			productReference = 1B2850A72F13FF540046247D /* Groo.app */;
@@ -616,10 +623,11 @@
 			mainGroup = 1B28509E2F13FF540046247D;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */,
 				1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */,
 				781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */,
 				8B834A862708F3215293BAC8 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */,
+				DF434C114A5674CA15B489D9 /* XCLocalSwiftPackageReference "WalletCoreBinary" */,
+				89130D19C098C59CC908B4E6 /* XCRemoteSwiftPackageReference "BigInt" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1B2850A82F13FF540046247D /* Products */;
@@ -1406,21 +1414,20 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/web3swift-team/web3swift";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 3.3.2;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		DF434C114A5674CA15B489D9 /* XCLocalSwiftPackageReference "WalletCoreBinary" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/WalletCoreBinary;
 		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
 		1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/batoulapps/adhan-swift";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 1.4.0;
+				minimumVersion = 1.5.0;
 			};
 		};
 		781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */ = {
@@ -1428,7 +1435,15 @@
 			repositoryURL = "https://github.com/groo-dev/auth-swift.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.4.4;
+				minimumVersion = 0.4.5;
+			};
+		};
+		89130D19C098C59CC908B4E6 /* XCRemoteSwiftPackageReference "BigInt" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/attaswift/BigInt.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.0.1;
 			};
 		};
 		8B834A862708F3215293BAC8 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */ = {
@@ -1436,23 +1451,33 @@
 			repositoryURL = "https://github.com/pointfreeco/swift-snapshot-testing";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 1.17.0;
+				minimumVersion = 1.19.6;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		1B48208A2F35625A0018D7FA /* web3swift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 1B4820892F35625A0018D7FA /* XCRemoteSwiftPackageReference "web3swift" */;
-			productName = web3swift;
-		};
 		1B9FA3702F44944100D792F5 /* Adhan */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 1B9FA36F2F44944100D792F5 /* XCRemoteSwiftPackageReference "adhan-swift" */;
 			productName = Adhan;
 		};
+		318BCCEC150AA9A028E3D405 /* WalletCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DF434C114A5674CA15B489D9 /* XCLocalSwiftPackageReference "WalletCoreBinary" */;
+			productName = WalletCore;
+		};
 		6CB17EFCC3A613A008ADBD29 /* GrooAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */;
+			productName = GrooAuth;
+		};
+		87AF5BDD8BD83F638757E2D7 /* BigInt */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89130D19C098C59CC908B4E6 /* XCRemoteSwiftPackageReference "BigInt" */;
+			productName = BigInt;
+		};
+		A135E9C4D4E3DA5219FB27B0 /* GrooAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */;
 			productName = GrooAuth;
@@ -1461,11 +1486,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */;
 			productName = GrooAuthUI;
-		};
-		A135E9C4D4E3DA5219FB27B0 /* GrooAuth */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 781332538BFA4F3F31472BD4 /* XCRemoteSwiftPackageReference "auth-swift" */;
-			productName = GrooAuth;
 		};
 		B026D97D28BCC53D8ED6E1D0 /* Adhan */ = {
 			isa = XCSwiftPackageProductDependency;

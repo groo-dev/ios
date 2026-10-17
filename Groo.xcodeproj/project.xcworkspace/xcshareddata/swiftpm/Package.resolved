@@ -1,13 +1,13 @@
 {
-  "originHash" : "df40aeb9bf63e68e8b24f95bae1884d751eaf81d82774eb3a65b9c5afcbe6e20",
+  "originHash" : "d2f60d541c16cea3d1a6d64ab1f8339bf416dfc3b0f6bd2551c39f0574c44c1c",
   "pins" : [
     {
       "identity" : "adhan-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/batoulapps/adhan-swift",
       "state" : {
-        "revision" : "6dc8309951fdaa0cd124c52b9a8de7e0da1ff2ce",
-        "version" : "1.4.0"
+        "revision" : "a6fa2deee80c5abb0b9ad04466f8ab12b53144e7",
+        "version" : "1.5.0"
       }
     },
     {
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/groo-dev/auth-swift.git",
       "state" : {
-        "revision" : "b432da30507ad5011e87dbf8a8290c380c38ce3e",
-        "version" : "0.4.4"
+        "revision" : "247422ac96cf4e293a366f51ec8d817f1e5e4a77",
+        "version" : "0.4.5"
       }
     },
     {
@@ -24,26 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/attaswift/BigInt.git",
       "state" : {
-        "revision" : "793a7fac0bfc318e85994bf6900652e827aef33e",
-        "version" : "5.4.1"
-      }
-    },
-    {
-      "identity" : "cryptoswift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/krzyzanowskim/CryptoSwift.git",
-      "state" : {
-        "revision" : "e45a26384239e028ec87fbcc788f513b67e10d8f",
-        "version" : "1.9.0"
-      }
-    },
-    {
-      "identity" : "secp256k1.swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/GigaBitcoin/secp256k1.swift",
-      "state" : {
-        "revision" : "48fb20fce4ca3aad89180448a127d5bc16f0e44c",
-        "version" : "0.10.0"
+        "revision" : "63feef7820abb1a8fb08587d7da56bb0b7db8751",
+        "version" : "6.0.1"
       }
     },
     {
@@ -60,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/pointfreeco/swift-snapshot-testing",
       "state" : {
-        "revision" : "ad5e3190cc63dc288f28546f9c6827efc1e9d495",
-        "version" : "1.19.2"
+        "revision" : "28e5de025e3fd98991791bfbf83023ab3708da03",
+        "version" : "1.19.6"
       }
     },
     {
@@ -71,15 +53,6 @@
       "state" : {
         "revision" : "79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1",
         "version" : "603.0.2"
-      }
-    },
-    {
-      "identity" : "web3swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/web3swift-team/web3swift",
-      "state" : {
-        "revision" : "b9c771bf3b94983d2f9b22096b4a267a72c16006",
-        "version" : "3.3.2"
       }
     },
     {

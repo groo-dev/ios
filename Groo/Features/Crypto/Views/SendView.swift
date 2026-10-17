@@ -6,12 +6,10 @@
 //
 
 import BigInt
-import CryptoSwift
 import os
 import Security
 import SwiftUI
-import Web3Core
-import web3swift
+import WalletCore
 
 struct SendView: View {
     let asset: CryptoAsset
@@ -324,7 +322,7 @@ struct SendView: View {
             )
 
             let hash = try await ethereumService.sendRawTransaction(
-                signedTx: signedTx.toHexString()
+                signedTx: signedTx.hexString
             )
             txHash = hash
         } catch {
