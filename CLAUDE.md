@@ -212,12 +212,33 @@ GROO_TEST_DESTINATION="platform=iOS Simulator,id=<udid>" scripts/test.sh --unit
 **The 2026-08-08 baseline below no longer describes this toolchain.** On
 2026-10-17, the first run after the project became buildable under Xcode 27,
 the unit suite failed **34 lines / 27 unique names** — every one of them an
-image snapshot, with zero logic-test failures. The references date from
-2026-07-06 and SwiftUI's large-title rendering has moved since: the diff on
-`CryptoViewSnapshotTests.walletOnboardingMain` is a **missing navigation
-title**, with the content below it pixel-identical. The same shift explains
-why Drive, Pad, Stocks, Pass, Azan and Scratchpad snapshots all went red at
-once.
+image snapshot, with zero logic-test failures.
+
+**They do not share one cause, and that matters more than the count.** Measured
+per-image (pixels changed, and maximum per-channel delta) they fall into three
+populations:
+
+| Population | Signature | Examples | Verdict |
+|---|---|---|---|
+| **Async race** | ~40–73% of pixels, the view captured mid-load | `PassViewSnapshotTests.healthReportStates` (both cases) | **Never re-record.** The snapshot holds a "Analyzing passwords…" spinner where the reference holds the finished report |
+| **Layout shift** | whole-view offset of a few px, or an absent large title | `RootPilotSnapshotTests.drivePlaceholder`, `CryptoViewSnapshotTests.walletOnboardingMain`, `RootViewSnapshotTests.settingsViewWithBackupDate` | OS drift against references dated 2026-07-06 |
+| **Antialiasing** | maxdelta ≤ 8, often invisible side by side | `PassViewSnapshotTests.formEditModes.*`, `StocksViewSnapshotTests.addTransactionModes` | Noise |
+
+The race is the one worth acting on. `PasswordHealthView.task` calls a fully
+**synchronous** `analyzePasswords()`, so nothing is slow — the task has simply
+not fired by the time `ViewRender.settledImage` draws, and that helper settles
+by counting `Task.yield()`s rather than by waiting for a condition. A fixed
+yield count encodes an assumption the test cannot check, and when it stops
+holding the test does not error: it quietly asserts against a loading state.
+**Pumping the main run loop between yields was tried and does not fix it** —
+the diff came back identical to the byte, so the cause lies elsewhere and is
+still open.
+
+To triage these, measure rather than squint — two images that look identical
+side by side can differ by a 6px offset, and one that looks like a rendering
+change can be a spinner. A script that walks `__Snapshots__` against the
+simulator's `tmp/<SuiteName>/` artifacts and reports percent-changed plus
+maxdelta per image is how the table above was built.
 
 Be careful what this does and does not establish. No before/after comparison
 was possible, because **the app did not build at all on Xcode 27** until that
