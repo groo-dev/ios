@@ -21,6 +21,7 @@ struct ContentView: View {
     @State private var router: AppRouter?
     @State private var isGloballyUnlocked = false
     @State private var needsGlobalUnlock = false
+    @State private var showReauthSheet = false
 
     // Under --uitest the global-lock check must consult the same fake
     // keychain the services write to, never the developer's real keychain.
@@ -52,6 +53,14 @@ struct ContentView: View {
                     )
                 } else if let configStore, let router {
                     Group {
+                        // Above the tabs, not in front of them: an expired
+                        // session stops syncing, it does not make the local
+                        // data unreadable, so nothing here is modal.
+                        if authService.requiresReauth {
+                            ReauthBanner(email: authService.currentUserEmail) {
+                                showReauthSheet = true
+                            }
+                        }
                         if UIDevice.current.userInterfaceIdiom == .pad {
                             MainTabView(
                                 padService: padService,
@@ -77,8 +86,18 @@ struct ContentView: View {
             initializeServices()
             updateState()
         }
-        .onChange(of: authService.isAuthenticated) {
+        // Observes `hasKnownUser`, not `isAuthenticated`: a session lapsing
+        // into reauth changes the latter but must NOT tear the shell down.
+        .onChange(of: authService.hasKnownUser) {
             updateState()
+        }
+        .sheet(isPresented: $showReauthSheet) {
+            SignInScreen()
+        }
+        .onChange(of: authService.requiresReauth) { _, stillNeedsReauth in
+            // Signing in succeeded — close the sheet rather than leaving them
+            // looking at a sign-in screen they have already finished with.
+            if !stillNeedsReauth { showReauthSheet = false }
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
@@ -140,7 +159,9 @@ struct ContentView: View {
         let wasLoggedIn = isLoggedIn
         // --uitest bypasses OAuth entirely; services never ask AuthService
         // for tokens in that mode (see initializeServices)
-        isLoggedIn = authService.isAuthenticated || UITestMode.isActive
+        // Known user, not authenticated user: the shell stays up through a
+        // lapsed session so local data remains reachable.
+        isLoggedIn = authService.hasKnownUser || UITestMode.isActive
 
         // Check if global unlock is needed (biometric keys exist)
         if !wasLoggedIn && isLoggedIn {

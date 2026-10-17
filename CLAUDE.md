@@ -197,6 +197,33 @@ gone — `Data.toHexString()` and `Data.fromHex` were theirs, and the WalletCore
 equivalents (`Data.hexString`, `Data(hexString:)`) replaced the five call
 sites.
 
+**The Pad widget and the Pad keyboard have never been able to read anything,
+and they fail silently.** Both call `ExtensionDataProvider.loadDecryptedItems()`,
+which needs `pad_encryption_key` from the Keychain. The app writes that item
+through `saveBiometricProtected`, which deliberately omits `kSecAttrAccessGroup`
+— so it lands in the first `keychain-access-groups` entitlement,
+`$(AppIdentifierPrefix)dev.groo.ios`. `WidgetExtension` and `KeyboardExtension`
+declare **no `keychain-access-groups` entitlement at all** (only app groups) and
+query with `kSecAttrAccessGroup: "group.dev.groo.ios"`, which is an *app* group,
+not that one. The read returns `errSecItemNotFound`, `hasEncryptionKey()`
+accepts only `errSecSuccess`/`errSecInteractionNotAllowed` so it returns false,
+`isLocked()` returns true, and the widget renders its locked state without ever
+opening the database. `GrooAutoFill` works precisely because it *does* declare
+the entitlement with the matching group. Compare against it before assuming any
+extension can reach a Keychain item. Fixing this is a product decision, not a
+bug fix: under the encrypted-store design those extensions stay dark on purpose.
+
+**Gate the app shell on `AuthService.hasKnownUser`, never `isAuthenticated`.**
+An expired or revoked session is not a stranger: auth-swift keeps the identity
+and reports `requiresReauth`, and everything stored on the device still belongs
+to someone we can name. Gating on `isAuthenticated` throws the whole app back to
+a sign-in wall with the local data sitting there unreachable, which is the
+opposite of offline-first. `ContentView` shows a non-modal `ReauthBanner`
+instead. Both directions are pinned by `AuthServiceReauthTests`, and the
+complement matters as much as the main case — a `hasKnownUser` that is always
+true passes the lapsed-session test while making the sign-in screen
+unreachable.
+
 **Sending a token is not sending ETH with a different label.** A token is a
 row in a ledger owned by its contract, so a transfer is a *call to that
 contract*: the transaction goes **to the contract**, carries **no ETH**, and

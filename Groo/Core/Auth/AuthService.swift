@@ -35,6 +35,24 @@ final class AuthService {
     var isAuthenticated: Bool { controller.isSignedIn }
     var currentUserEmail: String? { controller.user?.email }
 
+    /// The tokens lapsed or were revoked, but the SDK kept the identity.
+    ///
+    /// This is NOT "signed out". Everything stored on this device still belongs
+    /// to a person we can name, so the app stays up and keeps working on local
+    /// data; only calls that need the server fail, and the screens making them
+    /// are the ones that should say so.
+    var requiresReauth: Bool { controller.requiresReauth }
+
+    /// Whether the app knows whose data this is.
+    ///
+    /// True while signed in, and still true once the tokens lapse — an expired
+    /// session does not make someone a stranger. Only a real sign-out, or a
+    /// first launch, makes it false, and only that should show the sign-in
+    /// screen. Gating the shell on `isAuthenticated` instead is what used to
+    /// throw the whole app back to a sign-in wall on expiry, with the local
+    /// data still sitting there unreachable.
+    var hasKnownUser: Bool { controller.isSignedIn || controller.requiresReauth }
+
     /// True until the Keychain has been read once, which is not the same as
     /// signed out. `ContentView` shows a spinner rather than the sign-in screen
     /// while it holds.
@@ -42,8 +60,10 @@ final class AuthService {
 
     private var session: GrooAuthSession { controller.session }
 
-    init() {
-        controller = GrooAuthController(session: GrooAuthFactory.makeSession())
+    /// `controller` is injectable so tests can drive a lapsed session; production
+    /// passes nothing and gets the real one.
+    init(controller: GrooAuthController? = nil) {
+        self.controller = controller ?? GrooAuthController(session: GrooAuthFactory.makeSession())
     }
 
     // MARK: - Sign in / out
